@@ -1,21 +1,18 @@
 import os
 import re
 from pathlib import Path
-import traceback
-from typing import Any, Literal
-from contextlib import redirect_stdout
-import io
-import matplotlib.pyplot as plt
+from typing import Literal
 
 import dotenv
-from langchain_core.language_models import BaseLLM
-from langchain_core.runnables import RunnableSerializable
+import matplotlib.pyplot as plt
 import pandas as pd
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
+from langchain_core.language_models import BaseLLM
+from langchain_core.runnables import RunnableSerializable
 from pydantic import BaseModel, Field
 
-from docker_runner import execute_code_in_docker
+from code_executor import ExecuteResult, execute_code_in_docker, execute_code_with_exec
 
 dotenv.load_dotenv()
 
@@ -49,6 +46,9 @@ PROMPT_TEMPLATE = """\
 
 
 class OutputParser(PydanticOutputParser[CodeOutput]):
+    def __init__(self) -> None:
+        super().__init__(pydantic_object=CodeOutput)
+
     def parse(self, text: str) -> CodeOutput:
         cleaned_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
 
@@ -61,59 +61,15 @@ class OutputParser(PydanticOutputParser[CodeOutput]):
             raise
 
 
-def execute_code_with_exec(code: str, df: pd.DataFrame) -> dict[str, Any]:
-    # 创建一个隔离的命名空间
-    namespace = {
-        "df": df.copy(),
-        "pd": pd,
-        "np": __import__("numpy"),
-        "plt": __import__("matplotlib.pyplot"),
-    }
-
-    # 捕获标准输出
-    output_buffer = io.StringIO()
-    result = {
-        "success": False,
-        "output": "",
-        "error": "",
-        "result": None,
-        "figure": None,
-    }
-
-    try:
-        # 重定向标准输出
-        with redirect_stdout(output_buffer):
-            # 执行代码
-            compiled_code = compile(code, "<string>", "exec")
-            exec(compiled_code, namespace)
-
-        # 检查是否有图表
-        if (fig := plt.gcf()).get_axes():
-            result["figure"] = fig
-
-        # 捕获输出
-        result["output"] = output_buffer.getvalue()
-
-        # 如果代码定义了result变量，使用它作为结果
-        if "result" in namespace:
-            result["result"] = namespace["result"]
-
-        result["success"] = True
-    except Exception as e:
-        result["error"] = f"执行错误: {str(e)}\n{traceback.format_exc()}"
-
-    return result
-
-
 class NL2DataAnalysis:
     def __init__(self, llm: BaseLLM, execute_mode: Literal["exec", "docker"] = "exec"):
         self.execute_mode = execute_mode
-        self.output_parser = OutputParser(pydantic_object=CodeOutput)
+        self.output_parser = OutputParser()
         self.code_generator: RunnableSerializable[dict, CodeOutput] = (
             self._create_prompt_template() | llm | self.output_parser
         )
 
-    def _create_prompt_template(self):
+    def _create_prompt_template(self) -> PromptTemplate:
         return PromptTemplate(
             template=PROMPT_TEMPLATE,
             input_variables=["sample_data", "query"],
@@ -128,7 +84,7 @@ class NL2DataAnalysis:
             {"sample_data": sample_data, "query": query}
         ).python_code
 
-    def execute_code(self, code: str, df: pd.DataFrame) -> dict[str, Any]:
+    def execute_code(self, code: str, df: pd.DataFrame) -> ExecuteResult:
         """在Docker容器中执行生成的代码"""
         return (
             execute_code_with_exec
@@ -141,25 +97,17 @@ class NL2DataAnalysis:
         sample_data: str,
         full_data: pd.DataFrame,
         query: str,
-    ) -> dict[str, Any]:
+    ) -> ExecuteResult:
         """完整的分析流程"""
-        # 1. 生成代码
         code = self.generate_code(sample_data, query)
-
-        # 2. 执行代码
-        execution_result = self.execute_code(code, full_data)
-
-        # 3. 返回结果
-        return {
-            "query": query,
-            "generated_code": code,
-            "execution_result": execution_result,
-        }
+        print(f"生成的代码:\n\n{code}\n\n")
+        return self.execute_code(code, full_data)
 
 
 def main():
-    from dremio_client import DremioClient
     from langchain_google_genai import GoogleGenerativeAI
+
+    from dremio_client import DremioClient
     # from langchain_ollama import OllamaLLM
     # from langchain_openai import OpenAI
 
@@ -185,24 +133,22 @@ def main():
     for query in queries:
         print(f"\n=== 分析需求: {query} ===")
         result = analyzer.analyze(sample_data, df, query)
-
-        print("\n生成的代码:")
-        print(result["generated_code"])
-
-        res = result["execution_result"]
-
-        if res["success"]:
-            if res["output"]:
+        if result["success"]:
+            if result["output"]:
                 print("\n执行输出:")
-                print(res["output"])
-            if res["result"] is not None:
+                print(result["output"])
+            if result["result"] is not None:
                 print("\n计算结果:")
-                print(res["result"])
-            if res["figure"]:
+                print(result["result"])
+            if result["figure"]:
                 print("\n[图表已生成]")
-                res["figure"].show()
+                # result["figure"].show()
+                plt.figure()
+                plt.imshow(plt.imread(result["figure"]), aspect="auto")
+                plt.axis("off")
+                plt.show()
         else:
-            print(f"\n执行失败: {res['error']}")
+            print(f"\n执行失败: {result['error']}")
 
 
 if __name__ == "__main__":
