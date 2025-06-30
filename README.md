@@ -33,3 +33,10 @@ KEY=...
 - LLM 中 `model-name` 填入测试使用的模型代号
 - LangChain 配置指 `test_langchain.py` 的 main 函数中使用的具体 LLM 的配置
   - 参考代码对应部分选择合适的配置
+
+## 说明
+
+- 代码中的 `execute_mode` 参数
+  - 在 docker 中执行 LLM 生成的代码
+  - 需要使用 `docker build` 命令构建 runner 镜像，将镜像 ID 写入 .env 的 `DOCKER_RUNNER_IMAGE` 变量
+  - 命令参考: `docker build . -f docker/Dockerfile.runner -t langchain-runner`

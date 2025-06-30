@@ -1,10 +1,11 @@
-import io
 import os
 import re
-import traceback
-from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any
+import traceback
+from typing import Any, Literal
+from contextlib import redirect_stdout
+import io
+import matplotlib.pyplot as plt
 
 import dotenv
 from langchain_core.language_models import BaseLLM
@@ -12,8 +13,9 @@ from langchain_core.runnables import RunnableSerializable
 import pandas as pd
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
-from matplotlib import pyplot as plt
 from pydantic import BaseModel, Field
+
+from docker_runner import execute_code_in_docker
 
 dotenv.load_dotenv()
 
@@ -59,8 +61,53 @@ class OutputParser(PydanticOutputParser[CodeOutput]):
             raise
 
 
+def execute_code_with_exec(code: str, df: pd.DataFrame) -> dict[str, Any]:
+    # 创建一个隔离的命名空间
+    namespace = {
+        "df": df.copy(),
+        "pd": pd,
+        "np": __import__("numpy"),
+        "plt": __import__("matplotlib.pyplot"),
+    }
+
+    # 捕获标准输出
+    output_buffer = io.StringIO()
+    result = {
+        "success": False,
+        "output": "",
+        "error": "",
+        "result": None,
+        "figure": None,
+    }
+
+    try:
+        # 重定向标准输出
+        with redirect_stdout(output_buffer):
+            # 执行代码
+            compiled_code = compile(code, "<string>", "exec")
+            exec(compiled_code, namespace)
+
+        # 检查是否有图表
+        if (fig := plt.gcf()).get_axes():
+            result["figure"] = fig
+
+        # 捕获输出
+        result["output"] = output_buffer.getvalue()
+
+        # 如果代码定义了result变量，使用它作为结果
+        if "result" in namespace:
+            result["result"] = namespace["result"]
+
+        result["success"] = True
+    except Exception as e:
+        result["error"] = f"执行错误: {str(e)}\n{traceback.format_exc()}"
+
+    return result
+
+
 class NL2DataAnalysis:
-    def __init__(self, llm: BaseLLM):
+    def __init__(self, llm: BaseLLM, execute_mode: Literal["exec", "docker"] = "exec"):
+        self.execute_mode = execute_mode
         self.output_parser = OutputParser(pydantic_object=CodeOutput)
         self.code_generator: RunnableSerializable[dict, CodeOutput] = (
             self._create_prompt_template() | llm | self.output_parser
@@ -82,52 +129,12 @@ class NL2DataAnalysis:
         ).python_code
 
     def execute_code(self, code: str, df: pd.DataFrame) -> dict[str, Any]:
-        """
-        在隔离环境中执行代码
-
-        TODO: 使用 docker 实现
-        """
-        # 创建一个隔离的命名空间
-        namespace = {
-            "df": df.copy(),
-            "pd": pd,
-            "np": __import__("numpy"),
-            "plt": __import__("matplotlib.pyplot"),
-        }
-
-        # 捕获标准输出
-        output_buffer = io.StringIO()
-        result = {
-            "success": False,
-            "output": "",
-            "error": "",
-            "result": None,
-            "figure": None,
-        }
-
-        try:
-            # 重定向标准输出
-            with redirect_stdout(output_buffer):
-                # 执行代码
-                compiled_code = compile(code, "<string>", "exec")
-                exec(compiled_code, namespace)
-
-            # 检查是否有图表
-            if (fig := plt.gcf()).get_axes():
-                result["figure"] = fig
-
-            # 捕获输出
-            result["output"] = output_buffer.getvalue()
-
-            # 如果代码定义了result变量，使用它作为结果
-            if "result" in namespace:
-                result["result"] = namespace["result"]
-
-            result["success"] = True
-        except Exception as e:
-            result["error"] = f"执行错误: {str(e)}\n{traceback.format_exc()}"
-
-        return result
+        """在Docker容器中执行生成的代码"""
+        return (
+            execute_code_with_exec
+            if self.execute_mode == "exec"
+            else execute_code_in_docker
+        )(code, df)
 
     def analyze(
         self,
@@ -163,7 +170,10 @@ def main():
     llm = GoogleGenerativeAI(model=model_name)
     # llm = OpenAI(model=model_name)
     # llm = OllamaLLM(model=model_name)
-    analyzer = NL2DataAnalysis(llm)
+    analyzer = NL2DataAnalysis(
+        llm,
+        # execute_mode="docker",
+    )
 
     queries = [
         "分析各学生的平均分",
