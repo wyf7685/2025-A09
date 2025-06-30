@@ -61,9 +61,9 @@ class OutputParser(PydanticOutputParser[CodeOutput]):
 
 class NL2DataAnalysis:
     def __init__(self, llm: BaseLLM):
-        self.output_parser = PydanticOutputParser(pydantic_object=CodeOutput)
+        self.output_parser = OutputParser()
         self.code_generator: RunnableSerializable[dict, CodeOutput] = (
-            self._create_prompt_template() | llm | OutputParser()
+            self._create_prompt_template() | llm | self.output_parser
         )
 
     def _create_prompt_template(self):
@@ -182,15 +182,16 @@ def main():
         print(result["generated_code"])
 
         if result["execution_result"]["success"]:
-            if result["execution_result"]["output"]:
+            res = result["execution_result"]
+            if res["output"]:
                 print("\n执行输出:")
-                print(result["execution_result"]["output"])
-            if result["execution_result"]["result"] is not None:
+                print(res["output"])
+            if res["result"] is not None:
                 print("\n计算结果:")
-                print(result["execution_result"]["result"])
-            if result["execution_result"]["figure"]:
+                print(res["result"])
+            if res["figure"]:
                 print("\n[图表已生成]")
-                result["execution_result"]["figure"].show()
+                res["figure"].show()
         else:
             print(f"\n执行失败: {result['execution_result']['error']}")
 
