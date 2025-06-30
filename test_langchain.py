@@ -61,7 +61,7 @@ class OutputParser(PydanticOutputParser[CodeOutput]):
 
 class NL2DataAnalysis:
     def __init__(self, llm: BaseLLM):
-        self.output_parser = OutputParser()
+        self.output_parser = OutputParser(pydantic_object=CodeOutput)
         self.code_generator: RunnableSerializable[dict, CodeOutput] = (
             self._create_prompt_template() | llm | self.output_parser
         )
