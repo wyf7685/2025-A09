@@ -4,10 +4,41 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-import pandas
+import pandas as pd
 import requests
+
+
+class TemporaryDataSource:
+    """
+    临时数据源，用于在 Dremio 中创建和删除临时数据源
+    """
+
+    def __init__(
+        self,
+        client: "DremioClient",
+        type_: Literal["csv", "database"],
+        source_name: list[str],
+    ):
+        self.client = client
+        self.type_ = type_
+        self.source_name = source_name
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.type_ == "csv":
+            (self.client.external_dir / self.source_name[1]).unlink(missing_ok=True)
+            return
+
+        url = f"{self.client.base_url}/api/v3/catalog/{self.source_name[0]}"
+        response = requests.delete(url, headers=self.client._get_auth_header())
+        response.raise_for_status()
+
+    def read(self, limit: int | None = None) -> pd.DataFrame:
+        return self.client.read_source(self.source_name, limit)
 
 
 class DremioClient:
@@ -162,7 +193,7 @@ class DremioClient:
 
         return self.get_job_result(job_id)
 
-    def execute_sql_to_dataframe(self, sql_query: str) -> pandas.DataFrame:
+    def execute_sql_to_dataframe(self, sql_query: str) -> pd.DataFrame:
         """
         执行 SQL 查询并返回 DataFrame
 
@@ -174,7 +205,7 @@ class DremioClient:
             pandas.DataFrame: 查询结果的 DataFrame
         """
         results = self.execute_sql_query(sql_query)
-        return pandas.DataFrame(results["rows"])
+        return pd.DataFrame(results["rows"])
 
     def _format_source_name_table(self, source_name: str | list[str]) -> str:
         if isinstance(source_name, list):
@@ -224,6 +255,7 @@ class DremioClient:
 
         return [self.external_name, source_name]
 
+    # TODO: 改写为通用数据库连接
     def add_data_source_postgres(
         self,
         host: str,
@@ -303,26 +335,9 @@ class DremioClient:
 
         return tables
 
-    def peek_source(
-        self, source_name: str | list[str], limit: int = 5
-    ) -> pandas.DataFrame:
-        """
-        快速查看数据源的前几行数据
-
-        Args:
-            source_name: 数据源名称
-            limit: 返回的行数限制
-
-        Returns:
-            pandas.DataFrame: 数据源的前几行数据
-        """
-        source_name = self._format_source_name_table(source_name)
-        sql_query = f"SELECT * FROM {source_name} LIMIT {limit}"
-        return self.execute_sql_to_dataframe(sql_query)
-
     def read_source(
         self, source_name: str | list[str], limit: int | None = None
-    ) -> pandas.DataFrame:
+    ) -> pd.DataFrame:
         """
         读取数据源的前几行数据
 
@@ -338,6 +353,38 @@ class DremioClient:
         if limit is not None:
             sql_query += f" LIMIT {limit}"
         return self.execute_sql_to_dataframe(sql_query)
+
+    def data_source_csv(self, file: Path) -> TemporaryDataSource:
+        source_name = self.add_data_source_csv(file)
+        return TemporaryDataSource(self, "csv", source_name)
+
+    def data_source_postgres(
+        self,
+        host: str,
+        port: int,
+        database: str,
+        user: str,
+        password: str,
+        table: str | None = None,
+    ) -> TemporaryDataSource:
+        source_name = self.add_data_source_postgres(
+            host, port, database, user, password
+        )
+        tables = self.query_source_tables(source_name)
+        if not tables:
+            raise ValueError(f"数据源 {source_name} 中没有可用的表")
+
+        if table is None:
+            source_name = tables[0]
+        else:
+            for table_path in tables:
+                if table_path[-1] == table:
+                    source_name = table_path
+                    break
+            else:
+                raise ValueError(f"数据源 {source_name} 中没有找到表 {table}")
+
+        return TemporaryDataSource(self, "database", source_name)
 
 
 if __name__ == "__main__":

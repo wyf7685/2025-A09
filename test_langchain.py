@@ -156,24 +156,22 @@ def main():
     # from langchain_ollama import OllamaLLM
     # from langchain_openai import OpenAI
 
-    dremio = DremioClient()
-    data_file = Path("test.csv")
-    source_name = dremio.add_data_source_csv(data_file)
+    with DremioClient().data_source_csv(Path("test.csv")) as source:
+        df = source.read()
 
-    df = dremio.read_source(source_name)
-    sample_data = df.head().to_string() + "\n\n" + df.dtypes.to_string()
+    model_name = os.environ["TEST_MODEL_NAME"]
+    llm = GoogleGenerativeAI(model=model_name)
+    # llm = OpenAI(model=model_name)
+    # llm = OllamaLLM(model=model_name)
+    analyzer = NL2DataAnalysis(llm)
 
     queries = [
         "分析各学生的平均分",
         "分析学生的数学成绩统计量",
         "找出总成绩最高的学生",
     ]
+    sample_data = df.head().to_string() + "\n\n" + df.dtypes.to_string()
 
-    model_name = os.environ["TEST_MODEL_NAME"]
-    llm = GoogleGenerativeAI(model=model_name)
-    # llm = OpenAI(model=model_name, temperature=0)
-    # llm = OllamaLLM(model=model_name)
-    analyzer = NL2DataAnalysis(llm)
     for query in queries:
         print(f"\n=== 分析需求: {query} ===")
         result = analyzer.analyze(sample_data, df, query)
@@ -181,8 +179,9 @@ def main():
         print("\n生成的代码:")
         print(result["generated_code"])
 
-        if result["execution_result"]["success"]:
-            res = result["execution_result"]
+        res = result["execution_result"]
+
+        if res["success"]:
             if res["output"]:
                 print("\n执行输出:")
                 print(res["output"])
@@ -193,7 +192,7 @@ def main():
                 print("\n[图表已生成]")
                 res["figure"].show()
         else:
-            print(f"\n执行失败: {result['execution_result']['error']}")
+            print(f"\n执行失败: {res['error']}")
 
 
 if __name__ == "__main__":
