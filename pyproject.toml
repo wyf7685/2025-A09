@@ -1,0 +1,30 @@
+[project]
+name = "test"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=0.3.26",
+    "langchain-community>=0.3.26",
+    "langchain-google-genai>=2.1.5",
+    "langchain-ollama>=0.3.3",
+    "langchain-openai>=0.3.27",
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.1",
+    "pandas>=2.3.0",
+    # "pyarrow>=20.0.0",  # for dremio
+    "requests>=2.32.4",
+    # "torch>=2.7.0",
+]
+
+# [tool.uv.sources]
+# torch = [
+#     { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+# ]
+# torchvision = [
+#     { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+# ]
+
+# [[tool.uv.index]]
+# name = "pytorch-cu126"
+# url = "https://download.pytorch.org/whl/cu126"
+# explicit = true
