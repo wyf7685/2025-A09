@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import time
 import uuid
@@ -14,11 +15,11 @@ class DremioClient:
 
     def __init__(
         self,
-        base_url: str,
-        username: str,
-        password: str,
+        base_url: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
         external_dir: Path | None = None,
-        external_name: str = "external",
+        external_name: str | None = None,
     ):
         """
         初始化 Dremio 客户端
@@ -30,11 +31,15 @@ class DremioClient:
             external_dir: 外部数据源本地目录路径
             external_name: 外部数据源名称
         """
-        self.base_url = base_url
-        self.username = username
-        self.password = password
-        self.external_dir = external_dir
-        self.external_name = external_name
+        # fmt: off
+        self.base_url = base_url or os.environ.get("DREMIO_BASE_URL", "http://localhost:9047")
+        self.username = username or os.environ.get("DREMIO_USERNAME")
+        self.password = password or os.environ.get("DREMIO_PASSWORD")
+        self.external_dir = external_dir or Path(os.environ.get("DREMIO_EXTERNAL_DIR", "external"))
+        self.external_name = external_name or os.environ.get("DREMIO_EXTERNAL_NAME", "external")
+        assert self.base_url, "Dremio base URL is required"
+        assert self.username, "Dremio username is required"
+        assert self.password, "Dremio password is required"
         self._token = None
 
     def get_token(self) -> str:

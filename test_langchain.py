@@ -156,13 +156,7 @@ def main():
     # from langchain_ollama import OllamaLLM
     # from langchain_openai import OpenAI
 
-    dremio = DremioClient(
-        base_url="http://localhost:9047",
-        username="wyf7685",
-        password="pass7685",
-        external_dir=Path(__file__).parent / "external",
-        external_name="external",
-    )
+    dremio = DremioClient()
     data_file = Path("test.csv")
     source_name = dremio.add_data_source_csv(data_file)
 
