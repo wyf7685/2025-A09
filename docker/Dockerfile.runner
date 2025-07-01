@@ -1,5 +1,12 @@
 FROM python:3.12-slim-bookworm
 
-RUN pip install --no-cache-dir \
-    numpy pandas matplotlib
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-wqy-microhei \
+    fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir \
+    numpy pandas matplotlib seaborn
+
+# 更新matplotlib字体缓存
+RUN python -c "import matplotlib.pyplot as plt; plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'WenQuanYi Zen Hei']; plt.rcParams['axes.unicode_minus'] = False"

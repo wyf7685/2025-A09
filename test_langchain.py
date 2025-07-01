@@ -1,20 +1,20 @@
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 import os
 import re
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import dotenv
-from langchain_core.messages import BaseMessage
 import matplotlib.pyplot as plt
 import pandas as pd
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import LanguageModelInput
+from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSerializable
 from pydantic import BaseModel, Field
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from code_executor import ExecuteResult, execute_code_in_docker, execute_code_with_exec
 
@@ -52,8 +52,8 @@ PROMPT_TEMPLATE = """\
 用户的分析需求:
 {query}
 
-根据用户需求生成Python代码，该代码需要对名为'df'的DataFrame进行操作。代码应该高效、简洁，包含必要的注释。
-不要使用无法在Python标准库和pandas, numpy, matplotlib之外的库。
+根据用户需求生成 Python 代码，该代码需要对名为'df'的 DataFrame 进行操作。代码应该高效、简洁，包含必要的注释。
+不要使用无法在 Python 标准库和 pandas, numpy, matplotlib, seaborn 之外的库。
 
 重要规则：
 1. 计算的最终结果必须赋值给名为'result'的变量
@@ -333,10 +333,7 @@ def main():
     with DremioClient().data_source_csv(Path("test.csv")) as source:
         df = source.read()
 
-    analyzer = NL2DataAnalysis(
-        get_llm(),
-        # execute_mode="docker",
-    )
+    analyzer = NL2DataAnalysis(get_llm())
 
     queries = [
         "分析各学生的平均分",
@@ -374,7 +371,10 @@ def test_general_analyze():
     result = analyzer.invoke(df)
     print("\n\n分析报告:")
     print(result)
-    Path("report.md").write_text(result, encoding="utf-8")
+
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+    Path("output/report.md").write_text(result, encoding="utf-8")
 
 
 if __name__ == "__main__":

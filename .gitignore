@@ -334,3 +334,4 @@ pyrightconfig.json
 .env
 .env.*
 external/
+output/

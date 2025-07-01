@@ -1,20 +1,20 @@
 import ast
 import contextlib
-from io import BytesIO
 import io
 import json
 import os
+import shutil
 import tempfile
 import traceback
+from io import BytesIO
 from pathlib import Path
 from typing import Any, TypedDict
-import shutil
+
 import docker
 import docker.errors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 
 
 CODE_TEMPLATE_HEADER = """\
@@ -24,6 +24,11 @@ import matplotlib.pyplot as plt
 from io import StringIO
 import json
 import sys
+
+# 配置中文支持
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 df = pd.read_csv("/data/data.csv")
 
@@ -52,7 +57,7 @@ if 'result' in locals() or 'result' in globals():
             result_data['data'] = "无法序列化的结果"
 
 if plt.gcf().get_axes():
-    plt.savefig('/data/figure.png')
+    plt.savefig('/data/figure.png', dpi=300, bbox_inches='tight')
     result_data['has_figure'] = True
 
 with open('/data/result.json', 'w') as f:
@@ -177,6 +182,16 @@ def execute_code_with_exec(code: str, df: pd.DataFrame) -> ExecuteResult:
         "plt": __import__("matplotlib.pyplot"),
     }
 
+    # 添加中文支持
+    plt.rcParams["font.sans-serif"] = [
+        "SimHei",
+        "DejaVu Sans",
+        "Arial Unicode MS",
+        "sans-serif",
+    ]
+    plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["axes.unicode_minus"] = False
+
     # 捕获标准输出
     output_buffer = io.StringIO()
     result: ExecuteResult = {
@@ -211,11 +226,23 @@ def execute_code_with_exec(code: str, df: pd.DataFrame) -> ExecuteResult:
         result["success"] = True
     except Exception as e:
         result["error"] = f"执行错误: {str(e)}\n{traceback.format_exc()}"
+    finally:
+        # 只重置样式但保留字体设置
+        current_font_config = {
+            "font.sans-serif": plt.rcParams["font.sans-serif"],
+            "font.family": plt.rcParams["font.family"],
+            "axes.unicode_minus": plt.rcParams["axes.unicode_minus"],
+        }
+        plt.style.use("default")
+        # 恢复字体设置
+        plt.rcParams.update(current_font_config)
 
     return result
 
 
 def main():
+    from dotenv import load_dotenv
+
     load_dotenv()
 
     df = pd.read_csv("test.csv")
