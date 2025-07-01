@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Literal
 
 import dotenv
+from langchain_core.messages import BaseMessage
 import matplotlib.pyplot as plt
 import pandas as pd
 from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
-from langchain_core.language_models import BaseLLM, LanguageModelInput
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSerializable
 from pydantic import BaseModel, Field
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -296,7 +297,7 @@ class GeneralDataAnalysis:
         return analysis_chain.invoke({"sample_data": preview})
 
 
-def get_llm() -> BaseLLM:
+def get_llm() -> Runnable[LanguageModelInput, str]:
     """获取配置的LLM实例"""
     model_name = os.environ.get("TEST_MODEL_NAME")
     assert model_name, "TEST_MODEL_NAME 环境变量未设置"
@@ -307,10 +308,18 @@ def get_llm() -> BaseLLM:
         print("使用 Google Generative AI 模型")
         return GoogleGenerativeAI(model=model_name)
     elif "OPENAI_API_KEY" in os.environ:
-        from langchain_openai import OpenAI
+        from langchain_openai import ChatOpenAI
 
         print("使用 OpenAI 模型")
-        return OpenAI(model=model_name)
+
+        def convert(msg: BaseMessage) -> str:
+            if isinstance(msg.content, str):
+                return msg.content
+            if isinstance(msg.content, list):
+                return "\n".join(str(m) for m in msg.content)
+            raise ValueError(f"Unsupported message content type: {type(msg.content)}")
+
+        return ChatOpenAI(model=model_name) | convert
     else:
         from langchain_ollama import OllamaLLM
 
