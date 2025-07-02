@@ -2,10 +2,10 @@ import re
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import RunnableLambda
 
 from ..code_executor import ExecuteMode, ExecuteResult, execute_code
+from .llm import LLM
 
 PROMPT_TEMPLATE = """\
 你是一位数据分析专家，需要根据用户的自然语言分析需求生成Python代码。
@@ -33,7 +33,7 @@ PROMPT_TEMPLATE = """\
 class NL2DataAnalysis(RunnableLambda[tuple[pd.DataFrame, str], ExecuteResult]):
     def __init__(
         self,
-        llm: Runnable[LanguageModelInput, str],
+        llm: LLM,
         execute_mode: ExecuteMode = "exec",
     ) -> None:
         super().__init__(self._run)
@@ -82,17 +82,12 @@ def __demo__():
     """演示如何使用NL2DataAnalysis类"""
     import pandas as pd
 
-    # 创建一个示例 DataFrame
     data = {
         "日期": pd.date_range(start="2023-01-01", periods=5, freq="D"),
         "销售额": [100, 200, 150, 300, 250],
         "成本": [80, 150, 120, 200, 180],
     }
     df = pd.DataFrame(data)
-
-    # 创建NL2DataAnalysis实例
     analyzer = NL2DataAnalysis(llm=RunnableLambda(lambda x: "模拟LLM响应"))
-
-    # 执行分析
     result: ExecuteResult = analyzer.invoke((df, "计算每月的利润和趋势"))
     print(result)

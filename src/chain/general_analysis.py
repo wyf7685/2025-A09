@@ -3,11 +3,10 @@ from typing import override
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.runnables import Runnable
 
-from ._base import BaseLLMRunnable
 from ..code_executor import ExecuteMode, ExecuteResult
+from ._base import BaseLLMRunnable
+from .llm import LLM
 from .nl_analysis import NL2DataAnalysis
 from .parallel_runner import ParallelRunner
 
@@ -181,7 +180,7 @@ class GeneralDataAnalysis(
 ):
     def __init__(
         self,
-        llm: Runnable[LanguageModelInput, str],
+        llm: LLM,
         max_workers: int | None = None,
         execute_mode: ExecuteMode = "exec",
     ) -> None:
@@ -208,3 +207,24 @@ class GeneralDataAnalysis(
             | GeneralSummary(self.llm)
         )
         return chain.invoke(...)
+
+
+def __demo__():
+    """演示如何使用GeneralDataAnalysis类"""
+    import pandas as pd
+
+    from .llm import get_llm
+
+    data = {
+        "A": [1, 2, 3, 4, 5],
+        "B": [5, 4, 3, 2, 1],
+        "C": [10, 20, 30, 40, 50],
+    }
+    df = pd.DataFrame(data)
+
+    analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
+    report, figures = analyzer.invoke((df, ["趋势分析", "异常值检测"]))
+
+    # 打印报告
+    print(report)
+    print(f"\n\n生成了 {len(figures)} 个图表")
