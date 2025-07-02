@@ -773,14 +773,19 @@ ${formatDataPreview(preview.sample)}
             }
         }
 
-        function addMessage(role, content, timestamp, figure = null, isError = false) {
+        function addMessage(role, content, timestamp, figure = null, isError = false, isHTML = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             if (isError) messageDiv.classList.add('message-error');
 
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
-            contentDiv.textContent = content;
+            if (!isHTML) {
+                contentDiv.textContent = content;
+            }
+            else {
+                contentDiv.innerHTML = content; // 使用innerHTML来支持Markdown解析
+            }
 
             messageDiv.appendChild(contentDiv);
 
@@ -855,8 +860,9 @@ ${formatDataPreview(preview.sample)}
 
                 if (result.success) {
                     // 添加报告消息
-                    const reportContent = `📋 **智能分析报告已生成**<div class="report-content">${result.report}</div>`;
-                    addMessage('assistant', reportContent, new Date().toISOString());
+                    const markdownReport = marked.parse(result.report);
+                    const reportContent = `📋 <strong>智能分析报告已生成</strong><div class="report-content">${markdownReport}</div>`;
+                    addMessage('assistant', reportContent, new Date().toISOString(), null, false, true);
                     
                     // 添加报告中的图表
                     if (result.figures && result.figures.length > 0) {
