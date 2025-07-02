@@ -2,10 +2,11 @@ import re
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.runnables import Runnable, RunnableLambda
+
+from src.chain._base import BaseLLMRunnable
 
 from ..code_executor import ExecuteMode, ExecuteResult, execute_code
+from .llm import LLM
 
 PROMPT_TEMPLATE = """\
 你是一位数据分析专家，需要根据用户的自然语言分析需求生成Python代码。
@@ -30,14 +31,13 @@ PROMPT_TEMPLATE = """\
 """
 
 
-class NL2DataAnalysis(RunnableLambda[tuple[pd.DataFrame, str], ExecuteResult]):
+class NL2DataAnalysis(BaseLLMRunnable[tuple[pd.DataFrame, str], ExecuteResult]):
     def __init__(
         self,
-        llm: Runnable[LanguageModelInput, str],
+        llm: LLM,
         execute_mode: ExecuteMode = "exec",
     ) -> None:
-        super().__init__(self._run)
-        self.llm = llm
+        super().__init__(llm)
         self.execute_mode: ExecuteMode = execute_mode
 
     def analyze(
@@ -78,21 +78,89 @@ class NL2DataAnalysis(RunnableLambda[tuple[pd.DataFrame, str], ExecuteResult]):
             }
 
 
+PROMPT_SUMMARY = """\
+你是一位数据分析解释专家，需要根据分析结果为用户提供清晰易懂的总结。
+
+原始分析需求:
+{query}
+
+执行结果:
+{output}
+
+分析结果:
+{result}
+
+请提供一个专业且易懂的分析总结，包含以下内容:
+1. 简述分析的目标和方法
+2. 详细解释关键发现和结果的含义
+3. 提供结果的业务解读和洞察
+4. 如有图表，解释图表展示的主要信息
+5. 指出潜在的局限性或需要进一步分析的方向
+
+总结应保持专业性的同时，确保非技术人员也能理解。使用清晰的语言和结构化的格式。
+
+如果分析执行失败，请说明可能的原因并提供改进建议。
+"""
+
+
+class NLAnalysisSummary(BaseLLMRunnable[tuple[str, ExecuteResult], str]):
+    """对NL2DataAnalysis的执行结果进行专业总结的可运行组件"""
+
+    def _run(self, input: tuple[str, ExecuteResult]) -> str:
+        query, result = input
+
+        if not result["success"]:
+            return (
+                f"分析执行失败。错误信息: \n{result['error']}\n\n可能的原因：\n"
+                + "1. 数据格式可能与分析需求不匹配\n"
+                + "2. 分析查询可能需要澄清或重新表述\n"
+                + "3. 可能存在技术限制或数据质量问题"
+            )
+
+        result_text = ""
+        data = result["result"]
+        if data is not None:
+            if isinstance(data, pd.DataFrame):
+                result_text = f"DataFrame结果 (形状: {data.shape}):\n{data.to_string()}"
+            elif isinstance(data, pd.Series):
+                result_text = f"Series结果 (长度: {len(data)}):\n{data.to_string()}"
+            else:
+                result_text = str(data)
+
+        if result["figure"] is not None:
+            result_text += "\n\n[分析生成了可视化图表]"
+
+        prompt = PromptTemplate(
+            template=PROMPT_SUMMARY,
+            input_variables=["query", "output", "result"],
+        )
+
+        params = {
+            "query": query,
+            "output": result["output"],
+            "result": result_text,
+        }
+        return (prompt | self.llm).invoke(params)
+
+
 def __demo__():
     """演示如何使用NL2DataAnalysis类"""
     import pandas as pd
 
-    # 创建一个示例 DataFrame
+    from .llm import get_llm
+
     data = {
         "日期": pd.date_range(start="2023-01-01", periods=5, freq="D"),
         "销售额": [100, 200, 150, 300, 250],
         "成本": [80, 150, 120, 200, 180],
     }
     df = pd.DataFrame(data)
+    query = "计算每月的利润和趋势"
+    llm = get_llm()
 
-    # 创建NL2DataAnalysis实例
-    analyzer = NL2DataAnalysis(llm=RunnableLambda(lambda x: "模拟LLM响应"))
-
-    # 执行分析
-    result: ExecuteResult = analyzer.invoke((df, "计算每月的利润和趋势"))
+    result: ExecuteResult = NL2DataAnalysis(llm).invoke((df, query))
     print(result)
+
+    summary = NLAnalysisSummary(llm).invoke((query, result))
+    print("分析总结:")
+    print(summary)

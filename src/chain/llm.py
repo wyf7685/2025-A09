@@ -4,11 +4,10 @@ from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable
 
-
 type LLM = Runnable[LanguageModelInput, str]
 
 
-def get_llm() -> Runnable[LanguageModelInput, str]:
+def get_llm() -> LLM:
     """获取配置的LLM实例"""
     model_name = os.environ.get("TEST_MODEL_NAME")
     assert model_name, "TEST_MODEL_NAME 环境变量未设置"
@@ -33,6 +32,7 @@ def get_llm() -> Runnable[LanguageModelInput, str]:
 
         return ChatOpenAI(model=model_name) | convert
 
+    # TODO: check Ollama api url
     from langchain_ollama import OllamaLLM
 
     print("未检测到模型配置，尝试使用本地部署 Ollama 模型")

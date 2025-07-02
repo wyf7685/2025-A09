@@ -3,11 +3,10 @@ from typing import override
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.runnables import Runnable
 
-from ._base import BaseLLMRunnable
 from ..code_executor import ExecuteMode, ExecuteResult
+from ._base import BaseLLMRunnable
+from .llm import LLM
 from .nl_analysis import NL2DataAnalysis
 from .parallel_runner import ParallelRunner
 
@@ -15,7 +14,7 @@ GENERAL_DATA_ANALYSIS_QUERIES_PROMPT = """\
 你是一位资深的数据分析专家。根据给定的数据格式和示例数据，生成一系列有价值的分析问题。
 
 数据格式和示例:
-{sample_data}
+{overview}
 
 请生成5条数据分析查询语句，这些查询应该：
 1. 覆盖基础统计分析（如均值、分布、统计量等）
@@ -123,7 +122,7 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
 
 class QueryGenerator(
     BaseLLMRunnable[
-        # 输入数据: (df, focus) / (df)
+        # 输入数据: (overview, focus) / (overview)
         tuple[str, str | None] | str,
         # 输出: [query, ...]
         list[str],
@@ -133,21 +132,18 @@ class QueryGenerator(
     def _run(self, input: tuple[str, str | None] | str) -> list[str]:
         overview = input[0] if isinstance(input, tuple) else input
         focus = input[1] if isinstance(input, tuple) else None
-
-        chain = (
-            PromptTemplate(
-                template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
-                input_variables=["sample_data", "focus"],
-            )
-            | self.llm
+        prompt = PromptTemplate(
+            template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
+            input_variables=["overview", "focus"],
         )
-        text = chain.invoke({"sample_data": overview, "focus": focus or ""})
+        params = {"overview": overview, "focus": focus or ""}
+        text = (prompt | self.llm).invoke(params)
         return [q for q in map(str.strip, text.splitlines()) if q]
 
 
 class GeneralSummary(
     BaseLLMRunnable[
-        # 输入数据: (overview, [result, ...], focus)
+        # 输入数据: (overview, [(query, result), ...], focus)
         tuple[str, list[tuple[str, ExecuteResult]], str],
         # 输出: (summary, figures)
         tuple[str, list[BytesIO]],
@@ -167,12 +163,11 @@ class GeneralSummary(
                 figures.append(result["figure"])
             return f"<analysis-item>{text}</analysis-item>"
 
-        formatted = "\n\n".join(format(query, result) for query, result in results)
-
         prompt = PromptTemplate(
             template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
             input_variables=["overview", "results", "focus"],
         )
+        formatted = "\n\n".join(format(query, result) for query, result in results)
         params = {"overview": overview, "results": formatted, "focus": focus}
         return (prompt | self.llm).invoke(params), figures
 
@@ -185,7 +180,7 @@ class GeneralDataAnalysis(
 ):
     def __init__(
         self,
-        llm: Runnable[LanguageModelInput, str],
+        llm: LLM,
         max_workers: int | None = None,
         execute_mode: ExecuteMode = "exec",
     ) -> None:
@@ -212,3 +207,24 @@ class GeneralDataAnalysis(
             | GeneralSummary(self.llm)
         )
         return chain.invoke(...)
+
+
+def __demo__():
+    """演示如何使用GeneralDataAnalysis类"""
+    import pandas as pd
+
+    from .llm import get_llm
+
+    data = {
+        "A": [1, 2, 3, 4, 5],
+        "B": [5, 4, 3, 2, 1],
+        "C": [10, 20, 30, 40, 50],
+    }
+    df = pd.DataFrame(data)
+
+    analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
+    report, figures = analyzer.invoke((df, ["趋势分析", "异常值检测"]))
+
+    # 打印报告
+    print(report)
+    print(f"\n\n生成了 {len(figures)} 个图表")

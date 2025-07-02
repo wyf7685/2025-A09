@@ -1,6 +1,7 @@
 from typing import override
 
 from langchain_core.runnables import RunnableLambda
+
 from .llm import LLM
 
 
