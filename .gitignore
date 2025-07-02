@@ -335,3 +335,4 @@ pyrightconfig.json
 .env.*
 external/
 output/
+test.csv

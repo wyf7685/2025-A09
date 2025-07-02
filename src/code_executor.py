@@ -10,12 +10,12 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal, TypedDict, assert_never
 
-import docker
-import docker.errors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import docker
+import docker.errors
 
 CODE_TEMPLATE_HEADER = """\
 import pandas as pd

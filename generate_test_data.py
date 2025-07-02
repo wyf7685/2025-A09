@@ -1,8 +1,9 @@
-import pandas as pd
-import numpy as np
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
-import random
+
+import numpy as np
+import pandas as pd
 
 
 def generate_test_data(

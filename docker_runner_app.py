@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from code_executor import ExecuteResult, execute_code_in_docker
+from src.code_executor import ExecuteResult, execute_code_in_docker
 
 app = FastAPI(
     title="代码执行调试接口",
