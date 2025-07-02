@@ -15,7 +15,7 @@ GENERAL_DATA_ANALYSIS_QUERIES_PROMPT = """\
 你是一位资深的数据分析专家。根据给定的数据格式和示例数据，生成一系列有价值的分析问题。
 
 数据格式和示例:
-{sample_data}
+{overview}
 
 请生成5条数据分析查询语句，这些查询应该：
 1. 覆盖基础统计分析（如均值、分布、统计量等）
@@ -123,7 +123,7 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
 
 class QueryGenerator(
     BaseLLMRunnable[
-        # 输入数据: (df, focus) / (df)
+        # 输入数据: (overview, focus) / (overview)
         tuple[str, str | None] | str,
         # 输出: [query, ...]
         list[str],
@@ -133,21 +133,18 @@ class QueryGenerator(
     def _run(self, input: tuple[str, str | None] | str) -> list[str]:
         overview = input[0] if isinstance(input, tuple) else input
         focus = input[1] if isinstance(input, tuple) else None
-
-        chain = (
-            PromptTemplate(
-                template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
-                input_variables=["sample_data", "focus"],
-            )
-            | self.llm
+        prompt = PromptTemplate(
+            template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
+            input_variables=["overview", "focus"],
         )
-        text = chain.invoke({"sample_data": overview, "focus": focus or ""})
+        params = {"overview": overview, "focus": focus or ""}
+        text = (prompt | self.llm).invoke(params)
         return [q for q in map(str.strip, text.splitlines()) if q]
 
 
 class GeneralSummary(
     BaseLLMRunnable[
-        # 输入数据: (overview, [result, ...], focus)
+        # 输入数据: (overview, [(query, result), ...], focus)
         tuple[str, list[tuple[str, ExecuteResult]], str],
         # 输出: (summary, figures)
         tuple[str, list[BytesIO]],
@@ -167,12 +164,11 @@ class GeneralSummary(
                 figures.append(result["figure"])
             return f"<analysis-item>{text}</analysis-item>"
 
-        formatted = "\n\n".join(format(query, result) for query, result in results)
-
         prompt = PromptTemplate(
             template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
             input_variables=["overview", "results", "focus"],
         )
+        formatted = "\n\n".join(format(query, result) for query, result in results)
         params = {"overview": overview, "results": formatted, "focus": focus}
         return (prompt | self.llm).invoke(params), figures
 
