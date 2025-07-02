@@ -37,8 +37,18 @@ class TemporaryDataSource:
         response = requests.delete(url, headers=self.client._get_auth_header())
         response.raise_for_status()
 
-    def read(self, limit: int | None = None) -> pd.DataFrame:
-        return self.client.read_source(self.source_name, limit)
+    def read(self, limit: int | None = None, fetch_all: bool = False) -> pd.DataFrame:
+        """
+        读取临时数据源的数据
+
+        Args:
+            limit: 返回的行数限制
+            fetch_all: 是否获取全部数据
+
+        Returns:
+            pandas.DataFrame: 数据源数据
+        """
+        return self.client.read_source(self.source_name, limit, fetch_all)
 
 
 class DremioClient:
@@ -157,6 +167,7 @@ class DremioClient:
             if job_status["jobState"] == "COMPLETED":
                 return job_status
             elif job_status["jobState"] in ["FAILED", "CANCELED", "INVALID"]:
+                print(f"查询任务失败\n{job_status}")
                 raise Exception(f"Query failed with state: {job_status['jobState']}")
             time.sleep(1)
 
@@ -336,23 +347,74 @@ class DremioClient:
         return tables
 
     def read_source(
-        self, source_name: str | list[str], limit: int | None = None
+        self,
+        source_name: str | list[str],
+        limit: int | None = None,
+        fetch_all: bool = False,
     ) -> pd.DataFrame:
         """
-        读取数据源的前几行数据
+        读取数据源的数据
 
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
+            fetch_all: 是否获取全部数据（会忽略limit参数）
 
         Returns:
-            pandas.DataFrame: 数据源的前几行数据
+            pandas.DataFrame: 数据源数据
         """
         source_name = self._format_source_name_table(source_name)
-        sql_query = f"SELECT * FROM {source_name}"
-        if limit is not None:
-            sql_query += f" LIMIT {limit}"
-        return self.execute_sql_to_dataframe(sql_query)
+
+        if not fetch_all:
+            if limit is not None:
+                sql_query = f"SELECT * FROM {source_name} FETCH FIRST {limit} ROWS ONLY"
+            else:
+                sql_query = f"SELECT * FROM {source_name}"
+            return self.execute_sql_to_dataframe(sql_query)
+
+        try:
+            # 首先获取计数
+            count_query = f"SELECT COUNT(*) as row_count FROM {source_name}"
+            count_df = self.execute_sql_to_dataframe(count_query)
+            total_rows = count_df.iloc[0]["row_count"]
+            print(f"表中共有 {total_rows} 条数据")
+
+            batch_size = 100  # Dremio REST api 单次查询最大数据量
+            all_data = []
+
+            for offset in range(0, total_rows, batch_size):
+                print(
+                    f"正在获取第 {offset + 1}-{min(offset + batch_size, total_rows)} 条数据..."
+                )
+                batch_query = f"SELECT * FROM {source_name} OFFSET {offset} ROWS FETCH NEXT {batch_size} ROWS ONLY"
+                batch_result = self.execute_sql_to_dataframe(batch_query)
+
+                if batch_result.empty:
+                    print("返回了空结果，可能已经获取完所有数据")
+                    break
+
+                all_data.append(batch_result)
+
+                # 如果返回的数据量小于请求量，说明已经获取完毕
+                if len(batch_result) < batch_size:
+                    print(
+                        f"获取了 {len(batch_result)} 条数据，小于批次大小 {batch_size}，数据获取完毕"
+                    )
+                    break
+
+            if all_data:
+                result = pd.concat(all_data, ignore_index=True)
+                print(f"通过分批查询共获取 {len(result)} 条数据")
+                return result
+            return pd.DataFrame()
+
+        except Exception as e:
+            print(f"分批查询失败: {str(e)}")
+
+        print("警告: 无法获取全部数据，返回最多可获取的数据")
+        return self.execute_sql_to_dataframe(
+            f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY"
+        )
 
     def data_source_csv(self, file: Path) -> TemporaryDataSource:
         source_name = self.add_data_source_csv(file)

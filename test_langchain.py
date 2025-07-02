@@ -1,3 +1,5 @@
+import datetime
+from io import BytesIO
 import os
 import re
 from collections.abc import Callable, Sequence
@@ -5,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import dotenv
-import matplotlib.pyplot as plt
 import pandas as pd
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import LanguageModelInput
@@ -31,7 +32,7 @@ PROMPT_TEMPLATE = """\
 {query}
 
 根据用户需求生成 Python 代码，该代码需要对名为'df'的 DataFrame 进行操作。代码应该高效、简洁，包含必要的注释。
-不要使用无法在 Python 标准库和 pandas, numpy, matplotlib, seaborn 之外的库。
+不要使用无法在 Python 标准库和 numpy, pandas, scipy, matplotlib, seaborn 之外的库。
 
 重要规则：
 1. 计算的最终结果必须赋值给名为'result'的变量
@@ -116,6 +117,8 @@ GENERAL_DATA_ANALYSIS_QUERIES_PROMPT = """\
 生成的查询应该实用、明确，并且能从数据中获取有价值的见解。
 每条查询单独一行，不要包含序号或其他格式标记。
 
+{focus}
+
 以下是查询示例格式：
 分析各科目的平均成绩分布情况
 找出成绩提升最显著的学生
@@ -152,12 +155,21 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 - 提出2-3条基于数据的具体建议
 - 指出潜在的分析局限性
 
+图表处理说明:
+- 当你看到形如[图表已生成，ID=数字]的标记时，请在适当位置插入对应的Markdown图片引用
+- 图片引用格式为: ![图表描述](./figure_数字.png)
+- 为每个图表提供简短但有信息量的描述，说明其展示的主要内容
+- 确保在正文中引用并解释每个图表的含义和重要发现
+
 要求：
 1. 使用专业但易懂的语言
 2. 重点突出关键数据和重要发现
 3. 保持客观、准确的分析态度
 4. 确保结论有数据支持
 5. 适当引用具体的数字和统计结果
+6. 正确引用生成的图表
+
+{focus}
 """
 
 
@@ -167,6 +179,7 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
 
     if not result["success"]:
         result_text.append(f"分析失败: {result['error']}")
+        print(f"\n\n分析 {query} 时出错: \n{result['error']}\n\n")
         return "\n".join(result_text)
 
     if result["output"]:
@@ -180,6 +193,15 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
 
 
 class ParallelRunner[Input, Output]:
+    def __new__(
+        cls,
+        func: Runnable[Input, Output] | Callable[[Input], Output],
+        max_workers: int | None = None,
+    ) -> Runnable[Sequence[Input], Sequence[Output]]:
+        self = super().__new__(cls)
+        self.__init__(func, max_workers)
+        return RunnableLambda(self)
+
     def __init__(
         self,
         func: Runnable[Input, Output] | Callable[[Input], Output],
@@ -202,10 +224,13 @@ class GeneralDataAnalysis:
         llm: Runnable[LanguageModelInput, str],
         max_workers: int | None = None,
         execute_mode: ExecuteMode = "exec",
-    ) -> Runnable[pd.DataFrame, str]:
+    ) -> Runnable[
+        tuple[pd.DataFrame, list[str] | None] | pd.DataFrame,
+        tuple[str, list[BytesIO]],
+    ]:
         self = super().__new__(cls)
         self.__init__(llm, max_workers, execute_mode)
-        return RunnableLambda(self.analyze)
+        return RunnableLambda(self)
 
     def __init__(
         self,
@@ -217,36 +242,71 @@ class GeneralDataAnalysis:
         self.max_workers = max_workers
         self.analyzer = NL2DataAnalysis(llm, execute_mode)
 
-    def analyze(self, df: pd.DataFrame) -> str:
-        """执行完整的数据分析流程"""
-        preview = (
+    def format_preview(self, df: pd.DataFrame) -> str:
+        return (
             f"数据规模: {df.shape[0]} 行 × {df.shape[1]} 列\n"
             f"列数据类型:\n{df.dtypes}\n"
             f"数据预览:\n{df.head().to_string()}"
         )
+
+    def format_focus(self, focus_areas: list[str] | None) -> tuple[str, str]:
+        """格式化用户关注的分析方向"""
+        if not focus_areas:
+            return "", ""
+        focus = "\n".join(f"- {focus}" for focus in focus_areas)
+        return (
+            f"用户特别关注以下分析方向，请确保生成的查询能够覆盖这些方向：\n{focus}",
+            f"用户特别关注以下分析方向，请在报告中着重分析这些方面：\n{focus}",
+        )
+
+    def analyze(
+        self,
+        df: pd.DataFrame,
+        focus_areas: list[str] | None = None,
+    ) -> tuple[str, list[BytesIO]]:
+        """执行完整的数据分析流程"""
+        preview = self.format_preview(df)
+        query_focus, summary_focus = self.format_focus(focus_areas)
+        result_figures: list[BytesIO] = []
+
         prompt_queries = PromptTemplate(
             template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
-            input_variables=["sample_data"],
+            input_variables=["sample_data", "focus"],
         )
         prompt_summary = PromptTemplate(
             template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
-            input_variables=["overview", "results"],
+            input_variables=["overview", "results", "focus"],
         )
 
         def analyze(query: str) -> str:
             result = self.analyzer.invoke((df, query))
             formatted = format_analysis_result(query, result)
+            if result["figure"] is not None:
+                formatted += f"\n\n[图表已生成，ID={len(result_figures)}]"
+                result_figures.append(result["figure"])
             return f"<analysis-item>{formatted}</analysis-item>"
 
         chain = (
-            (prompt_queries | self.llm)
+            (lambda _: {"sample_data": preview, "focus": query_focus})
+            | (prompt_queries | self.llm)
             | (lambda text: filter(None, map(str.strip, str(text).splitlines())))
             | ParallelRunner[str, str](analyze, self.max_workers)
-            | (lambda results: {"overview": preview, "results": "\n\n".join(results)})
+            | (
+                lambda results: {
+                    "overview": preview,
+                    "results": "\n\n".join(results),
+                    "focus": summary_focus,
+                }
+            )
             | (prompt_summary | self.llm)
         )
 
-        return chain.invoke({"sample_data": preview})
+        return chain.invoke(...), result_figures
+
+    def __call__(
+        self, input: tuple[pd.DataFrame, list[str] | None] | pd.DataFrame
+    ) -> tuple[str, list[BytesIO]]:
+        return self.analyze(*input) if isinstance(input, tuple) else self.analyze(input)
 
 
 def get_llm() -> Runnable[LanguageModelInput, str]:
@@ -280,56 +340,32 @@ def get_llm() -> Runnable[LanguageModelInput, str]:
     return OllamaLLM(model=model_name)
 
 
-def test_analyze_query():
-    from dremio_client import DremioClient
-
-    with DremioClient().data_source_csv(Path("test.csv")) as source:
-        df = source.read()
-
-    analyzer = NL2DataAnalysis(get_llm())
-
-    queries = [
-        "分析各学生的平均分",
-        "分析学生的数学成绩统计量",
-        "找出总成绩最高的学生",
-    ]
-
-    for query in queries:
-        print(f"\n=== 分析需求: {query} ===")
-        result = analyzer.invoke((df, query))
-        if result["success"]:
-            if result["output"]:
-                print("\n执行输出:")
-                print(result["output"])
-            if result["result"] is not None:
-                print("\n计算结果:")
-                print(result["result"])
-            if result["figure"]:
-                print("\n[图表已生成]")
-                plt.figure()
-                plt.imshow(plt.imread(result["figure"]), aspect="auto")
-                plt.axis("off")
-                plt.show()
-        else:
-            print(f"\n执行失败: {result['error']}")
-
-
 def test_general_analyze():
     from dremio_client import DremioClient
 
     with DremioClient().data_source_csv(Path("test.csv")) as source:
-        df = source.read()
+        df = source.read(fetch_all=True)
+
+    print("数据预览:")
+    print(df.head().to_string())
+    print("\n数据规模:", df.shape)
+    print("\n请输入您关注的分析方向（多个方向用逗号分隔，直接回车则不设置侧重点）：")
+    print("例如：趋势分析,异常值检测,相关性分析")
+    user_input = input("> ").strip()
+    focus_areas = [i.strip() for i in user_input.split(",")] if user_input else None
 
     analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
-    result = analyzer.invoke(df)
+    report, figures = analyzer.invoke((df, focus_areas))
     print("\n\n分析报告:")
-    print(result)
+    print(report)
 
-    output_dir = Path("output")
-    output_dir.mkdir(exist_ok=True)
-    Path("output/report.md").write_text(result, encoding="utf-8")
-
+    output_dir = Path("output") / datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "report.md").write_text(report, encoding="utf-8")
+    for i, figure_data in enumerate(figures):
+        with (output_dir / f"figure_{i}.png").open("wb") as f:
+            f.write(figure_data.getvalue())
+    print(f"\n\n报告和图表已保存到: {output_dir}")
 
 if __name__ == "__main__":
-    # test_analyze_query()
     test_general_analyze()

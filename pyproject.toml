@@ -16,6 +16,7 @@ dependencies = [
     # "pyarrow>=20.0.0",  # for dremio
     "requests>=2.32.4",
     # "torch>=2.7.0",
+    "scipy>=1.16.0",
 ]
 
 # [tool.uv.sources]

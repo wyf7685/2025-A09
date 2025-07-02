@@ -21,12 +21,14 @@ CODE_TEMPLATE_HEADER = """\
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from io import StringIO
 import json
 import sys
+from matplotlib.font_manager import FontProperties
 
-# 配置中文支持
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
+# 配置中文支持 - 明确指定可用的中文字体路径
+plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'WenQuanYi Zen Hei', 'SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
@@ -57,6 +59,20 @@ if 'result' in locals() or 'result' in globals():
             result_data['data'] = "无法序列化的结果"
 
 if plt.gcf().get_axes():
+    # 确保保存图表前再次设置字体
+    plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'WenQuanYi Zen Hei', 'SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 应用字体到所有文本元素
+    for ax in plt.gcf().get_axes():
+        for text in ax.texts + [ax.title, ax.xaxis.label, ax.yaxis.label]:
+            text.set_fontproperties(FontProperties(family='sans-serif', size=text.get_fontsize()))
+
+        # 设置刻度标签字体
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_fontproperties(FontProperties(family='sans-serif', size=label.get_fontsize()))
+
     plt.savefig('/data/figure.png', dpi=300, bbox_inches='tight')
     result_data['has_figure'] = True
 
