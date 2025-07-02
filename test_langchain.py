@@ -2,45 +2,23 @@ import os
 import re
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import dotenv
 import matplotlib.pyplot as plt
 import pandas as pd
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage
-from langchain_core.runnables import Runnable, RunnableLambda, RunnableSerializable
-from pydantic import BaseModel, Field
+from langchain_core.runnables import Runnable, RunnableLambda
 
-from code_executor import ExecuteResult, execute_code_in_docker, execute_code_with_exec
+from code_executor import (
+    ExecuteMode,
+    ExecuteResult,
+    execute_code,
+)
 
 dotenv.load_dotenv()
-
-
-class CodeOutput(BaseModel):
-    python_code: str = Field(description="生成的Python代码，用于执行数据分析")
-
-
-class OutputParser(PydanticOutputParser[CodeOutput]):
-    def __init__(self) -> None:
-        super().__init__(pydantic_object=CodeOutput)
-
-    def parse(self, text: str) -> CodeOutput:
-        cleaned_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-
-        try:
-            return super().parse(cleaned_text.strip())
-        except Exception:
-            if code_match := re.search(
-                r"```[a-zA-Z0-9]*?\n?(.*?)```", cleaned_text, re.DOTALL
-            ):
-                code = code_match.group(1).strip()
-                return CodeOutput(python_code=code)
-            raise
 
 
 PROMPT_TEMPLATE = """\
@@ -63,7 +41,6 @@ PROMPT_TEMPLATE = """\
 5. 部分数值类型可能为字符串，请确保在计算前将其转换为数值类型
 6. 输出代码中 **不应包含示例数据**
 
-{format_instructions}
 """
 
 
@@ -71,7 +48,7 @@ class NL2DataAnalysis:
     def __new__(
         cls,
         llm: Runnable[LanguageModelInput, str],
-        execute_mode: Literal["exec", "docker"] = "exec",
+        execute_mode: ExecuteMode = "exec",
     ) -> Runnable[tuple[pd.DataFrame, str], ExecuteResult]:
         self = super().__new__(cls)
         self.__init__(llm, execute_mode)
@@ -80,36 +57,10 @@ class NL2DataAnalysis:
     def __init__(
         self,
         llm: Runnable[LanguageModelInput, str],
-        execute_mode: Literal["exec", "docker"] = "exec",
-    ):
-        self.execute_mode = execute_mode
-        self.output_parser = OutputParser()
-        self.code_generator: RunnableSerializable[dict, CodeOutput] = (
-            self._create_prompt_template() | llm | self.output_parser
-        )
-
-    def _create_prompt_template(self) -> PromptTemplate:
-        return PromptTemplate(
-            template=PROMPT_TEMPLATE,
-            input_variables=["sample_data", "query"],
-            partial_variables={
-                "format_instructions": self.output_parser.get_format_instructions()
-            },
-        )
-
-    def generate_code(self, sample_data: str, query: str) -> str:
-        """根据数据描述、示例数据和查询生成Python代码"""
-        return self.code_generator.invoke(
-            {"sample_data": sample_data, "query": query}
-        ).python_code
-
-    def execute_code(self, code: str, df: pd.DataFrame) -> ExecuteResult:
-        """在Docker容器中执行生成的代码"""
-        return (
-            execute_code_with_exec
-            if self.execute_mode == "exec"
-            else execute_code_in_docker
-        )(code, df)
+        execute_mode: ExecuteMode = "exec",
+    ) -> None:
+        self.llm = llm
+        self.execute_mode: ExecuteMode = execute_mode
 
     def analyze(
         self,
@@ -117,10 +68,24 @@ class NL2DataAnalysis:
         query: str,
     ) -> ExecuteResult:
         """完整的分析流程"""
+
+        def parser(text: str) -> str:
+            text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+            if match := re.search(r"```(.*?)```", text, re.DOTALL):
+                text = match.group(1).strip()
+            return text.removeprefix("python").strip()
+
+        prompt = PromptTemplate(
+            template=PROMPT_TEMPLATE,
+            input_variables=["sample_data", "query"],
+        )
+
+        chain = (prompt | self.llm | parser) | (
+            lambda code: execute_code(self.execute_mode, code, full_data)
+        )
+
         sample_data = str(full_data.dtypes) + "\n\n" + full_data.head().to_string()
-        code = self.generate_code(sample_data, query)
-        # print(f"生成的代码:\n\n{code}\n\n")
-        return self.execute_code(code, full_data)
+        return chain.invoke({"sample_data": sample_data, "query": query})
 
     def __call__(self, input: tuple[pd.DataFrame, str]) -> ExecuteResult:
         try:
@@ -162,10 +127,10 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 你是一位专业的数据分析师，需要基于多个分析结果编写一份完整的数据分析报告。
 
 数据概览:
-{data_overview}
+{overview}
 
 分析结果列表:
-{analysis_results}
+{results}
 
 请按照以下结构编写一份专业的数据分析报告：
 
@@ -196,46 +161,33 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 """
 
 
-@dataclass
-class AnalysisItem:
-    """单个分析项的结果"""
+def format_analysis_result(query: str, result: ExecuteResult) -> str:
+    """格式化单个分析结果为报告输入"""
+    result_text = [f"查询: {query}", ""]
 
-    query: str
-    result: ExecuteResult
+    if not result["success"]:
+        result_text.append(f"分析失败: {result['error']}")
+        return "\n".join(result_text)
 
+    if result["output"]:
+        result_text.append(f"<output>\n{result['output']}</output>")
+    if result["result"] is not None:
+        result_text.append(f"<result>\n{result['result']}</result>")
+    if result["figure"]:
+        result_text.append("[包含可视化图表]")
 
-def format_analysis_results(results: Sequence[AnalysisItem]) -> str:
-    """格式化分析结果为报告输入"""
-    formatted_results: list[list[str]] = []
-
-    for item in results:
-        result_text = ["---", f"查询: {item.query}", ""]
-        formatted_results.append(result_text)
-
-        if not item.result["success"]:
-            result_text.append(f"分析失败: {item.result['error']}")
-            continue
-
-        if item.result["output"]:
-            result_text.append(f"<output>\n{item.result['output']}</output>")
-        if item.result["result"] is not None:
-            result_text.append(f"<result>\n{item.result['result']}</result>")
-        if item.result["figure"]:
-            result_text.append("[包含可视化图表]")
-
-    return "\n\n".join(
-        f"<analysis-item>\n{'\n'.join(lines).strip()}\n</analysis-item>"
-        for lines in formatted_results
-    )
+    return "\n".join(result_text)
 
 
 class ParallelRunner[Input, Output]:
     def __init__(
         self,
-        func: Callable[[Input], Output],
+        func: Runnable[Input, Output] | Callable[[Input], Output],
         max_workers: int | None = None,
     ) -> None:
-        self.func = func
+        self.func: Callable[[Input], Output] = (
+            func.invoke if isinstance(func, Runnable) else func
+        )
         self.max_workers = max_workers
 
     def __call__(self, inputs: Sequence[Input]) -> Sequence[Output]:
@@ -249,7 +201,7 @@ class GeneralDataAnalysis:
         cls,
         llm: Runnable[LanguageModelInput, str],
         max_workers: int | None = None,
-        execute_mode: Literal["exec", "docker"] = "exec",
+        execute_mode: ExecuteMode = "exec",
     ) -> Runnable[pd.DataFrame, str]:
         self = super().__new__(cls)
         self.__init__(llm, max_workers, execute_mode)
@@ -259,11 +211,11 @@ class GeneralDataAnalysis:
         self,
         llm: Runnable[LanguageModelInput, str],
         max_workers: int | None = None,
-        execute_mode: Literal["exec", "docker"] = "exec",
+        execute_mode: ExecuteMode = "exec",
     ) -> None:
         self.llm = llm
         self.max_workers = max_workers
-        self.execute_mode: Literal["exec", "docker"] = execute_mode
+        self.analyzer = NL2DataAnalysis(llm, execute_mode)
 
     def analyze(self, df: pd.DataFrame) -> str:
         """执行完整的数据分析流程"""
@@ -272,29 +224,29 @@ class GeneralDataAnalysis:
             f"列数据类型:\n{df.dtypes}\n"
             f"数据预览:\n{df.head().to_string()}"
         )
-
-        analyzer = NL2DataAnalysis(self.llm, self.execute_mode)
-        analysis_chain = (
-            PromptTemplate(
-                template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
-                input_variables=["sample_data"],
-            )
-            | self.llm
-            | (lambda text: [q.strip() for q in str(text).split("\n") if q.strip()])
-            | ParallelRunner[str, AnalysisItem](
-                (lambda query: AnalysisItem(query, analyzer.invoke((df, query)))),
-                max_workers=self.max_workers,
-            )
-            | format_analysis_results
-            | (lambda results: {"data_overview": preview, "analysis_results": results})
-            | PromptTemplate(
-                template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
-                input_variables=["data_overview", "analysis_results"],
-            )
-            | self.llm
+        prompt_queries = PromptTemplate(
+            template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
+            input_variables=["sample_data"],
+        )
+        prompt_summary = PromptTemplate(
+            template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
+            input_variables=["overview", "results"],
         )
 
-        return analysis_chain.invoke({"sample_data": preview})
+        def analyze(query: str) -> str:
+            result = self.analyzer.invoke((df, query))
+            formatted = format_analysis_result(query, result)
+            return f"<analysis-item>{formatted}</analysis-item>"
+
+        chain = (
+            (prompt_queries | self.llm)
+            | (lambda text: filter(None, map(str.strip, str(text).splitlines())))
+            | ParallelRunner[str, str](analyze, self.max_workers)
+            | (lambda results: {"overview": preview, "results": "\n\n".join(results)})
+            | (prompt_summary | self.llm)
+        )
+
+        return chain.invoke({"sample_data": preview})
 
 
 def get_llm() -> Runnable[LanguageModelInput, str]:
@@ -307,7 +259,8 @@ def get_llm() -> Runnable[LanguageModelInput, str]:
 
         print("使用 Google Generative AI 模型")
         return GoogleGenerativeAI(model=model_name)
-    elif "OPENAI_API_KEY" in os.environ:
+
+    if "OPENAI_API_KEY" in os.environ:
         from langchain_openai import ChatOpenAI
 
         print("使用 OpenAI 模型")
@@ -320,14 +273,14 @@ def get_llm() -> Runnable[LanguageModelInput, str]:
             raise ValueError(f"Unsupported message content type: {type(msg.content)}")
 
         return ChatOpenAI(model=model_name) | convert
-    else:
-        from langchain_ollama import OllamaLLM
 
-        print("未检测到模型配置，尝试使用本地部署 Ollama 模型")
-        return OllamaLLM(model=model_name)
+    from langchain_ollama import OllamaLLM
+
+    print("未检测到模型配置，尝试使用本地部署 Ollama 模型")
+    return OllamaLLM(model=model_name)
 
 
-def main():
+def test_analyze_query():
     from dremio_client import DremioClient
 
     with DremioClient().data_source_csv(Path("test.csv")) as source:
@@ -378,5 +331,5 @@ def test_general_analyze():
 
 
 if __name__ == "__main__":
-    # main()
+    # test_analyze_query()
     test_general_analyze()

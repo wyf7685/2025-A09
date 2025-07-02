@@ -189,7 +189,7 @@ class DremioClient:
         print(f"查询提交成功，Job ID: {job_id}")
 
         job_status = self.wait_for_job_completion(job_id)
-        print("\n查询完成，状态:", job_status["jobState"])
+        print("查询完成，状态:", job_status["jobState"])
 
         return self.get_job_result(job_id)
 

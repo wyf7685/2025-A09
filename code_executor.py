@@ -8,7 +8,7 @@ import tempfile
 import traceback
 from io import BytesIO
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict, assert_never
 
 import docker
 import docker.errors
@@ -238,6 +238,19 @@ def execute_code_with_exec(code: str, df: pd.DataFrame) -> ExecuteResult:
         plt.rcParams.update(current_font_config)
 
     return result
+
+
+type ExecuteMode = Literal["exec", "docker"]
+
+
+def execute_code(mode: ExecuteMode, code: str, df: pd.DataFrame) -> ExecuteResult:
+    match mode:
+        case "docker":
+            return execute_code_in_docker(code, df)
+        case "exec":
+            return execute_code_with_exec(code, df)
+        case x:
+            assert_never(x)
 
 
 def main():
