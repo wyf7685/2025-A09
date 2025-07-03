@@ -1,8 +1,9 @@
 import os
 
+from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableWithMessageHistory
 
 type LLM = Runnable[LanguageModelInput, str]
 
@@ -37,3 +38,8 @@ def get_llm() -> LLM:
 
     print("未检测到模型配置，尝试使用本地部署 Ollama 模型")
     return OllamaLLM(model=model_name)
+
+
+def wrap_with_memory(llm: LLM) -> LLM:
+    history = InMemoryChatMessageHistory()
+    return RunnableWithMessageHistory(llm, lambda: history)

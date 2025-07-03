@@ -50,6 +50,15 @@ class TemporaryDataSource:
         """
         return self.client.read_source(self.source_name, limit, fetch_all)
 
+    def shape(self) -> tuple[int, int]:
+        """
+        获取临时数据源的形状（行数和列数）
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        return self.client.shape(self.source_name)
+
 
 class DremioClient:
     """Dremio REST API 客户端"""
@@ -415,6 +424,27 @@ class DremioClient:
         return self.execute_sql_to_dataframe(
             f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY"
         )
+
+    def shape(self, source_name: str | list[str]) -> tuple[int, int]:
+        """
+        获取数据源的形状（行数和列数）
+
+        Args:
+            source_name: 数据源名称
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+
+        sql_query = f"SELECT COUNT(*) as row_count FROM {self._format_source_name_table(source_name)}"
+        result = self.execute_sql_to_dataframe(sql_query)
+        row_count = int(result.iloc[0]["row_count"])
+
+        first_line = self.read_source(source_name, limit=1)
+        col_count = len(first_line.columns) if not first_line.empty else 0
+
+        return row_count, col_count
+
 
     def data_source_csv(self, file: Path) -> TemporaryDataSource:
         source_name = self.add_data_source_csv(file)
