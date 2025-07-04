@@ -1,3 +1,5 @@
+# ruff: noqa
+
 import base64
 import datetime
 import uuid
@@ -9,8 +11,8 @@ from flask import Flask, jsonify, render_template_string, request
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-from src.chain import GeneralDataAnalysis, NL2DataAnalysis, get_llm
-from src.dremio_client import DremioClient
+from app.chain import GeneralDataAnalysis, NL2DataAnalysis, get_llm
+from app.dremio_client import DremioClient
 
 app = Flask(__name__)
 CORS(app)
@@ -132,7 +134,7 @@ def chat():
 
         # 使用NL2DataAnalysis进行分析
         llm = get_llm()
-        analyzer = NL2DataAnalysis(llm, "docker")  # 使用docker模式提高安全性
+        analyzer = NL2DataAnalysis(llm)  # 使用docker模式提高安全性
 
         result = analyzer.invoke((df, message))
 
@@ -156,7 +158,9 @@ def chat():
                     if len(result["result"]) <= 10:
                         response_content += f"**数据结果:**\n```\n{result['result'].to_string()}\n```\n\n"
                     else:
-                        response_content += f"**数据结果:** (显示前10行)\n```\n{result['result'].head(10).to_string()}\n```\n\n"
+                        response_content += (
+                            f"**数据结果:** (显示前10行)\n```\n{result['result'].head(10).to_string()}\n```\n\n"
+                        )
 
                     # 存储完整结果供下载
                     assistant_response["data_result"] = {
@@ -165,9 +169,7 @@ def chat():
                         "columns": result["result"].columns.tolist(),
                     }
                 elif isinstance(result["result"], pd.Series):
-                    response_content += (
-                        f"**计算结果:**\n```\n{result['result'].to_string()}\n```\n\n"
-                    )
+                    response_content += f"**计算结果:**\n```\n{result['result'].to_string()}\n```\n\n"
                     assistant_response["data_result"] = {
                         "type": "series",
                         "data": result["result"].to_dict(),
@@ -232,14 +234,10 @@ def generate_report():
 
         # 使用GeneralDataAnalysis生成报告
         llm = get_llm()
-        analyzer = GeneralDataAnalysis(llm.with_retry(), execute_mode="docker")
+        analyzer = GeneralDataAnalysis(llm.with_retry())
 
         # 处理关注点
-        focus_list = (
-            [area.strip() for area in focus_areas if area.strip()]
-            if focus_areas
-            else None
-        )
+        focus_list = [area.strip() for area in focus_areas if area.strip()] if focus_areas else None
 
         report, figures = analyzer.invoke((df, focus_list))
 
@@ -315,9 +313,7 @@ def list_sessions():
 @app.route("/")
 def index():
     """提供前端界面"""
-    return render_template_string(
-        open("templates/chat_interface.html", encoding="utf-8").read()
-    )
+    return render_template_string(open("templates/chat_interface.html", encoding="utf-8").read())
 
 
 if __name__ == "__main__":

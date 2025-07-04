@@ -1,15 +1,17 @@
+# ruff: noqa: T201
+
 import datetime
 from pathlib import Path
 
 import dotenv
 
-from src.chain import GeneralDataAnalysis, get_llm
+from app.chain import GeneralDataAnalysis, get_llm
 
 dotenv.load_dotenv()
 
 
-def test_general_analyze():
-    from src.dremio_client import DremioClient
+def test_general_analyze() -> None:
+    from app.dremio_client import DremioClient
 
     with DremioClient().data_source_csv(Path("test.csv")) as source:
         df = source.read(fetch_all=True)
@@ -22,7 +24,8 @@ def test_general_analyze():
     user_input = input("> ").strip()
     focus_areas = [i.strip() for i in user_input.split(",")] if user_input else None
 
-    analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
+    llm = get_llm().with_retry()
+    analyzer = GeneralDataAnalysis(llm)
     report, figures = analyzer.invoke((df, focus_areas))
     print("\n\n分析报告:")
     print(report)

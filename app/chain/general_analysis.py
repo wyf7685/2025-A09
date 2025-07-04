@@ -3,12 +3,16 @@ from typing import override
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables.base import RunnableEach
 
-from ..code_executor import ExecuteMode, ExecuteResult
+from app.utils import format_overview
+
+from ..executor import ExecuteResult
+from ..log import logger
 from ._base import BaseLLMRunnable
 from .llm import LLM
 from .nl_analysis import NL2DataAnalysis
-from .parallel_runner import ParallelRunner
 
 GENERAL_DATA_ANALYSIS_QUERIES_PROMPT = """\
 你是一位资深的数据分析专家。根据给定的数据格式和示例数据，生成一系列有价值的分析问题。
@@ -41,6 +45,11 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 数据概览:
 {overview}
 
+数据类型处理说明:
+- 请注意：如果数据源自CSV文件，pandas可能将所有列初始识别为'object'类型。
+- 在报告中，不要过度关注这一问题。假设数值型数据已经在分析过程中被正确转换和处理。
+- 请专注于分析结果和数据洞察，而非数据类型显示问题。
+
 分析结果列表:
 {results}
 
@@ -48,7 +57,7 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 
 1. 数据概述
 - 简要说明数据的基本情况、维度和规模
-- 数据质量评估
+- 数据质量评估(排除CSV导入时的类型识别问题)
 
 2. 主要发现
 - 基于所有分析结果，总结3-5个最重要的发现
@@ -82,14 +91,6 @@ GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT = """\
 """
 
 
-def format_overview(df: pd.DataFrame) -> str:
-    return (
-        f"数据规模: {df.shape[0]} 行 × {df.shape[1]} 列\n"
-        f"列数据类型:\n{df.dtypes}\n"
-        f"数据预览:\n{df.head().to_string()}"
-    )
-
-
 def format_focus(focus_areas: list[str] | None) -> tuple[str, str]:
     """格式化用户关注的分析方向"""
     if not focus_areas:
@@ -107,7 +108,7 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
 
     if not result["success"]:
         result_text.append(f"分析失败: {result['error']}")
-        print(f"\n\n分析 {query} 时出错: \n{result['error']}\n\n")
+        logger.warning(f"分析 {query} 时出错: \n{result['error']}")
         return "\n".join(result_text)
 
     if result["output"]:
@@ -150,9 +151,7 @@ class GeneralSummary(
     ]
 ):
     @override
-    def _run(
-        self, input: tuple[str, list[tuple[str, ExecuteResult]], str]
-    ) -> tuple[str, list[BytesIO]]:
+    def _run(self, input: tuple[str, list[tuple[str, ExecuteResult]], str]) -> tuple[str, list[BytesIO]]:
         overview, results, focus = input
         figures: list[BytesIO] = []
 
@@ -178,53 +177,45 @@ class GeneralDataAnalysis(
         tuple[str, list[BytesIO]],
     ]
 ):
-    def __init__(
-        self,
-        llm: LLM,
-        max_workers: int | None = None,
-        execute_mode: ExecuteMode = "exec",
-    ) -> None:
+    def __init__(self, llm: LLM) -> None:
         super().__init__(llm)
-        self.max_workers = max_workers
-        self.analyzer = NL2DataAnalysis(llm, execute_mode)
+        self.analyzer = NL2DataAnalysis(llm)
 
-    def _run(
-        self, input: tuple[pd.DataFrame, list[str] | None] | pd.DataFrame
-    ) -> tuple[str, list[BytesIO]]:
+    def _run(self, input: tuple[pd.DataFrame, list[str] | None] | pd.DataFrame) -> tuple[str, list[BytesIO]]:
         df = input[0] if isinstance(input, tuple) else input
         focus_areas = input[1] if isinstance(input, tuple) else None
         overview = format_overview(df)
         query_focus, summary_focus = format_focus(focus_areas)
 
+        @RunnableLambda
         def worker(query: str) -> tuple[str, ExecuteResult]:
+            logger.info(f"开始分析: {query}")
             return query, self.analyzer.invoke((df, query))
 
         chain = (
             (lambda _: (overview, query_focus))
             | QueryGenerator(self.llm)
-            | ParallelRunner(worker, self.max_workers)
+            | RunnableEach(bound=worker)
             | (lambda results: (overview, results, summary_focus))
             | GeneralSummary(self.llm)
         )
         return chain.invoke(...)
 
 
-def __demo__():
-    """演示如何使用GeneralDataAnalysis类"""
-    import pandas as pd
+# def __demo__() -> None:
+#     """演示如何使用GeneralDataAnalysis类"""
+#     from .llm import get_llm
 
-    from .llm import get_llm
+#     data = {
+#         "A": [1, 2, 3, 4, 5],
+#         "B": [5, 4, 3, 2, 1],
+#         "C": [10, 20, 30, 40, 50],
+#     }
+#     df = pd.DataFrame(data)
 
-    data = {
-        "A": [1, 2, 3, 4, 5],
-        "B": [5, 4, 3, 2, 1],
-        "C": [10, 20, 30, 40, 50],
-    }
-    df = pd.DataFrame(data)
+#     analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
+#     report, figures = analyzer.invoke((df, ["趋势分析", "异常值检测"]))
 
-    analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
-    report, figures = analyzer.invoke((df, ["趋势分析", "异常值检测"]))
-
-    # 打印报告
-    print(report)
-    print(f"\n\n生成了 {len(figures)} 个图表")
+#     # 打印报告
+#     print(report)
+#     print(f"\n\n生成了 {len(figures)} 个图表")

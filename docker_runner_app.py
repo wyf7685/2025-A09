@@ -1,3 +1,5 @@
+# ruff: noqa
+
 import base64
 import io
 from typing import Any, Literal
@@ -8,7 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from src.code_executor import ExecuteResult, execute_code_in_docker
+from app.executor import ExecuteResult, execute_code as execute_code_in_docker
 
 app = FastAPI(
     title="代码执行调试接口",
@@ -74,9 +76,7 @@ class ExecutionResponse(BaseModel):
     success: bool = Field(description="是否执行成功")
     output: str = Field(default="", description="标准输出内容")
     error: str = Field(default="", description="错误信息")
-    result: TableResult | ArrayResult | OtherResult | None = Field(
-        default=None, description="执行结果"
-    )
+    result: TableResult | ArrayResult | OtherResult | None = Field(default=None, description="执行结果")
     figure: Figure | None = Field(default=None, description="生成的图表")
 
 
@@ -96,9 +96,7 @@ def process_result(execution_result: ExecuteResult) -> ExecutionResponse:
         if isinstance(result, pd.Series):
             result = result.to_frame()
         if isinstance(result, pd.DataFrame):
-            processed_result["result"] = TableResult(
-                data=result.to_dict(orient="split")
-            )
+            processed_result["result"] = TableResult(data=result.to_dict(orient="split"))
         elif hasattr(result, "__array__"):  # numpy数组
             processed_result["result"] = ArrayResult(data=result.tolist())
         else:

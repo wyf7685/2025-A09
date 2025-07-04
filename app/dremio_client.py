@@ -1,13 +1,16 @@
+# ruff: noqa: S608, S113
 import json
 import os
 import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 import pandas as pd
 import requests
+
+from app.log import logger
 
 
 class TemporaryDataSource:
@@ -20,24 +23,24 @@ class TemporaryDataSource:
         client: "DremioClient",
         type_: Literal["csv", "database"],
         source_name: list[str],
-    ):
+    ) -> None:
         self.client = client
         self.type_ = type_
         self.source_name = source_name
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
         if self.type_ == "csv":
             (self.client.external_dir / self.source_name[1]).unlink(missing_ok=True)
             return
 
         url = f"{self.client.base_url}/api/v3/catalog/{self.source_name[0]}"
-        response = requests.delete(url, headers=self.client._get_auth_header())
+        response = requests.delete(url, headers=self.client.get_auth_header())
         response.raise_for_status()
 
-    def read(self, limit: int | None = None, fetch_all: bool = False) -> pd.DataFrame:
+    def read(self, limit: int | None = None, *, fetch_all: bool = False) -> pd.DataFrame:
         """
         读取临时数据源的数据
 
@@ -48,7 +51,7 @@ class TemporaryDataSource:
         Returns:
             pandas.DataFrame: 数据源数据
         """
-        return self.client.read_source(self.source_name, limit, fetch_all)
+        return self.client.read_source(self.source_name, limit, fetch_all=fetch_all)
 
     def shape(self) -> tuple[int, int]:
         """
@@ -70,7 +73,7 @@ class DremioClient:
         password: str | None = None,
         external_dir: Path | None = None,
         external_name: str | None = None,
-    ):
+    ) -> None:
         """
         初始化 Dremio 客户端
 
@@ -121,7 +124,7 @@ class DremioClient:
         response.raise_for_status()
         return response.json()["token"]
 
-    def _get_auth_header(self) -> dict[str, str]:
+    def get_auth_header(self) -> dict[str, str]:
         """
         获取认证头部
 
@@ -149,7 +152,7 @@ class DremioClient:
 
         response = requests.post(
             submit_url,
-            headers=self._get_auth_header(),
+            headers=self.get_auth_header(),
             data=json.dumps(sql_payload),
         )
         response.raise_for_status()
@@ -170,14 +173,14 @@ class DremioClient:
         """
         job_status_url = f"{self.base_url}/api/v3/job/{job_id}"
         while True:
-            response = requests.get(job_status_url, headers=self._get_auth_header())
+            response = requests.get(job_status_url, headers=self.get_auth_header())
             response.raise_for_status()
             job_status = response.json()
             if job_status["jobState"] == "COMPLETED":
                 return job_status
-            elif job_status["jobState"] in ["FAILED", "CANCELED", "INVALID"]:
-                print(f"查询任务失败\n{job_status}")
-                raise Exception(f"Query failed with state: {job_status['jobState']}")
+            if job_status["jobState"] in ["FAILED", "CANCELED", "INVALID"]:
+                logger.warning(f"查询任务失败\n{job_status}")
+                raise Exception(f"Query failed with state: {job_status['jobState']}")  # noqa: TRY002
             time.sleep(1)
 
     def get_job_result(self, job_id: str) -> dict[str, Any]:
@@ -191,7 +194,7 @@ class DremioClient:
             dict[str, Any]: 查询结果
         """
         result_url = f"{self.base_url}/api/v3/job/{job_id}/results"
-        response = requests.get(result_url, headers=self._get_auth_header())
+        response = requests.get(result_url, headers=self.get_auth_header())
         response.raise_for_status()
         return response.json()
 
@@ -206,10 +209,10 @@ class DremioClient:
             dict[str, Any]: 查询结果
         """
         job_id = self.create_query_job(sql_query)
-        print(f"查询提交成功，Job ID: {job_id}")
+        logger.info(f"查询提交成功，Job ID: {job_id}")
 
-        job_status = self.wait_for_job_completion(job_id)
-        print("查询完成，状态:", job_status["jobState"])
+        self.wait_for_job_completion(job_id)
+        logger.success("查询完成")
 
         return self.get_job_result(job_id)
 
@@ -268,7 +271,7 @@ class DremioClient:
 
         response = requests.put(
             url,
-            headers=self._get_auth_header(),
+            headers=self.get_auth_header(),
             data=json.dumps(payload),
         )
         response.raise_for_status()
@@ -323,7 +326,7 @@ class DremioClient:
 
         response = requests.post(
             url,
-            headers=self._get_auth_header(),
+            headers=self.get_auth_header(),
             data=json.dumps(payload),
         )
         response.raise_for_status()
@@ -340,8 +343,8 @@ class DremioClient:
             list[list[str]]: 表路径列表
         """
         url = f"{self.base_url}/api/v3/catalog/by-path/{source_name}"
-        print(f"查询数据源 {source_name} 的子项...")
-        response = requests.get(url, headers=self._get_auth_header())
+        logger.info(f"查询数据源 {source_name} 的子项...")
+        response = requests.get(url, headers=self.get_auth_header())
         response.raise_for_status()
 
         tables: list[list[str]] = []
@@ -359,6 +362,7 @@ class DremioClient:
         self,
         source_name: str | list[str],
         limit: int | None = None,
+        *,
         fetch_all: bool = False,
     ) -> pd.DataFrame:
         """
@@ -386,44 +390,38 @@ class DremioClient:
             count_query = f"SELECT COUNT(*) as row_count FROM {source_name}"
             count_df = self.execute_sql_to_dataframe(count_query)
             total_rows = count_df.iloc[0]["row_count"]
-            print(f"表中共有 {total_rows} 条数据")
+            logger.info(f"表中共有 {total_rows} 条数据")
 
             batch_size = 100  # Dremio REST api 单次查询最大数据量
             all_data = []
 
             for offset in range(0, total_rows, batch_size):
-                print(
-                    f"正在获取第 {offset + 1}-{min(offset + batch_size, total_rows)} 条数据..."
-                )
+                logger.info(f"正在获取第 {offset + 1}-{min(offset + batch_size, total_rows)} 条数据...")
                 batch_query = f"SELECT * FROM {source_name} OFFSET {offset} ROWS FETCH NEXT {batch_size} ROWS ONLY"
                 batch_result = self.execute_sql_to_dataframe(batch_query)
 
                 if batch_result.empty:
-                    print("返回了空结果，可能已经获取完所有数据")
+                    logger.info("返回了空结果，可能已经获取完所有数据")
                     break
 
                 all_data.append(batch_result)
 
                 # 如果返回的数据量小于请求量，说明已经获取完毕
                 if len(batch_result) < batch_size:
-                    print(
-                        f"获取了 {len(batch_result)} 条数据，小于批次大小 {batch_size}，数据获取完毕"
-                    )
+                    logger.info(f"获取了 {len(batch_result)} 条数据，小于批次大小 {batch_size}，数据获取完毕")
                     break
 
             if all_data:
                 result = pd.concat(all_data, ignore_index=True)
-                print(f"通过分批查询共获取 {len(result)} 条数据")
+                logger.info(f"通过分批查询共获取 {len(result)} 条数据")
                 return result
             return pd.DataFrame()
 
-        except Exception as e:
-            print(f"分批查询失败: {str(e)}")
+        except Exception:
+            logger.exception("分批查询失败")
 
-        print("警告: 无法获取全部数据，返回最多可获取的数据")
-        return self.execute_sql_to_dataframe(
-            f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY"
-        )
+        logger.warning("警告: 无法获取全部数据，返回最多可获取的数据")
+        return self.execute_sql_to_dataframe(f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY")
 
     def shape(self, source_name: str | list[str]) -> tuple[int, int]:
         """
@@ -445,7 +443,6 @@ class DremioClient:
 
         return row_count, col_count
 
-
     def data_source_csv(self, file: Path) -> TemporaryDataSource:
         source_name = self.add_data_source_csv(file)
         return TemporaryDataSource(self, "csv", source_name)
@@ -459,9 +456,7 @@ class DremioClient:
         password: str,
         table: str | None = None,
     ) -> TemporaryDataSource:
-        source_name = self.add_data_source_postgres(
-            host, port, database, user, password
-        )
+        source_name = self.add_data_source_postgres(host, port, database, user, password)
         tables = self.query_source_tables(source_name)
         if not tables:
             raise ValueError(f"数据源 {source_name} 中没有可用的表")
@@ -477,45 +472,3 @@ class DremioClient:
                 raise ValueError(f"数据源 {source_name} 中没有找到表 {table}")
 
         return TemporaryDataSource(self, "database", source_name)
-
-
-if __name__ == "__main__":
-    # 创建客户端
-    client = DremioClient(
-        base_url="http://localhost:9047",
-        username="wyf7685",
-        password="pass7685",
-        # external_dir=Path(__file__).parent / "external",
-        # external_name="external",
-    )
-
-    try:
-        # 添加 PostgreSQL 数据源
-        print("正在添加 PostgreSQL 数据源到 Dremio...")
-        source_name = client.add_data_source_postgres(
-            host="postgres",
-            port=5432,
-            database="database",
-            user="user",
-            password="password",
-        )
-
-        print(f"PostgreSQL 数据源添加成功，源名称: {source_name}")
-        print("正在查询 PostgreSQL 数据源的所有表...")
-        tables = client.query_source_tables(source_name)
-        print("查询到的表:")
-        for table_path in tables:
-            print(table_path)
-            full_name = ".".join(f'"{part}"' for part in table_path)
-            sql_query = f"SELECT * FROM {full_name} LIMIT 5"
-            print(f"查询 SQL: {sql_query}")
-
-            df = client.execute_sql_to_dataframe(sql_query)
-            print("\n查询结果数据:")
-            print(df)
-
-    except requests.exceptions.HTTPError as err:
-        print(f"❌ 请求失败: {err.response.status_code}")
-        print(f"错误信息: {err.response.text}")
-    except Exception as e:
-        print(f"❌ 发生未知错误: {e}")

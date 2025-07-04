@@ -1,3 +1,5 @@
+# ruff: noqa: T201
+
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -77,9 +79,7 @@ def generate_test_data(
     # 添加城乡属性
     urban_rural = ["城市", "城镇", "农村"]
     urban_rural_weights = [0.45, 0.25, 0.3]
-    df["residence_type"] = np.random.choice(
-        urban_rural, size=num_rows, p=urban_rural_weights
-    )
+    df["residence_type"] = np.random.choice(urban_rural, size=num_rows, p=urban_rural_weights)
 
     # 添加新字段: 时间信息
     # 生成入学年份(最近3年)
@@ -97,25 +97,17 @@ def generate_test_data(
     # 添加新字段: 家庭背景
     # 生成随机家庭收入(以万元/年为单位)，根据地区有所差异
     base_income = {"东部": 20, "西部": 12, "南部": 15, "北部": 14, "中部": 16}
-    df["family_income"] = (
-        df["region"].apply(lambda r: np.random.normal(base_income[r], 5)).round(2)
-    )
+    df["family_income"] = df["region"].apply(lambda r: np.random.normal(base_income[r], 5)).round(2)
     df["family_income"] = np.clip(df["family_income"], 5, 50)  # 限制在合理范围
     # 生成随机父母教育水平
     education_levels = ["初中及以下", "高中", "大专", "本科", "硕士及以上"]
     weights = [0.15, 0.25, 0.3, 0.2, 0.1]  # 加权概率
-    df["father_education"] = np.random.choice(
-        education_levels, size=num_rows, p=weights
-    )
-    df["mother_education"] = np.random.choice(
-        education_levels, size=num_rows, p=weights
-    )
+    df["father_education"] = np.random.choice(education_levels, size=num_rows, p=weights)
+    df["mother_education"] = np.random.choice(education_levels, size=num_rows, p=weights)
     # 添加家庭结构
     family_structures = ["双亲家庭", "单亲家庭", "与祖父母同住", "其他"]
     family_weights = [0.75, 0.12, 0.1, 0.03]
-    df["family_structure"] = np.random.choice(
-        family_structures, size=num_rows, p=family_weights
-    )
+    df["family_structure"] = np.random.choice(family_structures, size=num_rows, p=family_weights)
 
     # 添加新字段: 学习习惯和参与度
     # 生成随机每日学习时间(小时)
@@ -151,9 +143,7 @@ def generate_test_data(
         academic_score += df[subject] * weight
     # 综合评分考虑学术成绩(80%)和其他因素(20%)
     other_factors = (
-        df["attendance_rate"] * 0.1
-        + df["mental_health"] * 10 * 0.05
-        + df["extracurricular_activity"] * 5 * 0.05
+        df["attendance_rate"] * 0.1 + df["mental_health"] * 10 * 0.05 + df["extracurricular_activity"] * 5 * 0.05
     )
     df["overall_score"] = (academic_score + other_factors).round(2)
     # 添加学习进步指标(相比上次考试)
