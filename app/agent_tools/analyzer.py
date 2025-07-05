@@ -10,7 +10,7 @@ from app.log import logger
 from app.utils import format_overview
 
 
-def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
+def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 

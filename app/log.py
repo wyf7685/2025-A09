@@ -40,7 +40,8 @@ logger.remove()
 logger_id_console = logger.add(
     sys.stdout,
     level=0,
-    diagnose=False,
+    # diagnose=False,
+    diagnose=True,  # 生产环境应设置为 False
     filter=default_filter,
     format=log_format,
 )
