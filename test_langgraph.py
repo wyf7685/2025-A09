@@ -14,6 +14,7 @@ from app.chain import get_chat_model
 from app.chain.llm import get_llm
 from app.log import logger
 from app.utils import format_overview
+from app.tool import DataFrameTools
 
 load_dotenv()
 
@@ -62,14 +63,13 @@ SYSTEM_PROMPT = """\
 """
 
 state_ta = TypeAdapter(dict[str, list[AnyMessage]])
-
-
 def test_agent() -> None:
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")
     analyzer, results = tool_analyzer(df, get_llm())
     agent = create_react_agent(
         model=get_chat_model(),
-        tools=[analyzer],
+        tools=[analyzer, DataFrameTools.correlation_analysis_tool,DataFrameTools.lag_analysis_tool,DataFrameTools.detect_outliers_tool
+               , DataFrameTools.train_model_tool, DataFrameTools.evaluate_model_tool],
         prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
         checkpointer=InMemorySaver(),
     )

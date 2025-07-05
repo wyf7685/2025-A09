@@ -37,13 +37,23 @@ PROMPT_GENERATE_CODE = """\
 4. 只需要返回可执行的Python代码，不需要解释
 5. 部分数值类型可能为字符串，请确保在计算前将其转换为数值类型
 6. 输出代码中 **禁止**包含示例数据
+7. 在实现相关性分析，时滞分析，异常检测时，必须使用自定义分析函数。
+8. 在实现模型训练时，必须使用自定义模型训练函数。
+
+**禁止以下操作:**
+- 禁止直接导入sklearn/scipy等分析库
+- 禁止自行实现相关/回归/分类等分析逻辑
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 **允许使用的自定义分析函数：**
-- **correlation_analysis(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
-- **lag_analysis(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
+- **corr_analys(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
+- **lag_analys(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
 - **detect_outliers(df, column, method="zscore", threshold=3)**: 对指定列进行异常值检测。
 
+**允许使用的自定义模型训练函数：**
+- **train_model(df, features, target, model_type="linear_regression", test_size=0.2, random_state=42)**: 训练机器学习模型。
+- **evaluate_model(trained_model_info)**: 评估训练好的模型。
+- **save_model(model_info, file_path="trained_model.joblib")**: 保存训练好的模型。
 代码执行环境: Python 3.12, Debian bookworm
 """
 
@@ -96,8 +106,25 @@ PROMPT_FIX_CODE = """\
 4. 保持代码高效简洁，包含必要的注释
 5. 只返回修复后的完整Python代码，不要包含其他解释，**禁止**包含示例数据
 6. 确保最终结果仍然存储在'result'变量中
+7. 在实现相关性分析，时滞分析，异常检测时，必须使用自定义分析函数。
+8. 在实现模型训练时，必须使用自定义模型训练函数。
+
+**禁止以下操作:**
+- 禁止直接导入sklearn/scipy等分析库
+- 禁止自行实现相关/回归/分类等分析逻辑
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
+
+**允许使用的自定义分析函数：**
+- **corr_analys(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
+- **lag_analys(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
+- **detect_outliers(df, column, method="zscore", threshold=3)**: 对指定列进行异常值检测。
+
+**允许使用的自定义模型训练函数：**
+- **train_model(df, features, target, model_type="linear_regression", test_size=0.2, random_state=42)**: 训练机器学习模型。
+- **evaluate_model(trained_model_info)**: 评估训练好的模型。
+- **save_model(model_info, file_path="trained_model.joblib")**: 保存训练好的模型。
+
 代码执行环境: Python 3.12, Debian bookworm
 """
 
