@@ -13,9 +13,10 @@ from pydantic import BaseModel, TypeAdapter
 from app.agent_tools import tool_analyzer
 from app.chain import get_chat_model
 from app.chain.general_analysis import GeneralSummary, GeneralSummaryInput
-from app.chain.llm import get_llm
+from app.chain.llm import get_llm, rate_limiter
 from app.executor import deserialize_result, serialize_result
 from app.log import logger
+from app.tool import dataframe_tools
 from app.utils import format_overview
 
 load_dotenv()
@@ -79,13 +80,16 @@ state_ta = TypeAdapter(AgentState)
 
 def test_agent() -> None:
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")
-    llm = get_llm()
+    limiter = rate_limiter(14)
+    llm = limiter | get_llm()
     analyzer, results = tool_analyzer(df, llm)
+    df_tools, models, model_paths = dataframe_tools(df)
     agent = create_react_agent(
         model=get_chat_model(),
-        tools=[analyzer],
+        tools=[analyzer, *df_tools],
         prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
         checkpointer=InMemorySaver(),
+        pre_model_hook=limiter,
     )
     config = ensure_config({"configurable": {"thread_id": threading.get_ident()}})
     state_file = Path("state.json")
@@ -113,6 +117,7 @@ def test_agent() -> None:
 
 # 分析电弧炉运行数据中的异常值
 # 分析能源消耗影响因素
+# 建模预测电弧炉的能量消耗
 
 if __name__ == "__main__":
     test_agent()

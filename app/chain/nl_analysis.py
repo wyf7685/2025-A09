@@ -38,6 +38,9 @@ PROMPT_GENERATE_CODE = """\
 5. 部分数值类型可能为字符串，请确保在计算前将其转换为数值类型
 6. 输出代码中 **禁止**包含示例数据
 
+**禁止以下操作:**
+- 禁止导入sklearn等机器学习库
+
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
 """
@@ -91,6 +94,9 @@ PROMPT_FIX_CODE = """\
 4. 保持代码高效简洁，包含必要的注释
 5. 只返回修复后的完整Python代码，不要包含其他解释，**禁止**包含示例数据
 6. 确保最终结果仍然存储在'result'变量中
+
+**禁止以下操作:**
+- 禁止导入sklearn等机器学习库
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
@@ -239,26 +245,3 @@ class NLAnalysisSummary(BaseLLMRunnable[tuple[str, ExecuteResult], str]):
             "result": result_text,
         }
         return (prompt | self.llm).invoke(params)
-
-
-# def __demo__() -> None:
-#     """演示如何使用NL2DataAnalysis类"""
-#     import pandas as pd
-
-#     from .llm import get_llm
-
-#     data = {
-#         "日期": pd.date_range(start="2023-01-01", periods=5, freq="D"),
-#         "销售额": [100, 200, 150, 300, 250],
-#         "成本": [80, 150, 120, 200, 180],
-#     }
-#     df = pd.DataFrame(data)
-#     query = "计算每月的利润和趋势"
-#     llm = get_llm()
-
-#     result: ExecuteResult = NL2DataAnalysis(llm).invoke((df, query))
-#     print(result)
-
-#     summary = NLAnalysisSummary(llm).invoke((query, result))
-#     print("分析总结:")
-#     print(summary)
