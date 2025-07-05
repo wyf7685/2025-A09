@@ -1,5 +1,8 @@
+import datetime
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -13,8 +16,8 @@ from app.agent_tools import tool_analyzer
 from app.chain import get_chat_model
 from app.chain.llm import get_llm
 from app.log import logger
+from app.tool import dataframe_tools
 from app.utils import format_overview
-from app.tool import DataFrameTools
 
 load_dotenv()
 
@@ -63,15 +66,42 @@ SYSTEM_PROMPT = """\
 """
 
 state_ta = TypeAdapter(dict[str, list[AnyMessage]])
+
+
+def rate_limiter(max_call_per_minute: int) -> Callable[[Any], Any]:
+    calls: list[datetime.datetime] = []
+
+    def limiter(input: Any) -> Any:
+        calls.append(datetime.datetime.now())
+        # 清理超过一分钟的调用记录
+        calls[:] = [call for call in calls if call > datetime.datetime.now() - datetime.timedelta(minutes=1)]
+        if len(calls) > max_call_per_minute:
+            wait_time = 60 - (datetime.datetime.now() - calls[0]).total_seconds()
+            if wait_time > 0:
+                logger.warning(f"超过速率限制，等待 {wait_time:.2f} 秒")
+                threading.Event().wait(wait_time)
+                logger.info("等待结束，继续处理请求")
+
+        if isinstance(input, dict):  # agent input
+            input.pop("is_last_step", None)
+            input.pop("remaining_steps", None)
+        return input
+
+    return limiter
+
+
 def test_agent() -> None:
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")
-    analyzer, results = tool_analyzer(df, get_llm())
+    limiter = rate_limiter(14)
+    llm = limiter | get_llm()
+    analyzer, results = tool_analyzer(df, llm)
+    df_tools, models, model_paths = dataframe_tools(df)
     agent = create_react_agent(
         model=get_chat_model(),
-        tools=[analyzer, DataFrameTools.correlation_analysis_tool,DataFrameTools.lag_analysis_tool,DataFrameTools.detect_outliers_tool
-               , DataFrameTools.train_model_tool, DataFrameTools.evaluate_model_tool],
+        tools=[analyzer, *df_tools],
         prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
         checkpointer=InMemorySaver(),
+        pre_model_hook=limiter,
     )
     config = ensure_config({"configurable": {"thread_id": threading.get_ident()}})
     state_file = Path("state.json")
@@ -90,6 +120,7 @@ def test_agent() -> None:
 
 # 分析电弧炉运行数据中的异常值
 # 分析能源消耗影响因素
+# 建模预测电弧炉的能量消耗
 
 if __name__ == "__main__":
     test_agent()

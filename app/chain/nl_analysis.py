@@ -45,15 +45,6 @@ PROMPT_GENERATE_CODE = """\
 - 禁止自行实现相关/回归/分类等分析逻辑
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
-**允许使用的自定义分析函数：**
-- **corr_analys(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
-- **lag_analys(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
-- **detect_outliers(df, column, method="zscore", threshold=3)**: 对指定列进行异常值检测。
-
-**允许使用的自定义模型训练函数：**
-- **train_model(df, features, target, model_type="linear_regression", test_size=0.2, random_state=42)**: 训练机器学习模型。
-- **evaluate_model(trained_model_info)**: 评估训练好的模型。
-- **save_model(model_info, file_path="trained_model.joblib")**: 保存训练好的模型。
 代码执行环境: Python 3.12, Debian bookworm
 """
 
@@ -114,17 +105,6 @@ PROMPT_FIX_CODE = """\
 - 禁止自行实现相关/回归/分类等分析逻辑
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
-
-**允许使用的自定义分析函数：**
-- **corr_analys(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
-- **lag_analys(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
-- **detect_outliers(df, column, method="zscore", threshold=3)**: 对指定列进行异常值检测。
-
-**允许使用的自定义模型训练函数：**
-- **train_model(df, features, target, model_type="linear_regression", test_size=0.2, random_state=42)**: 训练机器学习模型。
-- **evaluate_model(trained_model_info)**: 评估训练好的模型。
-- **save_model(model_info, file_path="trained_model.joblib")**: 保存训练好的模型。
-
 代码执行环境: Python 3.12, Debian bookworm
 """
 
@@ -271,26 +251,3 @@ class NLAnalysisSummary(BaseLLMRunnable[tuple[str, ExecuteResult], str]):
             "result": result_text,
         }
         return (prompt | self.llm).invoke(params)
-
-
-# def __demo__() -> None:
-#     """演示如何使用NL2DataAnalysis类"""
-#     import pandas as pd
-
-#     from .llm import get_llm
-
-#     data = {
-#         "日期": pd.date_range(start="2023-01-01", periods=5, freq="D"),
-#         "销售额": [100, 200, 150, 300, 250],
-#         "成本": [80, 150, 120, 200, 180],
-#     }
-#     df = pd.DataFrame(data)
-#     query = "计算每月的利润和趋势"
-#     llm = get_llm()
-
-#     result: ExecuteResult = NL2DataAnalysis(llm).invoke((df, query))
-#     print(result)
-
-#     summary = NLAnalysisSummary(llm).invoke((query, result))
-#     print("分析总结:")
-#     print(summary)
