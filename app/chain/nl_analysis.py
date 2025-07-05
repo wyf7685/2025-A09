@@ -39,6 +39,11 @@ PROMPT_GENERATE_CODE = """\
 6. 输出代码中 **禁止**包含示例数据
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
+**允许使用的自定义分析函数：**
+- **correlation_analysis(df, col1, col2, method="pearson")**: 用于计算两列之间的相关性（默认皮尔逊相关系数）。例如：`result = correlation_analysis(df, "温度", "压力")`
+- **lag_analysis(df, time_col1, time_col2)**: 计算两个时间字段的时滞（单位：秒）。
+- **detect_outliers(df, column, method="zscore", threshold=3)**: 对指定列进行异常值检测。
+
 代码执行环境: Python 3.12, Debian bookworm
 """
 
