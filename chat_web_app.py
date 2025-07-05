@@ -12,6 +12,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from app.chain import GeneralDataAnalysis, NL2DataAnalysis, get_llm
+from app.chain.general_analysis import GeneralDataAnalysisInput
 from app.dremio_client import DremioClient
 
 app = Flask(__name__)
@@ -184,7 +185,7 @@ def chat():
             # 处理图表
             if result["figure"]:
                 try:
-                    img_data = base64.b64encode(result["figure"].getvalue()).decode()
+                    img_data = base64.b64encode(result["figure"]).decode()
                     assistant_response["figure"] = f"data:image/png;base64,{img_data}"
                     response_content += "📊 **生成了可视化图表**\n\n"
                 except Exception as e:
@@ -239,12 +240,12 @@ def generate_report():
         # 处理关注点
         focus_list = [area.strip() for area in focus_areas if area.strip()] if focus_areas else None
 
-        report, figures = analyzer.invoke((df, focus_list))
+        report, figures = analyzer.invoke(GeneralDataAnalysisInput(df, focus_list))
 
         # 处理图片
         figure_data = []
         for i, fig in enumerate(figures):
-            img_data = base64.b64encode(fig.getvalue()).decode()
+            img_data = base64.b64encode(fig).decode()
             figure_data.append({"id": i, "data": f"data:image/png;base64,{img_data}"})
 
         # 添加报告到会话记录

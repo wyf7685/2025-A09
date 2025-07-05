@@ -10,7 +10,7 @@ from app.log import logger
 from app.utils import format_overview
 
 
-def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]]:
+def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -23,12 +23,13 @@ def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]
     """
     analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(df))
     overview = format_overview(df)
-    results: list[ExecuteResult] = []
+    results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
-        logger.info(f"Analyzing data with query: {query}")
+        # logger.info(f"Analyzing data with query: {query}")
+        logger.info(f"分析数据 - 查询内容:\n{query}")
         result = analyzer.invoke((overview, query))
-        results.append(result)
+        results.append((query, result))
 
         # 处理图片结果
         artifact = {}
@@ -36,7 +37,7 @@ def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]
             # 创建包含图片的工具输出
             artifact = {
                 "type": "image",
-                "base64_data": base64.b64encode(fig.getvalue()).decode(),
+                "base64_data": base64.b64encode(fig).decode(),
                 "caption": "分析图表输出",
             }
 

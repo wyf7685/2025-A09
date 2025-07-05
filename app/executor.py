@@ -5,7 +5,7 @@ import os
 import shutil
 import tempfile
 import time
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 from typing import Any, Self, TypedDict
 from weakref import finalize
@@ -23,7 +23,78 @@ class ExecuteResult(TypedDict):
     output: str
     error: str
     result: Any
-    figure: BytesIO | None
+    figure: bytes | None
+
+
+def serialize_result(result: ExecuteResult) -> dict:
+    data = {}
+    if isinstance(result["result"], pd.DataFrame):
+        data["result_type"] = "dataframe"
+        data["result"] = result["result"].to_json(orient="split")
+    elif isinstance(result["result"], pd.Series):
+        data["result_type"] = "series"
+        data["result"] = result["result"].to_json()
+        data["series_name"] = result["result"].name
+    elif hasattr(result["result"], "__array__"):
+        data["result_type"] = "array"
+        data["result"] = result["result"].tolist()
+    else:
+        data["result_type"] = "other"
+        data["result"] = str(result["result"])
+    data["success"] = result["success"]
+    data["output"] = result["output"]
+    data["error"] = result["error"]
+    if result["figure"] is not None:
+        data["has_figure"] = True
+        data["figure_data"] = base64.b64encode(result["figure"]).decode("utf-8")
+    else:
+        data["has_figure"] = False
+        data["figure_data"] = None
+    return data
+
+
+def deserialize_result(data: dict) -> ExecuteResult:
+    result: ExecuteResult = {
+        "success": data.get("success", False),
+        "output": data.get("output", ""),
+        "error": data.get("error", ""),
+        "result": None,
+        "figure": None,
+    }
+
+    # 处理返回值
+    if "result" in data:
+        result_type = data.get("result_type", "other")
+        if result_type == "dataframe":
+            result["result"] = pd.read_json(StringIO(data["result"]), orient="split")
+        elif result_type == "series":
+            result["result"] = pd.read_json(StringIO(data["result"]), typ="series")
+            if "series_name" in data:
+                result["result"].name = data["series_name"]
+        elif result_type == "array":
+            result["result"] = np.array(data["result"])
+        else:
+            result["result"] = data["result"]
+
+    # 处理图表
+    if data.get("has_figure") and data.get("figure_data"):
+        result["figure"] = base64.b64decode(data["figure_data"])
+
+    return result
+
+
+def parse_result(data: bytes) -> ExecuteResult:
+    try:
+        execution_result: dict = json.loads(data.decode("utf-8"))
+        return deserialize_result(execution_result)
+    except Exception as e:
+        return {
+            "success": False,
+            "output": "",
+            "error": f"解析结果时出错: {e}",
+            "result": None,
+            "figure": None,
+        }
 
 
 class CodeExecutor:
@@ -35,7 +106,6 @@ class CodeExecutor:
         self,
         df: pd.DataFrame,
         image: str | None = None,
-        timeout: int = 30,
         memory_limit: str = "512m",
         cpu_shares: int = 2,
     ) -> None:
@@ -44,7 +114,6 @@ class CodeExecutor:
 
         Args:
             image: Docker镜像名称，如果为None则使用环境变量DOCKER_RUNNER_IMAGE
-            timeout: 代码执行超时时间（秒）
             memory_limit: 内存限制
             cpu_shares: CPU使用限制
         """
@@ -52,7 +121,6 @@ class CodeExecutor:
         if not image:
             raise ValueError("Docker镜像名称未指定，请设置DOCKER_RUNNER_IMAGE环境变量")
         self.image = image
-        self.timeout = timeout
         self.memory_limit = memory_limit
         self.cpu_shares = cpu_shares
         self.client = docker.DockerClient()
@@ -141,49 +209,7 @@ class CodeExecutor:
 
         output_data = output_file.read_bytes()
         output_file.unlink()
-
-        # 解析结果
-        result: ExecuteResult = {
-            "success": False,
-            "output": "",
-            "error": "",
-            "result": None,
-            "figure": None,
-        }
-
-        if output_data:
-            try:
-                execution_result: dict = json.loads(output_data.decode("utf-8"))
-
-                # 填充结果
-                result["success"] = execution_result.get("success", False)
-                result["output"] = execution_result.get("output", "")
-                result["error"] = execution_result.get("error", "")
-
-                # 处理返回值
-                if "result" in execution_result:
-                    result_type = execution_result.get("result_type", "other")
-
-                    if result_type == "dataframe":
-                        result["result"] = pd.read_json(StringIO(execution_result["result"]), orient="split")
-                    elif result_type == "series":
-                        result["result"] = pd.read_json(StringIO(execution_result["result"]), typ="series")
-                        if "series_name" in execution_result:
-                            result["result"].name = execution_result["series_name"]
-                    elif result_type == "array":
-                        result["result"] = np.array(execution_result["result"])
-                    else:
-                        result["result"] = execution_result["result"]
-
-                # 处理图表
-                if execution_result.get("has_figure") and execution_result.get("figure_data"):
-                    figure_data = base64.b64decode(execution_result["figure_data"])
-                    result["figure"] = BytesIO(figure_data)
-
-            except json.JSONDecodeError as e:
-                result["error"] += f"\n解析结果时出错: {e}"
-
-        return result
+        return parse_result(output_data)
 
 
 def format_result(result: ExecuteResult) -> str:

@@ -1,5 +1,6 @@
 import threading
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -7,11 +8,13 @@ from langchain_core.messages import AnyMessage
 from langchain_core.runnables import ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from app.agent_tools import tool_analyzer
 from app.chain import get_chat_model
+from app.chain.general_analysis import GeneralSummary, GeneralSummaryInput
 from app.chain.llm import get_llm
+from app.executor import deserialize_result, serialize_result
 from app.log import logger
 from app.utils import format_overview
 
@@ -61,12 +64,23 @@ SYSTEM_PROMPT = """\
 在分析过程中始终记住，复杂的分析问题通常需要多个连续的工具调用才能得到全面而深入的解答。
 """
 
-state_ta = TypeAdapter(dict[str, list[AnyMessage]])
+
+class AgentValues(TypedDict):
+    messages: list[AnyMessage]
+
+
+class AgentState(BaseModel):
+    values: AgentValues
+    results: list[tuple[str, dict]]
+
+
+state_ta = TypeAdapter(AgentState)
 
 
 def test_agent() -> None:
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")
-    analyzer, results = tool_analyzer(df, get_llm())
+    llm = get_llm()
+    analyzer, results = tool_analyzer(df, llm)
     agent = create_react_agent(
         model=get_chat_model(),
         tools=[analyzer],
@@ -76,16 +90,25 @@ def test_agent() -> None:
     config = ensure_config({"configurable": {"thread_id": threading.get_ident()}})
     state_file = Path("state.json")
     if state_file.exists():
-        values = state_ta.validate_json(state_file.read_bytes())
-        agent.update_state(config, values)
-        logger.info(f"已加载 agent 状态: {len(values['messages'])}")
+        state = state_ta.validate_json(state_file.read_bytes())
+        agent.update_state(config, state.values)
+        results[:] = [(query, deserialize_result(result)) for query, result in state.results]
+        logger.info(f"已加载 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
 
     while user_input := input(">>> ").strip():
         result = agent.invoke({"messages": [{"role": "user", "content": user_input}]}, config)
         logger.info(f"LLM 输出:\n{result['messages'][-1].content}")
-        state = agent.get_state(config)
-        state_file.write_bytes(state_ta.dump_json(state.values))
+        state = AgentState(
+            values=cast("AgentValues", agent.get_state(config).values),
+            results=[(query, serialize_result(result)) for query, result in results],
+        )
+        state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
+
+    if input("是否执行总结? (y/n): ").strip().lower() == "y":
+        summary, figures = GeneralSummary(llm).invoke(GeneralSummaryInput(format_overview(df), results))
+        logger.info(f"总结报告:\n{summary}")
+        logger.info(f"生成的图表数: {len(figures)}")
 
 
 # 分析电弧炉运行数据中的异常值
