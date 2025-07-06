@@ -1,7 +1,8 @@
 import base64
+import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
@@ -125,7 +126,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         model_type: str = "linear_regression",
         test_size: float = 0.2,
         random_state: int = 42,
-        hyperparams: dict[str, Any] | None = None,  # 新增参数
+        hyperparams: dict[str, Any] | str | None = None,  # 修改参数类型
     ) -> str:
         """
         训练机器学习模型。
@@ -138,20 +139,39 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             model_type (str): 模型类型。
             test_size (float): 测试集占总数据集的比例。
             random_state (int): 随机种子。
-            hyperparams (dict, optional): 模型超参数，可以是超参数优化的结果。
+            hyperparams (dict | str, optional): 模型超参数，可以是字典或JSON字符串格式。
 
         Returns:
             str: 训练结果信息，包含训练结果ID(用于评估模型时引用)和模型类型、特征列、目标列等信息。
         """
         logger.info(f"开始训练模型: {model_type}，特征: {features}，目标: {target}")
-        if hyperparams:
-            hyperparams = _fix_hyperparams(hyperparams)
-            logger.info(f"使用自定义超参数: {hyperparams}")
+
+        # 处理超参数
+        hyperparams_parse_error = None
+        if hyperparams is not None:
+            # 如果是字符串，尝试解析为JSON
+            if isinstance(hyperparams, str):
+                try:
+                    hyperparams = cast("dict[str, Any]", json.loads(hyperparams))
+                except json.JSONDecodeError as err:
+                    hyperparams_parse_error = (
+                        f"注意: 无法解析超参数JSON字符串 {hyperparams}，使用默认超参数\n错误详情: {err}"
+                    )
+                    logger.warning(f"无法解析超参数JSON字符串: {hyperparams}，将使用默认超参数")
+                    hyperparams = None
+
+            # 修复超参数类型问题
+            if hyperparams:
+                hyperparams = _fix_hyperparams(hyperparams)
+                logger.info(f"使用自定义超参数: {hyperparams}")
 
         result = train_model(df, features, target, model_type, test_size, random_state, hyperparams)
         run_id = str(uuid.uuid4())
         train_model_cache[run_id] = result
-        return _format_train_result_for_llm(run_id, result)
+        formatted = _format_train_result_for_llm(run_id, result)
+        if hyperparams_parse_error:
+            formatted += f"\n\n{hyperparams_parse_error}"
+        return formatted
 
     @tool
     def evaluate_model_tool(trained_model_id: str) -> EvaluateModelResult:
