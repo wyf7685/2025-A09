@@ -1,14 +1,66 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router'
+
+const routes = [
+  {
+    path: '/',
+    redirect: '/dashboard'
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('../views/Dashboard.vue'),
+    meta: { title: '工作台' }
+  },
+  {
+    path: '/data-upload',
+    name: 'DataUpload',
+    component: () => import('../views/DataUpload.vue'),
+    meta: { title: '数据上传' }
+  },
+  {
+    path: '/data-sources',
+    name: 'DataSources',
+    component: () => import('../views/DataSources.vue'),
+    meta: { title: '数据源' }
+  },
+  {
+    path: '/chat-analysis',
+    name: 'ChatAnalysis',
+    component: () => import('../views/ChatAnalysis.vue'),
+    meta: { title: '对话分析' }
+  },
+  {
+    path: '/auto-analysis',
+    name: 'AutoAnalysis',
+    component: () => import('../views/AutoAnalysis.vue'),
+    meta: { title: '自动分析' }
+  },
+  {
+    path: '/reports',
+    name: 'Reports',
+    component: () => import('../views/Reports.vue'),
+    meta: { title: '分析报告' }
+  },
+  {
+    path: '/models',
+    name: 'Models',
+    component: () => import('../views/Models.vue'),
+    meta: { title: '模型管理' }
+  }
+]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BACKEND_BASE_URL || '/'),
-  routes: [
-    {
-      path: '/:pathMatch(.*)*',
-      name: 'not-found',
-      redirect: '/',
-    },
-  ],
-});
+  history: createWebHistory(),
+  routes
+})
 
-export default router;
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  // 设置页面标题
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - 智能数据分析平台`
+  }
+  next()
+})
+
+export default router
