@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -10,9 +9,6 @@ from app.chain.general_analysis import GeneralSummary, GeneralSummaryInput
 from app.chain.llm import get_llm, rate_limiter
 from app.log import logger
 from app.utils import format_overview
-
-if TYPE_CHECKING:
-    from langchain_core.messages import AIMessage
 
 load_dotenv()
 
@@ -31,7 +27,7 @@ def test_agent() -> None:
 
     while user_input := input(">>> ").strip():
         try:
-            message: AIMessage = agent.invoke(user_input)
+            message = agent.invoke(user_input)
         except Exception:
             logger.exception("Agent 执行失败")
             continue
