@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { RouterView, useRoute, useRouter } from 'vue-router';
+import { ref } from 'vue'
 
-const router = useRouter();
-const route = useRoute();
+const msg = ref("Hello Vue 3!")
 </script>
 
 <template>
-  <RouterView v-slot="{ Component }">
-    <transition name="fade" mode="out-in">
-      <component :is="Component" />
-    </transition>
-  </RouterView>
+  <div class="app">
+    <h1>{{ msg }}</h1>
+    <p>如果你能看到这个，说明 Vue 应用正常运行了！</p>
+    <RouterView />
+  </div>
 </template>
 
-<style>
-@import '@/assets/styles/global.css';
-@import '@/assets/styles/element-override.css';
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+<style scoped>
+.app {
+  padding: 20px;
+  text-align: center;
+  font-family: Arial, sans-serif;
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+h1 {
+  color: #42b883;
+  margin-bottom: 20px;
+}
+
+p {
+  color: #666;
+  margin-bottom: 30px;
 }
 </style>
