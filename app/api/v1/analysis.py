@@ -4,7 +4,6 @@
 
 import base64
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
@@ -14,6 +13,7 @@ from app.api.v1.sessions import sessions
 from app.api.v1.uploads import datasets
 from app.chain.general_analysis import GeneralDataAnalysis, GeneralDataAnalysisInput
 from app.chain.llm import get_llm
+from app.const import EXPORT_DIR
 from app.log import logger
 
 router = APIRouter()
@@ -96,20 +96,16 @@ async def export_report(request: ExportReportRequest) -> Response:
         latest_result = session["analysis_results"][-1]
         report_content = latest_result["report"]
 
-        # 创建导出文件
-        export_dir = Path("exports")
-        export_dir.mkdir(exist_ok=True)
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"analysis_report_{session_id}_{timestamp}"
         filepath = None
 
         if report_format == "markdown":
-            filepath = export_dir / f"{filename}.md"
+            filepath = EXPORT_DIR / f"{filename}.md"
             with filepath.open("w", encoding="utf-8") as f:
                 f.write(report_content)
         elif report_format == "html":
-            filepath = export_dir / f"{filename}.html"
+            filepath = EXPORT_DIR / f"{filename}.html"
             html_content = f"""
             <!DOCTYPE html>
             <html>

@@ -5,7 +5,6 @@
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -15,6 +14,7 @@ from app.agent import DataAnalyzerAgent
 from app.api.v1.sessions import sessions
 from app.api.v1.uploads import datasets
 from app.chain.llm import get_chat_model, get_llm
+from app.const import STATE_DIR
 from app.log import logger
 
 router = APIRouter()
@@ -58,6 +58,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         # 获取或创建 Agent
         if session_id not in agents:
             agents[session_id] = DataAnalyzerAgent(df, get_llm(), get_chat_model())
+            agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
 
         agent = agents[session_id]
 
@@ -77,9 +78,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
                 yield json.dumps({"type": "chunk", "content": content}) + "\n"
 
         # 保存状态
-        state_dir = Path("states")
-        state_dir.mkdir(exist_ok=True)
-        agent.save_state(state_dir / f"{session_id}.json")
+        agent.save_state(STATE_DIR / f"{session_id}.json")
 
         # 记录对话历史
         chat_entry = {

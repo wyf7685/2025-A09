@@ -127,15 +127,18 @@ class DataAnalyzerAgent:
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
-        if state_file.exists():
-            try:
-                state = AgentState.model_validate_json(state_file.read_bytes())
-            except ValueError:
-                logger.warning("无法加载 agent 状态: 状态文件格式错误")
-            else:
-                self.agent.update_state(self.config, state.values)
-                self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
-                logger.info(f"已加载 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
+        if not state_file.exists():
+            return
+
+        try:
+            state = AgentState.model_validate_json(state_file.read_bytes())
+        except ValueError:
+            logger.warning("无法加载 agent 状态: 状态文件格式错误")
+            return
+
+        self.agent.update_state(self.config, state.values)
+        self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
+        logger.info(f"已加载 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""

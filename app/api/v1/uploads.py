@@ -2,21 +2,16 @@
 文件上传接口
 """
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-# 导入现有的分析组件
+from app.const import UPLOAD_DIR
 from app.log import logger
 
 router = APIRouter()
-
-# 配置
-UPLOAD_FOLDER = Path("uploads")
-UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 # 数据集存储
 datasets: dict[str, pd.DataFrame] = {}
@@ -48,7 +43,7 @@ async def upload_file(file: UploadFile = File(), session_id: str | None = Form(N
 
         # 保存文件
         filename = f"{session_id}_{file.filename}"
-        filepath = UPLOAD_FOLDER / filename
+        filepath = UPLOAD_DIR / filename
 
         content = await file.read()
         with filepath.open("wb") as f:
