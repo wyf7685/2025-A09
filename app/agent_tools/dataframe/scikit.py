@@ -32,6 +32,7 @@ class TrainModelResult(TypedDict):
     feature_columns: list[str]
     target_column: str
     label_encoder: Any | None  # 可选的标签编码器，用于分类任务
+    hyperparams: NotRequired[dict[str, Any] | None]  # 存储使用的超参数
 
 
 def train_model(
@@ -41,6 +42,7 @@ def train_model(
     model_type: str = "linear_regression",
     test_size: float = 0.2,
     random_state: int = 42,
+    hyperparams: dict[str, Any] | None = None,  # 新增参数，接收优化后的超参数
 ) -> TrainModelResult:
     """
     训练机器学习模型。
@@ -55,6 +57,7 @@ def train_model(
         'random_forest_regressor', 'decision_tree_classifier', 'random_forest_classifier'。
         test_size (float): 测试集占总数据集的比例。
         random_state (int): 随机种子，用于复现结果。
+        hyperparams (dict, optional): 模型超参数，如果提供则应用于模型。
 
     Returns:
         dict: 包含训练好的模型、测试集数据、模型类型及相关信息的字典。
@@ -101,6 +104,14 @@ def train_model(
     else:
         raise ValueError(f"不支持的模型类型: {model_type}")
 
+    # 应用优化后的超参数（如果提供）
+    if hyperparams:
+        try:
+            model.set_params(**hyperparams)
+            logger.info(f"已应用优化的超参数: {hyperparams}")
+        except Exception as e:
+            logger.warning(f"应用超参数失败: {e}，将使用默认参数")
+
     model.fit(X_train, Y_train)
 
     return {
@@ -108,10 +119,11 @@ def train_model(
         "X_test": X_test,
         "Y_test": Y_test,
         "model_type": model_type,
-        "message": f"模型训练成功。模型类型: {model_type}",
+        "message": f"模型训练成功。模型类型: {model_type}" + ("，应用了优化超参数" if hyperparams else ""),
         "feature_columns": features,
         "target_column": target,
         "label_encoder": le,  # 保存编码器
+        "hyperparams": hyperparams,  # 保存使用的超参数
     }
 
 

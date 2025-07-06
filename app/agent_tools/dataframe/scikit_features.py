@@ -4,6 +4,7 @@ from typing import Any, NotRequired, TypedDict, cast
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.font_manager import FontProperties
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.feature_selection import (
     RFE,
@@ -506,7 +507,7 @@ def _create_feature_importance_plot(feature_importance: dict[str, float]) -> byt
     if len(features) > max_features:
         features = features[:max_features]
         importances = importances[:max_features]
-        plt.title(f"特征重要性 (显示前 {max_features} 个)")
+        plt.title("特征重要性 (显示前 15 个)")
     else:
         plt.title("特征重要性")
 
@@ -515,6 +516,15 @@ def _create_feature_importance_plot(feature_importance: dict[str, float]) -> byt
     plt.barh(y_pos, importances, align="center")
     plt.yticks(y_pos, features)
     plt.xlabel("重要性")
+
+    # 确保中文正确显示
+    for text in plt.gca().get_xticklabels() + plt.gca().get_yticklabels():
+        text.set_fontproperties(FontProperties(family=plt.rcParams["font.family"]))
+
+    for item in [plt.gca().title, plt.gca().xaxis.label, plt.gca().yaxis.label]:
+        if item:
+            item.set_fontproperties(FontProperties(family=plt.rcParams["font.family"]))
+
     plt.tight_layout()
 
     # 将图表保存为字节数据

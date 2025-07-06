@@ -27,6 +27,7 @@ from .scikit_features import (
     analyze_feature_importance,
     select_features,
 )
+from .scikit_hyperparam import HyperparamOptResult, LearningCurveResult, optimize_hyperparameters, plot_learning_curve
 
 
 def _format_train_result_for_llm(run_id: str, result: TrainModelResult) -> str:
@@ -40,12 +41,28 @@ def _format_train_result_for_llm(run_id: str, result: TrainModelResult) -> str:
     Returns:
         str: 格式化后的字符串。
     """
-    return (
-        f"训练结果 (ID='{run_id}'):\n"
+    output = (
+        f"训练结果 (ID='{run_id}'):\n "
         f"模型类型: {result['model_type']}\n"
         f"特征列: {', '.join(result['feature_columns'])}\n"
-        f"目标列: {result['target_column']}\n"
+        f"目标列: {result['target_column']}"
     )
+
+    # 如果使用了自定义超参数，添加到输出中
+    if hyperparams := result.get("hyperparams"):
+        output += "\n超参数:"
+        for param, value in hyperparams.items():
+            output += f"\n  - {param}: {value}"
+
+    return output
+
+
+def _fix_hyperparams(params: dict[str, Any]) -> dict[str, Any]:
+    for key, value in list(params.items()):
+        if isinstance(value, float) and value.is_integer():
+            # 如果是整数值的浮点数，转换为整数
+            params[key] = int(value)
+    return params
 
 
 def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainModelResult], dict[str, Path]]:
@@ -108,6 +125,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         model_type: str = "linear_regression",
         test_size: float = 0.2,
         random_state: int = 42,
+        hyperparams: dict[str, Any] | None = None,  # 新增参数
     ) -> str:
         """
         训练机器学习模型。
@@ -120,12 +138,17 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             model_type (str): 模型类型。
             test_size (float): 测试集占总数据集的比例。
             random_state (int): 随机种子。
+            hyperparams (dict, optional): 模型超参数，可以是超参数优化的结果。
 
         Returns:
             str: 训练结果信息，包含训练结果ID(用于评估模型时引用)和模型类型、特征列、目标列等信息。
         """
         logger.info(f"开始训练模型: {model_type}，特征: {features}，目标: {target}")
-        result = train_model(df, features, target, model_type, test_size, random_state)
+        if hyperparams:
+            hyperparams = _fix_hyperparams(hyperparams)
+            logger.info(f"使用自定义超参数: {hyperparams}")
+
+        result = train_model(df, features, target, model_type, test_size, random_state, hyperparams)
         run_id = str(uuid.uuid4())
         train_model_cache[run_id] = result
         return _format_train_result_for_llm(run_id, result)
@@ -178,7 +201,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         description: str | None = None,
     ) -> CreateColumnResult | OperationFailed:
         """
-        在DataFrame中创建新列或修改现有列。
+        可以使用此工具修改现有列或创建新列（包括简单的数据清洗）
         允许使用Python表达式对现有列进行操作，创建复合变量。
 
         Args:
@@ -315,6 +338,93 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
 
     analyze_feature_importance_tool.response_format = "content_and_artifact"
 
+    @tool
+    def optimize_hyperparameters_tool(
+        features: list[str],
+        target: str,
+        model_type: str = "random_forest",
+        task_type: str = "auto",
+        method: str = "grid",
+        cv_folds: int = 5,
+        scoring: str | None = None,
+        param_grid: dict[str, list[Any]] | None = None,
+        n_iter: int = 20,
+    ) -> tuple[HyperparamOptResult, dict]:
+        """
+        使用网格搜索或随机搜索优化机器学习模型的超参数。
+
+        Args:
+            features: 特征列名列表
+            target: 目标变量列名
+            model_type: 模型类型，可选:
+                    - "random_forest" (默认): 随机森林
+                    - "decision_tree": 决策树
+                    - "svm": 支持向量机
+                    - "logistic_regression": 逻辑回归(仅分类)
+                    - "ridge": 岭回归(仅回归)
+                    - "lasso": Lasso回归(仅回归)
+            task_type: 任务类型，"regression"、"classification"或"auto"(默认，自动检测)
+            method: 优化方法，"grid"(网格搜索)或"random"(随机搜索)
+            cv_folds: 交叉验证折数
+            scoring: 评分指标，如"r2"(回归)、"accuracy"(分类)等
+            param_grid: 超参数网格，为None时使用预定义的网格
+            n_iter: 随机搜索的迭代次数(仅当method="random"时有效)
+
+        Returns:
+            优化结果，包含最佳参数、得分等
+        """
+        logger.info(f"开始超参数优化，模型: {model_type}, 方法: {method}")
+        result, figure = optimize_hyperparameters(
+            df, features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
+        )
+
+        artifact = {}
+        if figure is not None:
+            artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
+
+        return result, artifact
+
+    optimize_hyperparameters_tool.response_format = "content_and_artifact"
+
+    @tool
+    def plot_learning_curve_tool(
+        features: list[str],
+        target: str,
+        model_type: str = "random_forest",
+        task_type: str = "auto",
+        cv_folds: int = 5,
+        scoring: str | None = None,
+        hyperparams: dict | None = None,
+    ) -> tuple[LearningCurveResult, dict]:
+        """
+        生成并绘制学习曲线，评估模型性能随训练样本数量的变化。
+        学习曲线可以帮助诊断模型是否存在偏差或方差问题。
+
+        Args:
+            features: 特征列名列表
+            target: 目标变量列名
+            model_type: 模型类型，与optimize_hyperparameters_tool相同
+            task_type: 任务类型，"regression"、"classification"或"auto"
+            cv_folds: 交叉验证折数
+            scoring: 评分指标
+            hyperparams: 模型超参数字典，为None时使用默认参数
+
+        Returns:
+            学习曲线结果及可视化图表
+        """
+        logger.info(f"开始生成学习曲线，模型: {model_type}")
+        result, figure = plot_learning_curve(
+            df, features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
+        )
+
+        artifact = {}
+        if figure is not None:
+            artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
+
+        return result, artifact
+
+    plot_learning_curve_tool.response_format = "content_and_artifact"
+
     tools = [
         correlation_analysis_tool,
         lag_analysis_tool,
@@ -327,6 +437,8 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         create_aggregated_feature_tool,
         select_features_tool,
         analyze_feature_importance_tool,
+        optimize_hyperparameters_tool,
+        plot_learning_curve_tool,
     ]
 
     return tools, train_model_cache, save_model_cache

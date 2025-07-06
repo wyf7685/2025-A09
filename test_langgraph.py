@@ -5,10 +5,8 @@ from dotenv import load_dotenv
 
 from app.agent import DataAnalyzerAgent
 from app.chain import get_chat_model
-from app.chain.general_analysis import GeneralSummary, GeneralSummaryInput
 from app.chain.llm import get_llm, rate_limiter
 from app.log import logger
-from app.utils import format_overview
 
 load_dotenv()
 
@@ -50,10 +48,12 @@ def test_agent() -> None:
             logger.info(f"  标签编码器类别: {le['classes']}")
     logger.info(f"model_paths: {agent.saved_model_paths}")
 
-    if input("是否执行总结? (y/n): ").strip().lower() == "y":
-        summary, figures = GeneralSummary(llm).invoke(GeneralSummaryInput(format_overview(df), agent.execution_results))
-        logger.info(f"总结报告:\n{summary}")
-        logger.info(f"生成的图表数: {len(figures)}")
+    # if input("是否执行总结? (y/n): ").strip().lower() == "y":
+    #     summary, figures = GeneralSummary(llm).invoke(
+    #         GeneralSummaryInput(format_overview(df), agent.execution_results),
+    #     )
+    #     logger.info(f"总结报告:\n{summary}")
+    #     logger.info(f"生成的图表数: {len(figures)}")
 
 
 # 分析电弧炉运行数据中的异常值
