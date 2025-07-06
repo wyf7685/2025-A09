@@ -39,3 +39,7 @@ TEST_MODEL_NAME=model-name
   - 在 docker 中执行 LLM 生成的代码
   - 需要使用 `docker build` 命令构建 runner 镜像，将镜像 ID 写入 .env 的 `DOCKER_RUNNER_IMAGE` 变量
   - 命令参考: `docker build . -f docker/Dockerfile.runner -t langchain-runner`
+
+## TODO
+
+- 删除 `src/` 下各目录中占位的 `.gitkeep`
