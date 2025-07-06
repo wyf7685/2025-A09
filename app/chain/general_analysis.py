@@ -1,4 +1,4 @@
-from io import BytesIO
+from dataclasses import dataclass
 from typing import override
 
 import pandas as pd
@@ -115,45 +115,53 @@ def format_analysis_result(query: str, result: ExecuteResult) -> str:
         result_text.append(f"<output>\n{result['output']}</output>")
     if result["result"] is not None:
         result_text.append(f"<result>\n{result['result']}</result>")
-    if result["figure"]:
+    if result["figure"] is not None:
         result_text.append("[包含可视化图表]")
 
     return "\n".join(result_text)
 
 
+@dataclass
+class QueryGeneratorInput:
+    overview: str
+    focus: str | None = None
+
+
 class QueryGenerator(
     BaseLLMRunnable[
-        # 输入数据: (overview, focus) / (overview)
-        tuple[str, str | None] | str,
+        QueryGeneratorInput,
         # 输出: [query, ...]
         list[str],
     ]
 ):
     @override
-    def _run(self, input: tuple[str, str | None] | str) -> list[str]:
-        overview = input[0] if isinstance(input, tuple) else input
-        focus = input[1] if isinstance(input, tuple) else None
+    def _run(self, input: QueryGeneratorInput) -> list[str]:
         prompt = PromptTemplate(
             template=GENERAL_DATA_ANALYSIS_QUERIES_PROMPT,
             input_variables=["overview", "focus"],
         )
-        params = {"overview": overview, "focus": focus or ""}
+        params = {"overview": input.overview, "focus": input.focus or ""}
         text = (prompt | self.llm).invoke(params)
         return [q for q in map(str.strip, text.splitlines()) if q]
 
 
+@dataclass
+class GeneralSummaryInput:
+    overview: str
+    results: list[tuple[str, ExecuteResult]]
+    focus: str | None = None
+
+
 class GeneralSummary(
     BaseLLMRunnable[
-        # 输入数据: (overview, [(query, result), ...], focus)
-        tuple[str, list[tuple[str, ExecuteResult]], str],
+        GeneralSummaryInput,
         # 输出: (summary, figures)
-        tuple[str, list[BytesIO]],
+        tuple[str, list[bytes]],
     ]
 ):
     @override
-    def _run(self, input: tuple[str, list[tuple[str, ExecuteResult]], str]) -> tuple[str, list[BytesIO]]:
-        overview, results, focus = input
-        figures: list[BytesIO] = []
+    def _run(self, input: GeneralSummaryInput) -> tuple[str, list[bytes]]:
+        figures: list[bytes] = []
 
         def format(query: str, result: ExecuteResult) -> str:
             text = format_analysis_result(query, result)
@@ -166,40 +174,43 @@ class GeneralSummary(
             template=GENERAL_DATA_ANALYSIS_SUMMARY_PROMPT,
             input_variables=["overview", "results", "focus"],
         )
-        formatted = "\n\n".join(format(query, result) for query, result in results)
-        params = {"overview": overview, "results": formatted, "focus": focus}
+        formatted = "\n\n".join(format(query, result) for query, result in input.results)
+        params = {"overview": input.overview, "results": formatted, "focus": input.focus or ""}
         return (prompt | self.llm).invoke(params), figures
+
+
+@dataclass
+class GeneralDataAnalysisInput:
+    df: pd.DataFrame
+    focus_areas: list[str] | None = None
 
 
 class GeneralDataAnalysis(
     BaseLLMRunnable[
-        tuple[pd.DataFrame, list[str] | None] | pd.DataFrame,
-        tuple[str, list[BytesIO]],
+        GeneralDataAnalysisInput,
+        tuple[str, list[bytes]],
     ]
 ):
     def __init__(self, llm: LLM) -> None:
         super().__init__(llm)
         self.analyzer = NL2DataAnalysis(llm)
 
-    def _run(self, input: tuple[pd.DataFrame, list[str] | None] | pd.DataFrame) -> tuple[str, list[BytesIO]]:
-        df = input[0] if isinstance(input, tuple) else input
-        focus_areas = input[1] if isinstance(input, tuple) else None
-        overview = format_overview(df)
-        query_focus, summary_focus = format_focus(focus_areas)
+    def _run(self, input: GeneralDataAnalysisInput) -> tuple[str, list[bytes]]:
+        overview = format_overview(input.df)
+        query_focus, summary_focus = format_focus(input.focus_areas)
 
         @RunnableLambda
         def worker(query: str) -> tuple[str, ExecuteResult]:
             logger.info(f"开始分析: {query}")
-            return query, self.analyzer.invoke((df, query))
+            return query, self.analyzer.invoke((input.df, query))
 
         chain = (
-            (lambda _: (overview, query_focus))
-            | QueryGenerator(self.llm)
+            QueryGenerator(self.llm)
             | RunnableEach(bound=worker)
-            | (lambda results: (overview, results, summary_focus))
+            | (lambda results: GeneralSummaryInput(overview, results, summary_focus))
             | GeneralSummary(self.llm)
         )
-        return chain.invoke(...)
+        return chain.invoke(QueryGeneratorInput(overview, query_focus))
 
 
 # def __demo__() -> None:
@@ -214,7 +225,7 @@ class GeneralDataAnalysis(
 #     df = pd.DataFrame(data)
 
 #     analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
-#     report, figures = analyzer.invoke((df, ["趋势分析", "异常值检测"]))
+#     report, figures = analyzer.invoke(GeneralDataAnalysisInput(df, ["趋势分析", "异常值检测"]))
 
 #     # 打印报告
 #     print(report)

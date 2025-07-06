@@ -6,6 +6,7 @@ from pathlib import Path
 import dotenv
 
 from app.chain import GeneralDataAnalysis, get_llm
+from app.chain.general_analysis import GeneralDataAnalysisInput
 
 dotenv.load_dotenv()
 
@@ -26,7 +27,7 @@ def test_general_analyze() -> None:
 
     llm = get_llm().with_retry()
     analyzer = GeneralDataAnalysis(llm)
-    report, figures = analyzer.invoke((df, focus_areas))
+    report, figures = analyzer.invoke(GeneralDataAnalysisInput(df, focus_areas))
     print("\n\n分析报告:")
     print(report)
 
@@ -35,7 +36,7 @@ def test_general_analyze() -> None:
     (output_dir / "report.md").write_text(report, encoding="utf-8")
     for i, figure_data in enumerate(figures):
         with (output_dir / f"figure_{i}.png").open("wb") as f:
-            f.write(figure_data.getvalue())
+            f.write(figure_data)
     print(f"\n\n报告和图表已保存到: {output_dir}")
 
 

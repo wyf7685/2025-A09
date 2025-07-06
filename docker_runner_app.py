@@ -104,7 +104,7 @@ def process_result(execution_result: ExecuteResult) -> ExecutionResponse:
 
     # 处理图表
     if execution_result["figure"] is not None:
-        image_base64 = base64.b64encode(execution_result["figure"].getvalue()).decode()
+        image_base64 = base64.b64encode(execution_result["figure"]).decode()
         processed_result["figure"] = Figure(data=image_base64)
 
     return ExecutionResponse(**processed_result)

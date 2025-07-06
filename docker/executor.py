@@ -95,7 +95,7 @@ def execute_code(code: str) -> dict:
         result["error"] = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
 
     result["output"] = mystdout.getvalue()
-    if (stderr := mystderr.getvalue()):
+    if stderr := mystderr.getvalue():
         result["error"] += stderr
     return result
 

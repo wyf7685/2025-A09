@@ -10,7 +10,7 @@ from app.log import logger
 from app.utils import format_overview
 
 
-def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]]:
+def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -23,12 +23,13 @@ def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]
     """
     analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(df))
     overview = format_overview(df)
-    results: list[ExecuteResult] = []
+    results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
-        logger.info(f"Analyzing data with query: {query}")
+        # logger.info(f"Analyzing data with query: {query}")
+        logger.info(f"分析数据 - 查询内容:\n{query}")
         result = analyzer.invoke((overview, query))
-        results.append(result)
+        results.append((query, result))
 
         # 处理图片结果
         artifact = {}
@@ -36,7 +37,7 @@ def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]
             # 创建包含图片的工具输出
             artifact = {
                 "type": "image",
-                "base64_data": base64.b64encode(fig.getvalue()).decode(),
+                "base64_data": base64.b64encode(fig).decode(),
                 "caption": "分析图表输出",
             }
 
@@ -47,8 +48,8 @@ def tool_analyzer(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[ExecuteResult]
         description="当你需要对数据进行分析时使用该工具。"
         "提供你的分析需求，工具将根据请求内容执行Python代码并返回结果。"
         "**无需自己编写代码**，只需具体描述你需要执行的分析。"
-        "在实现相关性分析，时滞分析，异常检测时，确保使用自定义分析函数。"
-        "在实现模型训练时，确保使用自定义模型训练函数。",
+        "在实现相关性分析，时滞分析，异常检测时，确保使用其他已提供的工具。"
+        "在实现模型训练时，确保使用其他已提供的工具。",
         func=analyze,
     )
     tool.response_format = "content_and_artifact"
