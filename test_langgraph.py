@@ -28,15 +28,26 @@ def test_agent() -> None:
 
     while user_input := input(">>> ").strip():
         try:
-            message = agent.invoke(user_input)
+            for message in agent.invoke(user_input):
+                content = message.content
+                if isinstance(content, list):
+                    content = "\n".join(str(item) for item in content)
+                if content := content.strip():
+                    logger.info(f"LLM输出:\n{content}")
         except Exception:
             logger.exception("Agent 执行失败")
             continue
-        logger.info(f"LLM 输出:\n{message.content}")
+
         # 保存 agent 状态
         agent.save_state(state_file)
 
-    logger.info(f"models: {agent.trained_models}")
+    for model_id, model_info in agent.trained_models.items():
+        logger.info(f"模型 ID: {model_id}")
+        logger.info(f"  模型类型: {model_info['model_type']}")
+        logger.info(f"  特征列: {model_info['feature_columns']}")
+        logger.info(f"  目标列: {model_info['target_column']}")
+        if le := model_info.get("label_encoder"):
+            logger.info(f"  标签编码器类别: {le['classes']}")
     logger.info(f"model_paths: {agent.saved_model_paths}")
 
     if input("是否执行总结? (y/n): ").strip().lower() == "y":

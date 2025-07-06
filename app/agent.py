@@ -1,4 +1,6 @@
+import queue
 import threading
+from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -8,7 +10,7 @@ from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.runnables import RunnableLambda, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 
 from app.agent_tools.analyzer import analyzer_tool
 from app.agent_tools.dataframe import dataframe_tools
@@ -70,9 +72,6 @@ class AgentState(BaseModel):
     results: list[tuple[str, dict]]
 
 
-state_ta = TypeAdapter(AgentState)
-
-
 class DataAnalyzerAgent:
     def __init__(
         self,
@@ -91,6 +90,7 @@ class DataAnalyzerAgent:
             prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
+            post_model_hook=self._post_model_hook,
         )
         self.config = ensure_config(
             {
@@ -102,11 +102,13 @@ class DataAnalyzerAgent:
         self.trained_models = models
         self.saved_model_paths = model_paths
 
+        self.message_queue: queue.Queue[AIMessage] = queue.Queue()
+
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
         if state_file.exists():
             try:
-                state = state_ta.validate_json(state_file.read_bytes())
+                state = AgentState.model_validate_json(state_file.read_bytes())
             except ValueError:
                 logger.warning("无法加载 agent 状态: 状态文件格式错误")
             else:
@@ -123,7 +125,28 @@ class DataAnalyzerAgent:
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
 
-    def invoke(self, user_input: str) -> AIMessage:
-        """使用用户输入调用 agent，并返回最后一条 AI 消息。"""
-        result = self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
-        return result["messages"][-1]
+    def invoke(self, user_input: str) -> Generator[AIMessage]:
+        """使用用户输入调用 agent"""
+
+        def invoke() -> None:
+            self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
+            finished.set()
+
+        finished = threading.Event()
+        invoke_thread = threading.Thread(target=invoke)
+        invoke_thread.start()
+
+        while not finished.is_set():
+            try:
+                message = self.message_queue.get(timeout=1)
+                if isinstance(message, AIMessage):
+                    yield message
+            except queue.Empty:
+                continue
+
+        invoke_thread.join()
+
+    def _post_model_hook(self, state: dict) -> dict:
+        messages = state.get("messages", [])
+        self.message_queue.put(messages[-1])
+        return {}

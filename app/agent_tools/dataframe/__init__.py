@@ -1,3 +1,4 @@
+import base64
 import uuid
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,12 @@ from .columns import (
     lag_analys,
 )
 from .scikit import EvaluateModelResult, SaveModelResult, TrainModelResult, evaluate_model, save_model, train_model
+from .scikit_features import (
+    FeatureImportanceResult,
+    FeatureSelectionResult,
+    analyze_feature_importance,
+    select_features,
+)
 
 
 def _format_train_result_for_llm(run_id: str, result: TrainModelResult) -> str:
@@ -241,6 +248,73 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         """
         return create_aggregated_feature(df, column_name, group_by_column, target_column, aggregation, description)
 
+    @tool
+    def select_features_tool(
+        features: list[str],
+        target: str,
+        method: str = "rf_importance",
+        task_type: str = "auto",
+        n_features: int | None = None,
+        threshold: float | None = None,
+    ) -> tuple[FeatureSelectionResult, dict]:
+        """
+        使用多种方法自动选择最重要的特征子集。
+
+        Args:
+            features (list[str]): 候选特征列表
+            target (str): 目标变量列名
+            method (str): 特征选择方法，可选:
+                          "rf_importance" - 随机森林特征重要性(默认)
+                          "lasso" - Lasso正则化(适用于线性关系)
+                          "rfe" - 递归特征消除(需要指定n_features)
+                          "rfecv" - 带交叉验证的递归特征消除(自动确定最佳特征数)
+                          "mutual_info" - 互信息(适用于非线性关系)
+                          "f_regression" - F统计量(仅回归任务)
+                          "chi2" - 卡方检验(仅分类任务，要求特征非负)
+            task_type (str): 任务类型，"regression"、"classification"或"auto"(默认，自动检测)
+            n_features (int, optional): 要选择的特征数量
+            threshold (float, optional): 特征重要性阈值，只保留重要性大于阈值的特征
+
+        Returns:
+            dict: 包含选择结果的字典，包括选择的特征列表、特征重要性和相关统计信息
+        """
+        logger.info(f"开始特征选择，方法: {method}, 候选特征数: {len(features)}")
+        result, figure = select_features(df, features, target, method, task_type, n_features, threshold)
+        artifact = {}
+        if figure is not None:
+            artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
+        return result, artifact
+
+    select_features_tool.response_format = "content_and_artifact"
+
+    @tool
+    def analyze_feature_importance_tool(
+        features: list[str], target: str, method: str = "rf_importance", task_type: str = "auto"
+    ) -> tuple[FeatureImportanceResult, dict]:
+        """
+        分析特征重要性，帮助理解哪些特征对目标变量影响最大。
+
+        Args:
+            features (list[str]): 要分析的特征列表
+            target (str): 目标变量列名
+            method (str): 特征重要性计算方法，可选:
+                          "rf_importance" - 随机森林特征重要性(默认)
+                          "permutation" - 排列重要性(适用于任意模型)
+                          "shap" - SHAP值(提供更详细的解释)
+            task_type (str): 任务类型，"regression"、"classification"或"auto"(默认，自动检测)
+
+        Returns:
+            dict: 包含特征重要性分析结果的字典
+        """
+        logger.info(f"开始分析特征重要性，方法: {method}, 特征数: {len(features)}")
+        result, figure = analyze_feature_importance(df, features, target, method, task_type)
+        artifact = {}
+        if figure is not None:
+            artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
+        return result, artifact
+
+    analyze_feature_importance_tool.response_format = "content_and_artifact"
+
     tools = [
         correlation_analysis_tool,
         lag_analysis_tool,
@@ -251,6 +325,8 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         create_column_tool,
         create_interaction_term_tool,
         create_aggregated_feature_tool,
+        select_features_tool,
+        analyze_feature_importance_tool,
     ]
 
     return tools, train_model_cache, save_model_cache
