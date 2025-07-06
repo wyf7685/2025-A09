@@ -46,19 +46,9 @@ def test_agent() -> None:
         logger.info(f"  目标列: {model_info['target_column']}")
         if le := model_info.get("label_encoder"):
             logger.info(f"  标签编码器类别: {le['classes']}")
-    logger.info(f"model_paths: {agent.saved_model_paths}")
+    for model_id, model_path in agent.saved_model_paths:
+        logger.info(f"模型 {model_id} 已保存到: {model_path}")
 
-    # if input("是否执行总结? (y/n): ").strip().lower() == "y":
-    #     summary, figures = GeneralSummary(llm).invoke(
-    #         GeneralSummaryInput(format_overview(df), agent.execution_results),
-    #     )
-    #     logger.info(f"总结报告:\n{summary}")
-    #     logger.info(f"生成的图表数: {len(figures)}")
-
-
-# 分析电弧炉运行数据中的异常值
-# 分析能源消耗影响因素
-# 建模预测电弧炉的能量消耗
 
 if __name__ == "__main__":
     test_agent()

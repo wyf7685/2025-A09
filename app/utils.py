@@ -51,6 +51,3 @@ def configure_matplotlib_fonts() -> None:
 
     # 确保负号正确显示
     plt.rcParams["axes.unicode_minus"] = False
-
-
-configure_matplotlib_fonts()
