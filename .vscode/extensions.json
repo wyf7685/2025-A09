@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "mhutchie.git-graph",
+    "esbenp.prettier-vscode",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "Vue.volar",
+    "vitest.explorer",
+    "dbaeumer.vscode-eslint",
+    "EditorConfig.EditorConfig"
+  ]
+}

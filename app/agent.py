@@ -1,6 +1,6 @@
 import queue
 import threading
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -17,7 +17,7 @@ from app.agent_tools.dataframe import dataframe_tools
 from app.chain.llm import LLM
 from app.executor import deserialize_result, serialize_result
 from app.log import logger
-from app.utils import format_overview
+from app.utils import format_overview, run_sync
 
 SYSTEM_PROMPT = """\
 你是一位专业的数据分析师，擅长解决复杂的数据分析问题。请按照以下结构化方法分析数据：
@@ -166,6 +166,15 @@ class DataAnalyzerAgent:
                 continue
 
         invoke_thread.join()
+
+    async def ainvoke(self, user_input: str) -> AsyncGenerator[AIMessage]:
+        """异步使用用户输入调用 agent"""
+        gen = self.invoke(user_input)
+        step = run_sync(lambda: next(gen, None))
+
+        while message := await step():
+            if isinstance(message, AIMessage):
+                yield message
 
     def _post_model_hook(self, state: dict) -> dict:
         messages = state.get("messages", [])

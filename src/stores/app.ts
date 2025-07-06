@@ -1,7 +1,15 @@
+import type {
+  AnalysisReport,
+  AnalysisResult,
+  ChatEntry,
+  Dataset,
+  Model,
+  Session,
+  UploadResult,
+} from '@/types';
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import api from '../utils/api';
-import type { ChatEntry, Dataset, AnalysisResult, Session, Model, AnalysisReport, UploadResult } from '@/types';
 
 export const useAppStore = defineStore('app', () => {
   // 状态
@@ -44,10 +52,7 @@ export const useAppStore = defineStore('app', () => {
   };
 
   // 文件上传
-  const uploadFile = async (
-    file: File,
-    sessionId: string | null = null,
-  ): Promise<UploadResult> => {
+  const uploadFile = async (file: File, sessionId: string | null = null): Promise<UploadResult> => {
     const formData = new FormData();
     formData.append('file', file);
     if (sessionId) {
@@ -112,6 +117,87 @@ export const useAppStore = defineStore('app', () => {
       }
 
       return response.data;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // 流式对话分析
+  const sendStreamChatMessage = async (
+    message: string,
+    sessionId: string,
+    datasetId: string | null = null,
+    onChunk: (chunk: string) => void,
+    onResults: (results: any[]) => void,
+    onDone: () => void,
+    onError: (error: string) => void,
+  ): Promise<void> => {
+    loading.value = true;
+
+    try {
+      const response = await fetch(`/api/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          session_id: sessionId,
+          dataset_id: datasetId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body reader could not be created');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        // 解码并添加到缓冲区
+        buffer += decoder.decode(value, { stream: true });
+
+        // 处理每一行
+        const lines = buffer.split('\n');
+        // 除了最后一行外，其余行都是完整的
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          try {
+            const data = JSON.parse(line);
+
+            // 处理不同类型的响应
+            if (data.type === 'chunk') {
+              onChunk(data.content);
+            } else if (data.type === 'results') {
+              onResults(data.results);
+            } else if (data.type === 'done') {
+              onDone();
+            } else if (data.error) {
+              onError(data.error);
+            }
+          } catch (e) {
+            console.error('Failed to parse SSE message:', line, e);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Stream chat error:', error);
+      onError(error instanceof Error ? error.message : String(error));
     } finally {
       loading.value = false;
     }
@@ -218,6 +304,7 @@ export const useAppStore = defineStore('app', () => {
     getDremioSources,
     loadDremioData,
     sendChatMessage,
+    sendStreamChatMessage,
     runGeneralAnalysis,
     getModels,
     deleteModel,

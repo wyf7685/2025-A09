@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { useAppStore } from '@/stores/app';
+import type { ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { useAppStore } from '@/stores/app';
-import type { ChatMessage, ChatEntry } from '@/types';
 
 const appStore = useAppStore()
 
@@ -58,34 +58,52 @@ const sendMessage = async (): Promise<void> => {
   scrollToBottom()
 
   try {
-    // 发送消息到后端
-    const response = await appStore.sendChatMessage(
+    // 创建一个初始的空AI回复消息
+    const assistantMessageIndex = messages.value.length
+    messages.value.push({
+      type: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      execution_results: [],
+      charts: []
+    })
+
+    // 使用流式API
+    await appStore.sendStreamChatMessage(
       userMessage,
       appStore.currentSessionId,
-      currentDataset.value.id
+      currentDataset.value.id,
+      // 处理每个文本块
+      (chunk: string) => {
+        // 更新消息内容
+        if (messages.value[assistantMessageIndex]) {
+          messages.value[assistantMessageIndex].content += chunk
+          nextTick(() => scrollToBottom())
+        }
+      },
+      // 处理结果（如图表等）
+      (results: any[]) => {
+        if (messages.value[assistantMessageIndex]) {
+          messages.value[assistantMessageIndex].execution_results = results
+          // 处理图表数据
+          messages.value[assistantMessageIndex].charts = results
+            .map(result => result.figure)
+            .filter(figure => figure !== undefined)
+        }
+      },
+      // 处理完成回调
+      () => {
+        // 确保滚动到底部
+        nextTick(() => scrollToBottom())
+      },
+      // 处理错误
+      (error: string) => {
+        console.error('流式聊天错误:', error)
+        if (messages.value[assistantMessageIndex]) {
+          messages.value[assistantMessageIndex].content += `\n\n抱歉，处理过程中出现错误: ${error}`
+        }
+      }
     )
-
-    // 添加AI回复
-    const assistantMessage: ChatMessage = {
-      type: 'assistant',
-      content: response.chat_entry.content || '抱歉，我无法处理您的请求。',
-      timestamp: response.chat_entry?.timestamp || new Date().toISOString(),
-      execution_results: response.chat_entry?.execution_results,
-      charts: []
-    }
-
-    // 处理图表数据
-    if (response.chat_entry?.execution_results) {
-      assistantMessage.charts = response.chat_entry.execution_results
-        .map(result => result.figure)
-        .filter(figure => figure !== undefined)
-    }
-
-    messages.value.push(assistantMessage)
-
-    // 滚动到底部
-    await nextTick()
-    scrollToBottom()
 
   } catch (error) {
     console.error('发送消息失败:', error)

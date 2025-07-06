@@ -1,5 +1,8 @@
+import asyncio
 import contextlib
+import functools
 import platform
+from collections.abc import Callable, Coroutine
 
 import matplotlib as mpl
 
@@ -51,3 +54,17 @@ def configure_matplotlib_fonts() -> None:
 
     # 确保负号正确显示
     plt.rcParams["axes.unicode_minus"] = False
+
+
+def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, R]]:
+    """一个用于包装 sync function 为 async function 的装饰器
+
+    参数:
+        call: 被装饰的同步函数
+    """
+
+    @functools.wraps(call)
+    async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        return await asyncio.to_thread(functools.partial(call, *args, **kwargs))
+
+    return _wrapper
