@@ -2,13 +2,15 @@
 
 ## 依赖
 
-- uv: https://github.com/astral-sh/uv
+- 后端: [uv](https://github.com/astral-sh/uv)
   - 安装后在项目根目录执行 `uv sync`
-- Dremio:
+- [Dremio](https://www.dremio.com/):
   - 使用 docker
     - 安装后在项目根目录执行 `docker compose pull` 和 `docker compose up -d`
   - 单独部署
     - 参考 Dremio 文档安装
+- 前端: [node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/)
+  - 在项目根目录执行 `pnpm i` 安装前端依赖 (vue3 + Element Plus)
 
 ## 配置
 
@@ -24,9 +26,6 @@ DREMIO_EXTERNAL_NAME=external
 
 # LLM
 TEST_MODEL_NAME=model-name
-
-# LangChain
-KEY=...
 ```
 
 - Dremio 配置中的 `username` 和 `password` 为安装后首次登录时填写的用户名和密码
