@@ -1,0 +1,419 @@
+from typing import Any, Literal, NotRequired, TypedDict, cast
+
+import numpy as np
+import pandas as pd
+from scipy.stats import pearsonr, spearmanr
+
+from app.log import logger
+
+
+def corr_analys(df: pd.DataFrame, col1: str, col2: str, method: str = "pearson") -> dict[str, Any]:
+    """
+    执行两个指定列之间的相关性分析。
+    支持 Pearson (默认) 和 Spearman 方法。
+
+    Args:
+        df (pd.DataFrame): 输入的DataFrame。
+        col1 (str): 第一个要分析的列名。
+        col2 (str): 第二个要分析的列名。
+        method (str): 相关性计算方法，可以是 'pearson' 或 'spearman'。
+
+    Returns:
+        dict: 包含相关系数和p值的结果字典。
+    """
+    # 相关性检测，增强健壮性
+    # 检查列是否存在
+    if col1 not in df.columns or col2 not in df.columns:
+        raise ValueError(f"列 {col1} 或 {col2} 不存在")
+
+    # 转为数值型，非数值型自动转为NaN
+    x = cast("pd.Series", pd.to_numeric(df[col1], errors="coerce"))
+    y = cast("pd.Series", pd.to_numeric(df[col2], errors="coerce"))
+
+    # 检查有效数据量
+    valid = x.notna() & y.notna()
+    if valid.sum() < 3:
+        raise ValueError(f"用于相关性分析的有效数据太少（仅{valid.sum()}行）")
+
+    x = x[valid]
+    y = y[valid]
+
+    if method == "pearson":
+        corr, p = pearsonr(x, y)
+    else:
+        corr, p = spearmanr(x, y)
+    return {"correlation": corr, "p_value": p}
+
+
+def lag_analys(df: pd.DataFrame, time_col1: str, time_col2: str) -> dict[str, Any]:
+    """
+    计算两个时间字段之间的时滞（单位：秒），并返回分布统计、异常点等信息。
+
+    Args:
+        df (pd.DataFrame): 输入的DataFrame。
+        time_col1 (str): 第一个时间列的名称。
+        time_col2 (str): 第二个时间列的名称。
+
+    Returns:
+        dict: 包含平均时滞、最大时滞、最小时滞、标准差、时滞异常点和时滞分布描述的结果字典。
+    """
+    # 转换为datetime
+    t1 = pd.to_datetime(df[time_col1])
+    t2 = pd.to_datetime(df[time_col2])
+    lag = (t2 - t1).dt.total_seconds()
+    df1 = df[(lag > lag.mean() + 3 * lag.std()) | (lag < lag.mean() - 3 * lag.std())][[time_col1, time_col2]]
+    return {
+        "mean_lag_seconds": lag.mean(),
+        "max_lag_seconds": lag.max(),
+        "min_lag_seconds": lag.min(),
+        "std_lag_seconds": lag.std(),
+        "lag_outliers": cast("pd.DataFrame", df1).to_dict(orient="records"),
+        "lag_distribution": lag.describe().to_dict(),
+    }
+
+
+def detect_outliers(df: pd.DataFrame, column: str, method: str = "zscore", threshold: int = 3) -> pd.DataFrame:
+    """
+    在指定列中检测异常值。
+    支持 'zscore' (默认) 和 'iqr' 方法。
+
+    Args:
+        df (pd.DataFrame): 输入的DataFrame。
+        column (str): 要检测异常值的列名。
+        method (str): 异常值检测方法，可以是 'zscore' 或 'iqr'。
+        threshold (int): 检测阈值。对于zscore，是标准差倍数；对于iqr，是IQR倍数。
+
+    Returns:
+        pd.DataFrame: 包含检测到的异常值的DataFrame。
+    """
+    # 只对数值型列做异常值检测
+    if column not in df.columns:
+        raise ValueError(f"列 {column} 不存在")
+    series = cast("pd.Series", pd.to_numeric(df[column], errors="coerce"))
+    if method == "zscore":
+        mean = series.mean()
+        std = series.std()
+        mask = np.abs(series - mean) > threshold * std
+    elif method == "iqr":
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        mask = (series < q1 - threshold * iqr) | (series > q3 + threshold * iqr)
+    else:
+        raise ValueError("不支持的异常值检测方法")
+    return cast("pd.DataFrame", df[mask])
+
+
+class OperationFailed(TypedDict):
+    success: Literal[False]
+    message: str
+
+
+class CreateColumnResult(TypedDict):
+    success: bool
+    message: str
+    statistics: dict[str, Any]  # 包含新列的统计信息
+    sample_values: list[Any]  # 新列的前5个样本值
+    dtype: str  # 新列的数据类型
+    description: NotRequired[str]  # 可选的新列描述和用途
+
+
+def create_column(
+    df: pd.DataFrame,
+    column_name: str,
+    expression: str,
+    columns_used: list[str] | None = None,
+    description: str | None = None,
+) -> CreateColumnResult | OperationFailed:
+    """
+    在DataFrame中创建新列或修改现有列。
+    允许使用Python表达式对现有列进行操作，创建复合变量。
+
+    Args:
+        column_name (str): 新列的名称，如果已存在则会被替换。
+        expression (str): Python表达式，用于计算新列的值。
+                         可使用df['列名']或直接使用列名(如果不包含特殊字符)，
+                         并可使用NumPy函数(如np.log(), np.sqrt())。
+                         示例: "df['A'] + df['B']" 或 "np.log(A) * 2 + B / C"。
+        columns_used (list[str], optional): 表达式中使用的列名列表。
+        description (str, optional): 新列的描述和用途，提高可解释性。
+
+    Returns:
+        dict: 包含操作结果的字典，包括新列的基本统计信息和样本值。
+    """
+    logger.info(f"创建新列: {column_name}，基于表达式: {expression}，使用列: {columns_used or '未指定'}")
+
+    try:
+        # 安全性检查：验证所有提到的列都存在
+        if columns_used:
+            missing_columns = [col for col in columns_used if col not in df.columns]
+            if missing_columns:
+                return {
+                    "success": False,
+                    "message": f"错误: 以下列不存在: {', '.join(missing_columns)}",
+                }
+
+        # 准备本地变量环境
+        local_vars = {"df": df, "np": np, "pd": pd}
+
+        for column in columns_used or []:
+            if column.isidentifier() and column not in local_vars:
+                local_vars[column] = df[column]  # 将列添加到本地变量中
+
+        # 执行表达式计算新列值
+        new_values = eval(  # noqa: S307
+            expression,
+            {"__builtins__": {}},  # 禁用内建函数提高安全性
+            local_vars,
+        )
+
+        # 将结果添加到DataFrame中
+        df[column_name] = new_values
+
+        # 返回结果
+        result: CreateColumnResult = {
+            "success": True,
+            "message": f"成功创建新列 '{column_name}'",
+            "statistics": df[column_name].describe().to_dict(),
+            "sample_values": df[column_name].head(5).tolist(),
+            "dtype": str(df[column_name].dtype),
+        }
+
+        if description:
+            result["description"] = description
+
+        return result  # noqa: TRY300
+
+    except Exception as e:
+        logger.exception(f"创建列 '{column_name}' 时出错")
+        return {"success": False, "message": f"错误: {e}"}
+
+
+class CreateInteractionTermResult(TypedDict):
+    success: bool
+    message: str
+    statistics: dict[str, Any]  # 包含新列的统计信息
+    sample_values: list[Any]  # 新列的前5个样本值
+    null_count: int  # 新列中的空值数量
+
+
+def create_interaction_term(
+    df: pd.DataFrame,
+    column_name: str,
+    columns_to_interact: list[str],
+    interaction_type: str = "multiply",
+    scale: bool = False,
+) -> CreateInteractionTermResult | OperationFailed:
+    """
+    创建交互项作为新列，用于捕捉特征间的相互作用效应。
+
+    Args:
+        column_name (str): 新创建的交互项列名。
+        columns_to_interact (list[str]): 需要交互的列名列表(至少2个)。
+        interaction_type (str): 交互方式，可选:
+                              - "multiply": 相乘 (默认，如A*B)
+                              - "add": 相加 (如A+B)
+                              - "subtract": 相减 (如A-B)
+                              - "divide": 相除 (如A/B)
+                              - "log_multiply": 取对数后相乘 (如log(A)*log(B))
+        scale (bool): 是否对结果进行标准化缩放(均值0,标准差1)。
+
+    Returns:
+        dict: 包含操作结果的字典。
+    """
+    logger.info(f"创建交互项: {column_name}，基于列: {columns_to_interact}，交互方式: {interaction_type}")
+
+    try:
+        if len(columns_to_interact) < 2:
+            return {
+                "success": False,
+                "message": "错误: 至少需要两列进行交互。",
+            }
+
+        # 检查所有列是否存在
+        missing_columns = [col for col in columns_to_interact if col not in df.columns]
+        if missing_columns:
+            return {
+                "success": False,
+                "message": f"错误: 以下列不存在: {', '.join(missing_columns)}",
+            }
+
+        # 检查所有列是否为数值类型
+        non_numeric_columns = [col for col in columns_to_interact if not pd.api.types.is_numeric_dtype(df[col])]
+        if non_numeric_columns:
+            return {
+                "success": False,
+                "message": f"错误: 以下列不是数值型: {', '.join(non_numeric_columns)}",
+            }
+
+        # 创建交互项
+        match interaction_type:
+            case "multiply":
+                result_series = df[columns_to_interact[0]].copy()
+                for col in columns_to_interact[1:]:
+                    result_series *= df[col]
+
+            case "add":
+                result_series = df[columns_to_interact[0]].copy()
+                for col in columns_to_interact[1:]:
+                    result_series += df[col]
+
+            case "subtract":
+                if len(columns_to_interact) != 2:
+                    return {
+                        "success": False,
+                        "message": "错误: 'subtract' 交互类型只支持两列。",
+                    }
+                result_series = df[columns_to_interact[0]] - df[columns_to_interact[1]]
+
+            case "divide":
+                if len(columns_to_interact) != 2:
+                    return {
+                        "success": False,
+                        "message": "错误: 'divide' 交互类型只支持两列。",
+                    }
+                # 防止除以零
+                denominator = df[columns_to_interact[1]].copy()
+                denominator = denominator.replace(0, np.nan)
+                result_series = df[columns_to_interact[0]] / denominator
+
+            case "log_multiply":
+                # 处理负值和零值
+                result_series = np.log(df[columns_to_interact[0]].clip(min=1e-10))
+                for col in columns_to_interact[1:]:
+                    result_series *= np.log(df[col].clip(min=1e-10))
+
+            case _:
+                return {
+                    "success": False,
+                    "message": f"错误: 不支持的交互类型 '{interaction_type}'。",
+                }
+
+        # 标准化
+        if scale:
+            result_series = (result_series - result_series.mean()) / result_series.std()
+
+        # 保存到DataFrame
+        df[column_name] = result_series
+
+        # 生成结果
+        stats = df[column_name].describe().to_dict()
+
+        # 返回结果
+        return {
+            "success": True,
+            "message": f"成功创建交互项 '{column_name}'",
+            "statistics": stats,
+            "sample_values": df[column_name].head(5).tolist(),
+            "null_count": df[column_name].isna().sum(),
+        }
+
+    except Exception as e:
+        logger.exception(f"创建交互项 '{column_name}' 时出错")
+        return {"success": False, "message": f"错误: {e}"}
+
+
+class CreateAggregatedFeatureResult(TypedDict):
+    success: bool
+    message: str
+    statistics: dict[str, Any]  # 包含新列的统计信息
+    sample_values: list[Any]  # 新列的前5个样本值
+    unique_groups: int  # 分组的唯一数量
+    group_sample_stats: dict[str, Any]  # 分组统计信息
+    description: NotRequired[str]  # 可选的新列描述和用途
+
+
+def create_aggregated_feature(
+    df: pd.DataFrame,
+    column_name: str,
+    group_by_column: str,
+    target_column: str,
+    aggregation: str = "mean",
+    description: str | None = None,
+) -> CreateAggregatedFeatureResult | OperationFailed:
+    """
+    创建基于分组聚合的新特征。
+    例如，可以计算同一组内其他记录的平均值、最大值等。
+
+    Args:
+        column_name (str): 新创建的聚合特征列名。
+        group_by_column (str): 用于分组的列名。
+        target_column (str): 需要聚合的目标列名。
+        aggregation (str): 聚合函数，可选：
+                         "mean"(平均值), "median"(中位数), "sum"(求和),
+                         "min"(最小值), "max"(最大值), "std"(标准差),
+                         "count"(计数), "nunique"(不同值的数量)
+        description (str, optional): 新列的描述和用途。
+
+    Returns:
+        dict: 包含操作结果的字典。
+    """
+    logger.info(
+        f"创建聚合特征: {column_name}，基于分组: {group_by_column}，目标列: {target_column}，聚合方式: {aggregation}"
+    )
+
+    try:
+        # 验证列是否存在
+        if group_by_column not in df.columns:
+            return {"success": False, "message": f"错误: 分组列 '{group_by_column}' 不存在。"}
+        if target_column not in df.columns:
+            return {"success": False, "message": f"错误: 目标列 '{target_column}' 不存在。"}
+
+        # 验证目标列是否为数值类型(对于大多数聚合函数)
+        if aggregation not in ["count", "nunique"] and not pd.api.types.is_numeric_dtype(df[target_column]):
+            return {
+                "success": False,
+                "message": f"错误: 对于聚合方式 '{aggregation}'，目标列必须是数值型。",
+            }
+
+        # 执行聚合操作
+        match aggregation:
+            case "mean":
+                agg_values = df.groupby(group_by_column)[target_column].transform("mean")
+            case "median":
+                agg_values = df.groupby(group_by_column)[target_column].transform("median")
+            case "sum":
+                agg_values = df.groupby(group_by_column)[target_column].transform("sum")
+            case "min":
+                agg_values = df.groupby(group_by_column)[target_column].transform("min")
+            case "max":
+                agg_values = df.groupby(group_by_column)[target_column].transform("max")
+            case "std":
+                agg_values = df.groupby(group_by_column)[target_column].transform("std")
+            case "count":
+                agg_values = df.groupby(group_by_column)[target_column].transform("count")
+            case "nunique":
+                # nunique不能直接使用transform，需要特殊处理
+                unique_counts = df.groupby(group_by_column)[target_column].nunique()
+                agg_values = df[group_by_column].map(unique_counts)  # type:ignore
+            case _:
+                return {"success": False, "message": f"错误: 不支持的聚合方式 '{aggregation}'。"}
+
+        # 保存到DataFrame
+        df[column_name] = agg_values
+
+        # 生成结果
+        stats = df[column_name].describe().to_dict()
+
+        # 组间差异分析
+        unique_groups = df[group_by_column].nunique()
+        group_stats = df.groupby(group_by_column)[column_name].agg(["mean", "min", "max"]).head(5).to_dict()
+
+        # 返回结果
+        result: CreateAggregatedFeatureResult = {
+            "success": True,
+            "message": f"成功创建聚合特征 '{column_name}'",
+            "statistics": stats,
+            "sample_values": df[column_name].head(5).tolist(),
+            "unique_groups": int(unique_groups),
+            "group_sample_stats": group_stats,
+        }
+
+        if description:
+            result["description"] = description
+
+        return result  # noqa: TRY300
+
+    except Exception as e:
+        logger.exception(f"创建聚合特征 '{column_name}' 时出错")
+        return {"success": False, "message": f"错误: {e}"}

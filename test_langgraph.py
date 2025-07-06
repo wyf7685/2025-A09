@@ -12,6 +12,7 @@ from app.utils import format_overview
 
 load_dotenv()
 
+
 def test_agent() -> None:
     # 读取数据
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")

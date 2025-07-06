@@ -131,6 +131,8 @@ ignore = [
   "PD901",  # pandas-df-variable-name
   "N807",   # dunder-function-name
   "N806",   # non-lowercase-variable-in-function
+  "FBT001", # boolean-type-hint-positional-argument
+  "FBT002", # boolean-default-value-positional-argument
 ]
 
 [tool.ruff.lint.flake8-builtins]

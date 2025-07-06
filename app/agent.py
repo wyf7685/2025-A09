@@ -126,6 +126,4 @@ class DataAnalyzerAgent:
     def invoke(self, user_input: str) -> AIMessage:
         """使用用户输入调用 agent，并返回最后一条 AI 消息。"""
         result = self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
-        message: AIMessage = result["messages"][-1]
-        logger.info(f"LLM 输出:\n{message.content}")
-        return message
+        return result["messages"][-1]
