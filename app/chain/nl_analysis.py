@@ -106,12 +106,12 @@ PROMPT_FIX_CODE = """\
 4. 保持代码高效简洁，包含必要的注释
 5. 只返回修复后的完整Python代码，不要包含其他解释，**禁止**包含示例数据
 6. 确保最终结果仍然存储在'result'变量中
-7. 在实现相关性分析，时滞分析，异常检测时，必须使用自定义分析函数。
+7. 针对每个子任务，请优先使用并调用提供的专用工具进行数据处理和分析。如果现有工具无法满足需求，再考虑生成通用Python代码。
 8. 在实现模型训练时，必须使用自定义模型训练函数。
 
 **禁止以下操作:**
 - 禁止直接导入sklearn/scipy等分析库
-- 禁止自行实现相关/回归/分类等分析逻辑
+- 禁止自行实现相关性/时滞分析/异常值检测等分析逻辑
 
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 
@@ -124,6 +124,14 @@ PROMPT_FIX_CODE = """\
 - **train_model(df, features, target, model_type="linear_regression", test_size=0.2, random_state=42)**: 训练机器学习模型。
 - **evaluate_model(trained_model_info)**: 评估训练好的模型。
 - **save_model(model_info, file_path="trained_model.joblib")**: 保存训练好的模型。
+
+工具使用指南：
+- **当需要进行相关性分析时，请调用 `correlation_analysis_tool`。**
+- **当需要进行时滞分析时，请调用 `lag_analysis_tool`。**
+- **当需要检测异常值时，请调用 `detect_outliers_tool`。**
+- **当需要训练机器学习模型时，请调用 `train_model_tool`。**
+- **当需要评估机器学习模型时，请调用 `evaluate_model_tool`。**
+- **当需要保存训练好的模型时，请调用 `save_model_tool`。**
 
 代码执行环境: Python 3.12, Debian bookworm
 """

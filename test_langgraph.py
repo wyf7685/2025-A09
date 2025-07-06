@@ -14,7 +14,7 @@ from app.chain import get_chat_model
 from app.chain.llm import get_llm
 from app.log import logger
 from app.utils import format_overview
-from app.tool import DataFrameTools
+from app.other_tools import create_dataframe_tools
 
 load_dotenv()
 
@@ -24,7 +24,7 @@ SYSTEM_PROMPT = """\
 
 1. 首先理解问题本质，确定分析目标
 2. 设计分析步骤，将复杂问题拆解为可执行的子任务
-3. 使用提供的工具进行数据处理和分析
+3. **针对每个子任务，请优先使用并调用提供的专用工具进行数据处理和分析。如果现有工具无法满足需求，再考虑生成通用Python代码。**
 4. 对结果进行解释，确保分析内容专业、准确且有洞见
 
 ## 工具使用指南
@@ -32,6 +32,7 @@ SYSTEM_PROMPT = """\
 - 每次调用工具应解决一个明确的子任务，如数据探索、清洗、可视化等
 - 根据前一步执行的结果调整后续分析步骤
 - 避免在单次工具调用中完成所有分析任务，这通常会导致错误或不完整的结果
+
 
 ## 数据概览
 {overview}
@@ -66,10 +67,11 @@ state_ta = TypeAdapter(dict[str, list[AnyMessage]])
 def test_agent() -> None:
     df = pd.read_csv(Path("test.csv"), encoding="utf-8")
     analyzer, results = tool_analyzer(df, get_llm())
+
+    other_tools = create_dataframe_tools(df) # 调用工厂函数获取工具列表
     agent = create_react_agent(
         model=get_chat_model(),
-        tools=[analyzer, DataFrameTools.correlation_analysis_tool,DataFrameTools.lag_analysis_tool,DataFrameTools.detect_outliers_tool
-               , DataFrameTools.train_model_tool, DataFrameTools.evaluate_model_tool],
+        tools=other_tools+[analyzer],  # 将数据分析工具和其他工具合并
         prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
         checkpointer=InMemorySaver(),
     )
