@@ -10,11 +10,11 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.agent import DataAnalyzerAgent
 from app.api.v1.sessions import sessions
 from app.api.v1.uploads import datasets
-from app.chain.llm import get_chat_model, get_llm
 from app.const import STATE_DIR
+from app.core.agent import DataAnalyzerAgent
+from app.core.chain.llm import get_chat_model, get_llm
 from app.log import logger
 
 router = APIRouter()

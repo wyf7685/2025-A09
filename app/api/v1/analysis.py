@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 from app.api.v1.sessions import sessions
 from app.api.v1.uploads import datasets
-from app.chain.general_analysis import GeneralDataAnalysis, GeneralDataAnalysisInput
-from app.chain.llm import get_llm
 from app.const import EXPORT_DIR
+from app.core.chain.general_analysis import GeneralDataAnalysis, GeneralDataAnalysisInput
+from app.core.chain.llm import get_llm
 from app.log import logger
 
 router = APIRouter()

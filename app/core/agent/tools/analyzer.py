@@ -3,9 +3,9 @@ import base64
 import pandas as pd
 from langchain_core.tools import Tool
 
-from app.chain.llm import LLM
-from app.chain.nl_analysis import NL2DataAnalysis
-from app.executor import CodeExecutor, ExecuteResult, format_result
+from app.core.chain.llm import LLM
+from app.core.chain.nl_analysis import NL2DataAnalysis
+from app.core.executor import CodeExecutor, ExecuteResult, format_result
 from app.log import logger
 from app.utils import format_overview
 

@@ -6,10 +6,10 @@ from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableEach
 
+from app.core.executor import ExecuteResult
+from app.log import logger
 from app.utils import format_overview
 
-from ..executor import ExecuteResult
-from ..log import logger
 from ._base import BaseLLMRunnable
 from .llm import LLM
 from .nl_analysis import NL2DataAnalysis

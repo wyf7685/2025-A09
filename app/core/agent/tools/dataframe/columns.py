@@ -182,7 +182,7 @@ def create_column(
         if description:
             result["description"] = description
 
-        return result  # noqa: TRY300
+        return result
 
     except Exception as e:
         logger.exception(f"创建列 '{column_name}' 时出错")
@@ -412,7 +412,7 @@ def create_aggregated_feature(
         if description:
             result["description"] = description
 
-        return result  # noqa: TRY300
+        return result
 
     except Exception as e:
         logger.exception(f"创建聚合特征 '{column_name}' 时出错")

@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from app.utils import configure_matplotlib_fonts
+
+configure_matplotlib_fonts()
+
 from app.api.v1 import router as api_router
 
 # 加载环境变量

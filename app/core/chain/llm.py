@@ -8,7 +8,7 @@ from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableWithMessageHistory
 
-from ..log import logger
+from app.log import logger
 
 type LLM = Runnable[LanguageModelInput, str]
 

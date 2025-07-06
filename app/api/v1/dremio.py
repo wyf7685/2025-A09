@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException
 
 from app.api.v1.sessions import get_or_create_session, sessions
 from app.api.v1.uploads import datasets
-from app.dremio_client import DremioClient
+from app.core.dremio import DremioClient
 from app.log import logger
 
 router = APIRouter(prefix="/dremio")

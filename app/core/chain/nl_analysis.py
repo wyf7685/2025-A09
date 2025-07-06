@@ -3,11 +3,11 @@ import re
 import pandas as pd
 from langchain.prompts import PromptTemplate
 
-from app.chain._base import BaseLLMRunnable
+from app.core.executor import CodeExecutor, ExecuteResult
 from app.log import logger
 from app.utils import format_overview
 
-from ..executor import CodeExecutor, ExecuteResult
+from ._base import BaseLLMRunnable
 from .llm import LLM
 
 

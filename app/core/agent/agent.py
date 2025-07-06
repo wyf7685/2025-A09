@@ -12,12 +12,12 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel
 
-from app.agent_tools.analyzer import analyzer_tool
-from app.agent_tools.dataframe import dataframe_tools
-from app.chain.llm import LLM
-from app.executor import deserialize_result, serialize_result
+from app.core.chain.llm import LLM
+from app.core.executor import deserialize_result, serialize_result
 from app.log import logger
 from app.utils import format_overview, run_sync
+
+from .tools import analyzer_tool, dataframe_tools
 
 SYSTEM_PROMPT = """\
 你是一位专业的数据分析师，擅长解决复杂的数据分析问题。请按照以下结构化方法分析数据：

@@ -226,8 +226,3 @@ def format_result(result: ExecuteResult) -> str:
         output_lines.append("[包含可视化图表]")
 
     return "\n".join(output_lines)
-
-
-def execute_code(code: str, df: pd.DataFrame) -> ExecuteResult:
-    with CodeExecutor(df) as executor:
-        return executor.execute(code)

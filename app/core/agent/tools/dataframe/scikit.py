@@ -266,6 +266,6 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
         with metadata_path.open("w", encoding="utf-8") as f:
             json.dump(meta_data, f, ensure_ascii=False, indent=4)
 
-        return {"message": "保存模型成功"}  # noqa: TRY300
+        return {"message": "保存模型成功"}
     except Exception as e:
         return {"message": f"保存模型失败: {e}"}
