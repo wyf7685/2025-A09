@@ -1,4 +1,6 @@
+import queue
 import threading
+from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -8,7 +10,7 @@ from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.runnables import RunnableLambda, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 
 from app.agent_tools.analyzer import analyzer_tool
 from app.agent_tools.dataframe import dataframe_tools
@@ -26,38 +28,59 @@ SYSTEM_PROMPT = """\
 4. 对结果进行解释，确保分析内容专业、准确且有洞见
 
 ## 工具使用指南
-- 你可以且应该在一次分析中多次调用工具
-- 每次调用工具应解决一个明确的子任务，如数据探索、清洗、可视化等
+- 在一次分析中多次调用不同工具，构建完整分析流程
+- 每次调用工具应解决一个明确的子任务
 - 根据前一步执行的结果调整后续分析步骤
-- 避免在单次工具调用中完成所有分析任务，这通常会导致错误或不完整的结果
+- 对于不同类型的任务，选择最合适的专用工具
+
+## 特别注意
+- analyze_data工具在Docker隔离环境中运行，其中对数据的修改不会反映到其他工具可访问的数据中
+- 如需保留数据修改，必须使用create_column_tool等专用工具重新实现
+- 对于特定任务，优先使用专用工具而非通用分析工具
 
 ## 数据概览
 {overview}
 
-## 分析方法指南
-- 数据清洗: 处理缺失值、异常值和重复数据
-- 描述性统计: 计算均值、中位数、分布等基本统计量
-- 可视化分析: 使用合适的图表展示数据分布和关系(生成的图表将直接展示给用户)
-- 相关性分析: 探索变量之间的相互关系
-- 时序分析: 对时间序列数据进行趋势和模式识别
-- 聚类分析: 识别数据中的自然分组
-- 异常检测: 使用统计方法或机器学习识别异常值
+## 工具选择指南
+- **数据探索与可视化**：使用analyze_data工具进行灵活的探索性分析和可视化
+- **数据处理与特征工程**：
+  - create_column_tool：创建新列或转换现有列
+  - create_interaction_term_tool：创建特征交互项
+  - create_aggregated_feature_tool：创建基于分组聚合的特征
+- **数据分析**：
+  - correlation_analysis_tool：分析变量间相关性
+  - lag_analysis_tool：分析时间序列数据中的时滞关系
+  - detect_outliers_tool：检测异常值
+- **特征选择**：
+  - select_features_tool：自动选择最重要的特征子集
+  - analyze_feature_importance_tool：分析特征重要性
+- **模型训练与优化**：
+  - optimize_hyperparameters_tool：优化模型超参数
+  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
+  - train_model_tool：训练机器学习模型
+  - evaluate_model_tool：评估模型性能
+  - save_model_tool：保存训练好的模型
 
-## 多步分析示例流程
-1. 第一次调用工具：探索数据基本结构和统计特征
-2. 第二次调用工具：针对发现的问题进行数据清洗
-3. 第三次调用工具：对清洗后的数据进行可视化分析
-4. 第四次调用工具：应用特定的分析方法（如相关性分析）
-5. 最后总结所有步骤的发现和结论
+## 推荐分析流程
+1. **数据探索**：使用analyze_data工具探索数据分布、缺失值等基本情况
+2. **数据处理**：使用create_column_tool处理缺失值、异常值，创建新特征
+3. **特征工程**：使用create_interaction_term_tool、create_aggregated_feature_tool构建高级特征
+4. **特征分析与选择**：使用analyze_feature_importance_tool分析特征重要性，使用select_features_tool选择最佳特征子集
+5. **模型训练与优化**：
+   - 先使用optimize_hyperparameters_tool寻找最佳超参数
+   - 使用plot_learning_curve_tool诊断模型偏差/方差问题
+   - 使用train_model_tool训练最终模型，并传入优化后的超参数
+   - 使用evaluate_model_tool评估模型性能
+6. **结果解释与总结**：分析模型结果，提出洞见和建议
 
 ## 输出格式要求
 - 分析报告应该结构清晰，包含标题、小节和结论
-- 每个分析步骤都应包含代码、结果和解释
-- 明确标注每个工具调用的目的和预期结果
+- 每个分析步骤都应包含工具调用结果和专业解释
 - 对重要发现进行高亮说明
 - 提供明确的结论和建议
+- 当生成图表时，在解释中明确引用图表内容
 
-在分析过程中始终记住，复杂的分析问题通常需要多个连续的工具调用才能得到全面而深入的解答。
+请记住，通常需要多个连续的工具调用和结果解释才能得到全面而深入的分析。
 """
 
 
@@ -68,9 +91,6 @@ class AgentValues(TypedDict):
 class AgentState(BaseModel):
     values: AgentValues
     results: list[tuple[str, dict]]
-
-
-state_ta = TypeAdapter(AgentState)
 
 
 class DataAnalyzerAgent:
@@ -91,6 +111,7 @@ class DataAnalyzerAgent:
             prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
+            post_model_hook=self._post_model_hook,
         )
         self.config = ensure_config(
             {
@@ -102,11 +123,13 @@ class DataAnalyzerAgent:
         self.trained_models = models
         self.saved_model_paths = model_paths
 
+        self.message_queue: queue.Queue[AIMessage] = queue.Queue()
+
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
         if state_file.exists():
             try:
-                state = state_ta.validate_json(state_file.read_bytes())
+                state = AgentState.model_validate_json(state_file.read_bytes())
             except ValueError:
                 logger.warning("无法加载 agent 状态: 状态文件格式错误")
             else:
@@ -123,9 +146,28 @@ class DataAnalyzerAgent:
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
 
-    def invoke(self, user_input: str) -> AIMessage:
-        """使用用户输入调用 agent，并返回最后一条 AI 消息。"""
-        result = self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
-        message: AIMessage = result["messages"][-1]
-        logger.info(f"LLM 输出:\n{message.content}")
-        return message
+    def invoke(self, user_input: str) -> Generator[AIMessage]:
+        """使用用户输入调用 agent"""
+
+        def invoke() -> None:
+            self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
+            finished.set()
+
+        finished = threading.Event()
+        invoke_thread = threading.Thread(target=invoke)
+        invoke_thread.start()
+
+        while not finished.is_set():
+            try:
+                message = self.message_queue.get(timeout=1)
+                if isinstance(message, AIMessage):
+                    yield message
+            except queue.Empty:
+                continue
+
+        invoke_thread.join()
+
+    def _post_model_hook(self, state: dict) -> dict:
+        messages = state.get("messages", [])
+        self.message_queue.put(messages[-1])
+        return {}

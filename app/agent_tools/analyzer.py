@@ -9,6 +9,32 @@ from app.executor import CodeExecutor, ExecuteResult, format_result
 from app.log import logger
 from app.utils import format_overview
 
+TOOL_DESCRIPTION = """\
+当你需要探索性数据分析或自定义可视化时使用该工具。
+
+该工具会由另一个LLM生成代码，在隔离的Docker容器中执行并返回结果。
+
+**重要限制**:
+1. 在此工具中对数据的修改不会反映到其他工具可访问的DataFrame中
+2. 创建的新列、转换数据或处理异常值仅在当前分析中有效
+3. 如需保留数据修改，必须在分析后使用专用工具(如create_column_tool)重新实现
+
+**适用场景**:
+- 探索性数据分析和统计摘要
+- 复杂的数据可视化(散点图、热图、分布图等)
+- 临时数据转换和探索
+- 特定问题的快速原型验证
+
+**不适用场景**:
+- 持久性数据转换(使用create_column_tool代替)
+- 相关性分析(使用correlation_analysis_tool代替)
+- 时滞分析(使用lag_analysis_tool代替)
+- 异常检测(使用detect_outliers_tool代替)
+- 模型训练(使用train_model_tool代替)
+
+使用方式：提供具体的分析需求描述，无需自己编写代码。
+"""
+
 
 def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
     """
@@ -45,11 +71,7 @@ def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, Exe
 
     tool = Tool(
         name="analyze_data",
-        description="当你需要对数据进行分析时使用该工具。"
-        "提供你的分析需求，工具将根据请求内容执行Python代码并返回结果。"
-        "**无需自己编写代码**，只需具体描述你需要执行的分析。"
-        "在实现相关性分析，时滞分析，异常检测时，确保使用其他已提供的工具。"
-        "在实现模型训练时，确保使用其他已提供的工具。",
+        description=TOOL_DESCRIPTION,
         func=analyze,
     )
     tool.response_format = "content_and_artifact"
