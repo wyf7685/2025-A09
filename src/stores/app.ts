@@ -9,7 +9,7 @@ import type {
 } from '@/types';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import api from '../utils/api';
+import api, { API_BASE_URL } from '../utils/api';
 
 export const useAppStore = defineStore('app', () => {
   // 状态
@@ -135,13 +135,13 @@ export const useAppStore = defineStore('app', () => {
     loading.value = true;
 
     try {
-      const response = await fetch(`/api/chat/stream`, {
+      const response = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message,
+          message: message,
           session_id: sessionId,
           dataset_id: datasetId,
         }),

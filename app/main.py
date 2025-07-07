@@ -2,8 +2,6 @@
 智能数据分析平台 - FastAPI 后端
 """
 
-from pathlib import Path
-
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -19,11 +17,6 @@ from app.api.v1 import router as api_router
 
 # 加载环境变量
 load_dotenv()
-
-# 创建必要的目录
-Path("uploads").mkdir(exist_ok=True)
-Path("states").mkdir(exist_ok=True)
-Path("exports").mkdir(exist_ok=True)
 
 # 创建 FastAPI 应用
 app = FastAPI(

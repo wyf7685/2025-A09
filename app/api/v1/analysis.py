@@ -15,6 +15,7 @@ from app.const import EXPORT_DIR
 from app.core.chain.general_analysis import GeneralDataAnalysis, GeneralDataAnalysisInput
 from app.core.chain.llm import get_llm
 from app.log import logger
+from app.utils import run_sync
 
 router = APIRouter()
 
@@ -45,11 +46,11 @@ async def general_analysis(request: AnalysisRequest) -> dict[str, Any]:
         df = datasets[dataset_id]
 
         # 创建分析引擎
-        llm = get_llm()
+        llm = await run_sync(get_llm)()
         analysis = GeneralDataAnalysis(llm=llm)
 
         # 执行分析
-        report, figures = analysis.invoke(GeneralDataAnalysisInput(df=df))
+        report, figures = await run_sync(analysis.invoke)(GeneralDataAnalysisInput(df=df))
 
         # 转换图表为 base64
         figure_data = []

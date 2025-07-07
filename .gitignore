@@ -333,9 +333,8 @@ pyrightconfig.json
 
 .env
 .env.*
-external/
-output/
+/external
 test.csv
-uploads/
+/data
 # agent state
 state.json

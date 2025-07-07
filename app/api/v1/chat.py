@@ -2,6 +2,7 @@
 对话式数据分析接口
 """
 
+import base64
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -15,6 +16,7 @@ from app.api.v1.uploads import datasets
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
+from app.core.executor import format_result
 from app.log import logger
 
 router = APIRouter()
@@ -90,9 +92,19 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
         # 添加执行结果（如果有图表）
         if agent.execution_results:
-            chat_entry["execution_results"] = agent.execution_results
+            results = [
+                {
+                    "query": query,
+                    "output": format_result(result),
+                    "figure": {"data": base64.b64encode(fig).decode()}
+                    if (fig := result.get("figure")) is not None
+                    else None,
+                }
+                for query, result in agent.execution_results
+            ]
+            chat_entry["execution_results"] = results
             # 发送执行结果
-            yield json.dumps({"type": "results", "results": agent.execution_results}) + "\n"
+            yield json.dumps({"type": "results", "results": results}) + "\n"
 
         sessions[session_id]["chat_history"].append(chat_entry)
 

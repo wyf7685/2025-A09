@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import type { Session } from '@/stores/app'
+import type { Session } from '@/types'
 
 
 const router = useRouter()
@@ -179,7 +179,7 @@ onMounted(async () => {
 .layout-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
@@ -212,7 +212,7 @@ onMounted(async () => {
 
 .layout-content {
   flex: 1;
-  padding: 24px;
+  padding: 10px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   overflow-y: auto;
 }

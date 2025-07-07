@@ -1,14 +1,16 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+export const API_BASE_URL = 'http://127.0.0.1:8000/api';
+
 // 创建 axios 实例
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 60000, // 60秒超时
   headers: {
-    'Content-Type': 'application/json'
-  }
-})
+    'Content-Type': 'application/json',
+  },
+});
 
 // 请求拦截器
 api.interceptors.request.use(
@@ -29,11 +31,11 @@ api.interceptors.response.use(
   (error) => {
     // 统一错误处理
     let errorMessage = '请求失败'
-    
+
     if (error.response) {
       // 服务器返回的错误
       const { status, data } = error.response
-      
+
       switch (status) {
         case 400:
           errorMessage = data.error || '请求参数错误'
@@ -63,10 +65,10 @@ api.interceptors.response.use(
       // 其他错误
       errorMessage = error.message || '未知错误'
     }
-    
+
     // 显示错误消息
     ElMessage.error(errorMessage)
-    
+
     return Promise.reject(error)
   }
 )

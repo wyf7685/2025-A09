@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAppStore } from '@/stores/app';
-import type { ChatEntry, ChatMessage } from '@/types';
+import type { ChatEntry, ChatMessage, ExecutionResult } from '@/types';
 import { ElMessage } from 'element-plus';
 import { marked } from 'marked';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -82,13 +82,13 @@ const sendMessage = async (): Promise<void> => {
         }
       },
       // 处理结果（如图表等）
-      (results: any[]) => {
+      (results: ExecutionResult[]) => {
         if (messages.value[assistantMessageIndex]) {
           messages.value[assistantMessageIndex].execution_results = results
           // 处理图表数据
           messages.value[assistantMessageIndex].charts = results
             .map(result => result.figure)
-            .filter(figure => figure !== undefined)
+            .filter(figure => figure !== undefined && figure !== null)
         }
       },
       // 处理完成回调
@@ -201,9 +201,9 @@ onMounted(() => {
               <div class="message-text" v-html="formatMessage(message.content)"></div>
 
               <!-- 如果有图表，显示图表 -->
-              <div v-if="message.charts && message.charts.length > 0" class="charts-container">
+              <div v-if="message.charts" class="charts-container">
                 <div v-for="(chart, chartIndex) in message.charts" :key="chartIndex" class="chart-item">
-                  <img :src="`data:image/png;base64,${chart}`" alt="分析图表" />
+                  <img :src="`data:image/png;base64,${chart.data}`" alt="分析图表" />
                 </div>
               </div>
 
@@ -245,21 +245,18 @@ onMounted(() => {
 
       <!-- 输入区域 -->
       <div class="chat-input">
-        <div style="margin-bottom: 12px;">
-          <el-tag v-if="currentDataset" type="success" size="small">
-            当前数据集: {{ currentDataset.id }}
-          </el-tag>
-          <el-tag v-else type="warning" size="small">
-            未选择数据集
-          </el-tag>
-        </div>
-
         <el-input v-model="inputMessage" type="textarea" :rows="3"
           placeholder="输入您想了解的数据分析问题，例如：分析数据的基本统计信息、查找异常值、绘制相关性热力图等..." @keydown.ctrl.enter="sendMessage"
           :disabled="!currentDataset || appStore.loading" />
 
         <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
           <div>
+            <el-tag v-if="currentDataset" type="success" size="small">
+              当前数据集: {{ currentDataset.id }}
+            </el-tag>
+            <el-tag v-else type="warning" size="small">
+              未选择数据集
+            </el-tag>
             <el-button size="small" @click="addSampleQuestion('分析数据的基本统计信息')">
               基本统计
             </el-button>
