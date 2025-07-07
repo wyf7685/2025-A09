@@ -495,6 +495,7 @@ def dataframe_tools(
         train_model_tool,
         evaluate_model_tool,
         save_model_tool,
+        load_model_tool,
         create_column_tool,
         create_interaction_term_tool,
         create_aggregated_feature_tool,
