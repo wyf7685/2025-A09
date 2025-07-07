@@ -233,9 +233,17 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     }
 
 
+class ModelMetadata(TypedDict):
+    model_type: str
+    feature_columns: list[str]
+    target_column: str
+    hyperparams: dict[str, Any] | None
+    label_encoder_classes: NotRequired[list[str]]  # 标签编码器的类别列表，如果适用
+
+
 class SaveModelResult(TypedDict):
     message: str
-    file_path: NotRequired[str]
+    metadata: NotRequired[ModelMetadata]
 
 
 def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult:
@@ -253,10 +261,11 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
     try:
         joblib.dump(model, file_path.with_suffix(".joblib"))
         # 还可以保存模型的元数据，例如特征列表、目标列、编码器等
-        meta_data = {
+        meta_data: ModelMetadata = {
             "model_type": model_info["model_type"],
             "feature_columns": model_info["feature_columns"],
             "target_column": model_info["target_column"],
+            "hyperparams": model_info.get("hyperparams", None),
         }
         # 如果有标签编码器，也保存它的类别信息
         if le := model_info.get("label_encoder"):
@@ -266,6 +275,58 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
         with metadata_path.open("w", encoding="utf-8") as f:
             json.dump(meta_data, f, ensure_ascii=False, indent=4)
 
-        return {"message": "保存模型成功"}
+        return {"message": "保存模型成功", "metadata": meta_data}
     except Exception as e:
         return {"message": f"保存模型失败: {e}"}
+
+
+def resume_train_result(df: pd.DataFrame, metadata: ModelMetadata, model: Any) -> TrainModelResult:
+    """
+    从元数据恢复训练结果。
+
+    Args:
+        df (pd.DataFrame): 用于训练的数据集。
+        metadata (ModelMetadata): 模型的元数据。
+        model (Any): 加载的模型实例。
+
+    Returns:
+        TrainModelResult: 恢复的训练结果。
+    """
+    Y = df[metadata["target_column"]].copy()
+    le = None
+    if Y.dtype == "object" or Y.dtype == "category":
+        le = LabelEncoder()
+        Y = le.fit_transform(Y)
+
+    return {
+        "model": model,
+        "X_test": df[metadata["feature_columns"]],
+        "Y_test": df[metadata["target_column"]],
+        "model_type": metadata["model_type"],
+        "message": "从文件加载模型",
+        "feature_columns": metadata["feature_columns"],
+        "target_column": metadata["target_column"],
+        "label_encoder": le,
+        "hyperparams": metadata.get("hyperparams", None),  # 超参数需要重新应用
+    }
+
+
+def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainModelResult]:
+    """
+    从文件加载机器学习模型及其元数据。
+
+    Args:
+        file_path (str): 模型文件的路径。
+
+    Returns:
+        tuple: 包含加载的模型和元数据的元组。
+    """
+    try:
+        model = joblib.load(file_path.with_suffix(".joblib"))
+        metadata_path = file_path.with_suffix(".metadata.json")
+        with metadata_path.open("r", encoding="utf-8") as f:
+            metadata = cast("ModelMetadata", json.load(f))
+        return metadata, resume_train_result(df, metadata, model)
+    except Exception as e:
+        logger.error(f"加载模型失败: {e}")
+        raise

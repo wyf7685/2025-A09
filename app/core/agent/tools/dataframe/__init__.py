@@ -1,6 +1,7 @@
 import base64
 import json
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,7 +22,16 @@ from .columns import (
     detect_outliers,
     lag_analys,
 )
-from .scikit import EvaluateModelResult, SaveModelResult, TrainModelResult, evaluate_model, save_model, train_model
+from .scikit import (
+    EvaluateModelResult,
+    ModelMetadata,
+    SaveModelResult,
+    TrainModelResult,
+    evaluate_model,
+    load_model,
+    save_model,
+    train_model,
+)
 from .scikit_features import (
     FeatureImportanceResult,
     FeatureSelectionResult,
@@ -66,9 +76,14 @@ def _fix_hyperparams(params: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
-def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainModelResult], dict[str, Path]]:
-    train_model_cache: dict[str, TrainModelResult] = {}
-    save_model_cache: dict[str, Path] = {}
+type TrainModelID = str
+
+
+def dataframe_tools(
+    df_ref: Callable[[], pd.DataFrame],
+) -> tuple[list[BaseTool], dict[TrainModelID, TrainModelResult], dict[TrainModelID, Path]]:
+    train_model_cache: dict[TrainModelID, TrainModelResult] = {}
+    saved_models: dict[TrainModelID, Path] = {}
 
     @tool
     def correlation_analysis_tool(col1: str, col2: str, method: str = "pearson") -> dict[str, Any]:
@@ -85,7 +100,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             dict: 包含相关系数和p值的结果字典。
         """
         logger.info(f"执行相关性分析: {col1} 与 {col2}，方法: {method}")
-        return corr_analys(df, col1, col2, method)
+        return corr_analys(df_ref(), col1, col2, method)
 
     @tool
     def lag_analysis_tool(time_col1: str, time_col2: str) -> dict[str, Any]:
@@ -100,7 +115,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             dict: 包含平均时滞、最大时滞、最小时滞、标准差、时滞异常点和时滞分布描述的结果字典。
         """
         logger.info(f"执行时滞分析: {time_col1} 与 {time_col2}")
-        return lag_analys(df, time_col1, time_col2)
+        return lag_analys(df_ref(), time_col1, time_col2)
 
     @tool
     def detect_outliers_tool(column: str, method: str = "zscore", threshold: int = 3) -> pd.DataFrame:
@@ -117,7 +132,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             pd.DataFrame: 包含检测到的异常值的DataFrame。
         """
         logger.info(f"检测异常值: 列 {column}，方法: {method}，阈值: {threshold}")
-        return detect_outliers(df, column, method, threshold)
+        return detect_outliers(df_ref(), column, method, threshold)
 
     @tool
     def train_model_tool(
@@ -157,7 +172,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
                     hyperparams_parse_error = (
                         f"注意: 无法解析超参数JSON字符串 {hyperparams}，使用默认超参数\n错误详情: {err}"
                     )
-                    logger.warning(f"无法解析超参数JSON字符串: {hyperparams}，将使用默认超参数")
+                    logger.warning(f"无法解析超参数JSON字符串: {hyperparams}，使用默认超参数")
                     hyperparams = None
 
             # 修复超参数类型问题
@@ -165,7 +180,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
                 hyperparams = _fix_hyperparams(hyperparams)
                 logger.info(f"使用自定义超参数: {hyperparams}")
 
-        result = train_model(df, features, target, model_type, test_size, random_state, hyperparams)
+        result = train_model(df_ref(), features, target, model_type, test_size, random_state, hyperparams)
         run_id = str(uuid.uuid4())
         train_model_cache[run_id] = result
         formatted = _format_train_result_for_llm(run_id, result)
@@ -174,13 +189,13 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         return formatted
 
     @tool
-    def evaluate_model_tool(trained_model_id: str) -> EvaluateModelResult:
+    def evaluate_model_tool(trained_model_id: TrainModelID) -> EvaluateModelResult:
         """
         评估训练好的机器学习模型。
         接受 train_model_tool 函数的返回值作为输入。
 
         Args:
-            trained_model_id (str): 训练结果ID，由 `train_model_tool` 函数返回。
+            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回。
 
         Returns:
             dict: 包含模型评估指标、消息和预测结果摘要的字典。
@@ -192,26 +207,52 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         return evaluate_model(train_model_cache[trained_model_id])
 
     @tool
-    def save_model_tool(trained_model_id: str) -> SaveModelResult:
+    def save_model_tool(trained_model_id: TrainModelID) -> SaveModelResult:
         """
         保存训练好的机器学习模型及其元数据。
 
         Args:
-            trained_model_id (dict): 训练结果ID，由 `train_model_tool` 函数返回。
+            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回。
 
         Returns:
-            dict: 包含保存结果消息和文件路径的字典。
+            dict: 包含保存结果消息和模型元信息的字典。
         """
         if trained_model_id not in train_model_cache:
             raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 train_model_tool 进行训练。")
 
         logger.info(f"保存模型: 训练结果 ID = {trained_model_id}")
-        file_path = Path.cwd() / "output" / "models" / uuid.uuid4().hex / "model"
+        file_path = Path.cwd() / "output" / "models" / trained_model_id / "model"
         file_path.parent.mkdir(parents=True, exist_ok=True)
         result = save_model(train_model_cache[trained_model_id], file_path)
-        save_model_cache[trained_model_id] = file_path
+        saved_models[trained_model_id] = file_path
         logger.info(f"模型已保存到: {file_path.with_suffix('.joblib')}")
         return result
+
+    @tool
+    def load_model_tool(trained_model_id: TrainModelID) -> ModelMetadata:
+        """
+        从文件加载训练好的机器学习模型，恢复模型的使用能力。
+
+        该工具适用于以下场景：
+        1. 会话中断后恢复：当 agent 会话中断并重新启动时，通过此工具恢复之前保存的模型状态
+        2. 跨会话模型使用：在新的分析会话中使用之前训练和保存的模型
+
+        使用此工具时，模型将被加载到内存中，可以立即用于预测或评估等其他操作，无需重新训练。
+
+        Args:
+            trained_model_id (str): 训练结果ID，由之前会话中的 `train_model_tool` 返回并通过 `save_model_tool` 保存。
+
+        Returns:
+            dict: 包含加载的模型元信息，包括模型类型、特征列、目标列和超参数等。
+        """
+        if trained_model_id not in saved_models:
+            raise ValueError(f"未找到保存的模型 ID '{trained_model_id}'")
+
+        file_path = saved_models[trained_model_id]
+        logger.info(f"加载模型: {file_path}")
+        metadata, train_result = load_model(df_ref(), file_path)
+        train_model_cache[trained_model_id] = train_result
+        return metadata
 
     @tool
     def create_column_tool(
@@ -236,7 +277,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         Returns:
             dict: 包含操作结果的字典，包括新列的基本统计信息和样本值。
         """
-        return create_column(df, column_name, expression, columns_used, description)
+        return create_column(df_ref(), column_name, expression, columns_used, description)
 
     @tool
     def create_interaction_term_tool(
@@ -262,7 +303,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         Returns:
             dict: 包含操作结果的字典。
         """
-        return create_interaction_term(df, column_name, columns_to_interact, interaction_type, scale)
+        return create_interaction_term(df_ref(), column_name, columns_to_interact, interaction_type, scale)
 
     @tool
     def create_aggregated_feature_tool(
@@ -289,7 +330,9 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         Returns:
             dict: 包含操作结果的字典。
         """
-        return create_aggregated_feature(df, column_name, group_by_column, target_column, aggregation, description)
+        return create_aggregated_feature(
+            df_ref(), column_name, group_by_column, target_column, aggregation, description
+        )
 
     @tool
     def select_features_tool(
@@ -322,7 +365,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             dict: 包含选择结果的字典，包括选择的特征列表、特征重要性和相关统计信息
         """
         logger.info(f"开始特征选择，方法: {method}, 候选特征数: {len(features)}")
-        result, figure = select_features(df, features, target, method, task_type, n_features, threshold)
+        result, figure = select_features(df_ref(), features, target, method, task_type, n_features, threshold)
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
@@ -350,7 +393,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
             dict: 包含特征重要性分析结果的字典
         """
         logger.info(f"开始分析特征重要性，方法: {method}, 特征数: {len(features)}")
-        result, figure = analyze_feature_importance(df, features, target, method, task_type)
+        result, figure = analyze_feature_importance(df_ref(), features, target, method, task_type)
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
@@ -395,7 +438,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         """
         logger.info(f"开始超参数优化，模型: {model_type}, 方法: {method}")
         result, figure = optimize_hyperparameters(
-            df, features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
+            df_ref(), features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
         )
 
         artifact = {}
@@ -434,7 +477,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         """
         logger.info(f"开始生成学习曲线，模型: {model_type}")
         result, figure = plot_learning_curve(
-            df, features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
+            df_ref(), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
         )
 
         artifact = {}
@@ -461,7 +504,7 @@ def dataframe_tools(df: pd.DataFrame) -> tuple[list[BaseTool], dict[str, TrainMo
         plot_learning_curve_tool,
     ]
 
-    return tools, train_model_cache, save_model_cache
+    return tools, train_model_cache, saved_models
 
 
 __all__ = ["dataframe_tools"]

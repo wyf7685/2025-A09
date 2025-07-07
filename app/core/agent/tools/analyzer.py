@@ -52,7 +52,6 @@ def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, Exe
     results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
-        # logger.info(f"Analyzing data with query: {query}")
         logger.info(f"分析数据 - 查询内容:\n{query}")
         result = analyzer.invoke((overview, query))
         results.append((query, result))

@@ -1,3 +1,4 @@
+import functools
 import queue
 import threading
 from collections.abc import AsyncGenerator, Generator
@@ -18,6 +19,7 @@ from app.log import logger
 from app.utils import format_overview, run_sync
 
 from .tools import analyzer_tool, dataframe_tools
+from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 
 SYSTEM_PROMPT = """\
 你是一位专业的数据分析师，擅长解决复杂的数据分析问题。请按照以下结构化方法分析数据：
@@ -91,6 +93,33 @@ class AgentValues(TypedDict):
 class AgentState(BaseModel):
     values: AgentValues
     results: list[tuple[str, dict]]
+    models: dict[str, Path]
+
+
+TOOLS_TO_RESUME = {
+    "create_column_tool": create_column,
+    "create_interaction_term_tool": create_interaction_term,
+    "create_aggregated_feature_tool": create_aggregated_feature,
+}
+
+
+def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFrame:
+    original = df.copy()
+    for call in functools.reduce(
+        (lambda a, b: a + b),
+        (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
+    ):
+        if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
+            try:
+                result = tool(df=df, **call["args"])
+            except Exception as err:
+                logger.warning(f"工具调用恢复失败: {call['name']} - {err}")
+                return original
+            if not result["success"]:
+                logger.warning(f"工具调用恢复失败: {call['name']} - {result['message']}")
+                return original
+
+    return df
 
 
 class DataAnalyzerAgent:
@@ -102,8 +131,9 @@ class DataAnalyzerAgent:
         *,
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
+        self.df = df
         analyzer, results = analyzer_tool(df, llm)
-        df_tools, models, model_paths = dataframe_tools(df)
+        df_tools, models, saved_models = dataframe_tools(lambda: self.df)
 
         self.agent = create_react_agent(
             model=chat_model,
@@ -121,7 +151,7 @@ class DataAnalyzerAgent:
         )
         self.execution_results = results
         self.trained_models = models
-        self.saved_model_paths = model_paths
+        self.saved_models = saved_models
 
         self.message_queue: queue.Queue[AIMessage] = queue.Queue()
 
@@ -136,15 +166,19 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        self.agent.update_state(self.config, state.values)
+        values = state.values  # noqa: PD011
+        self.agent.update_state(self.config, values)
         self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
-        logger.info(f"已加载 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
+        self.saved_models.update(state.models)
+        self.df = resume_tool_calls(self.df, values["messages"])
+        logger.info(f"已加载 agent 状态: {len(values['messages'])}")
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
         state = AgentState(
             values=cast("AgentValues", self.agent.get_state(self.config).values),
             results=[(query, serialize_result(result)) for query, result in self.execution_results],
+            models=self.saved_models,
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
