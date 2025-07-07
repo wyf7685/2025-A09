@@ -16,12 +16,13 @@ dependencies = [
   "matplotlib>=3.10.3",
   "numpy>=2.3.1",
   "pandas>=2.3.0",
-  "pyarrow>=20.0.0",               # for dremio
+  "pyarrow>=20.0.0", # for dremio
   "requests>=2.32.4",
   # "torch>=2.7.0",
   "scikit-learn>=1.7.0",
   "scipy>=1.16.0",
   "statsmodels>=0.14.4",
+  "xgboost>=3.0.2",
 ]
 
 # [tool.uv.sources]

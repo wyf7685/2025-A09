@@ -18,7 +18,7 @@ from app.core.executor import deserialize_result, serialize_result
 from app.log import logger
 from app.utils import format_overview, run_sync
 
-from .tools import analyzer_tool, dataframe_tools
+from .tools import analyzer_tool, dataframe_tools, scikit_tools
 from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 
 SYSTEM_PROMPT = """\
@@ -133,11 +133,12 @@ class DataAnalyzerAgent:
     ) -> None:
         self.df = df
         analyzer, results = analyzer_tool(df, llm)
-        df_tools, models, saved_models = dataframe_tools(lambda: self.df)
+        df_tools = dataframe_tools(lambda: self.df)
+        sk_tools, models, saved_models = scikit_tools(lambda: self.df)
 
         self.agent = create_react_agent(
             model=chat_model,
-            tools=[analyzer, *df_tools],
+            tools=[analyzer, *df_tools, *sk_tools],
             prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,

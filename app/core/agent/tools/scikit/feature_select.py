@@ -1,11 +1,7 @@
-import io
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, TypedDict, cast
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.font_manager import FontProperties
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.feature_selection import (
     RFE,
     RFECV,
@@ -16,9 +12,10 @@ from sklearn.feature_selection import (
     mutual_info_classif,
     mutual_info_regression,
 )
-from sklearn.linear_model import Lasso, LogisticRegression
 
 from app.log import logger
+
+from .feature_importance import _create_feature_importance_plot
 
 
 class FeatureSelectionResult(TypedDict):
@@ -159,6 +156,8 @@ def _select_by_random_forest(
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
     """使用随机森林特征重要性进行特征选择"""
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
     if task_type == "regression":
         model = RandomForestRegressor(n_estimators=100, random_state=42)
     else:
@@ -207,6 +206,8 @@ def _select_by_lasso(
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
     """使用Lasso正则化进行特征选择"""
+    from sklearn.linear_model import Lasso, LogisticRegression
+
     if task_type == "regression":
         # 对于回归任务使用Lasso
         model = Lasso(alpha=0.01, random_state=42)
@@ -257,6 +258,8 @@ def _select_by_rfe(
     X: pd.DataFrame, y: pd.Series, features: list[str], task_type: str, n_features: int, result: FeatureSelectionResult
 ) -> FeatureSelectionResult:
     """使用递归特征消除进行特征选择"""
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
     if task_type == "regression":
         estimator = RandomForestRegressor(n_estimators=100, random_state=42)
     else:
@@ -298,6 +301,8 @@ def _select_by_rfecv(
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
     """使用带交叉验证的递归特征消除进行特征选择"""
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
     if task_type == "regression":
         estimator = RandomForestRegressor(n_estimators=100, random_state=42)
     else:
@@ -492,162 +497,3 @@ def _select_by_chi2(
         result["additional_info"]["p_values"] = {features[i]: p_values[i] for i in range(len(features))}
 
     return result
-
-
-def _create_feature_importance_plot(feature_importance: dict[str, float]) -> bytes:
-    """创建特征重要性图表并返回字节数据"""
-    plt.figure(figsize=(10, 6))
-
-    # 获取按重要性排序的特征
-    features = list(feature_importance.keys())
-    importances = list(feature_importance.values())
-
-    # 限制显示的特征数量，避免图表过于拥挤
-    max_features = 15
-    if len(features) > max_features:
-        features = features[:max_features]
-        importances = importances[:max_features]
-        plt.title("特征重要性 (显示前 15 个)")
-    else:
-        plt.title("特征重要性")
-
-    # 绘制条形图
-    y_pos = np.arange(len(features))
-    plt.barh(y_pos, importances, align="center")
-    plt.yticks(y_pos, features)
-    plt.xlabel("重要性")
-
-    # 确保中文正确显示
-    for text in plt.gca().get_xticklabels() + plt.gca().get_yticklabels():
-        text.set_fontproperties(FontProperties(family=plt.rcParams["font.family"]))
-
-    for item in [plt.gca().title, plt.gca().xaxis.label, plt.gca().yaxis.label]:
-        if item:
-            item.set_fontproperties(FontProperties(family=plt.rcParams["font.family"]))
-
-    plt.tight_layout()
-
-    # 将图表保存为字节数据
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
-    plt.close()
-    buffer.seek(0)
-
-    return buffer.getvalue()
-
-
-class FeatureImportanceResult(TypedDict):
-    feature_importance: dict[str, float]
-    message: str
-    # figure: bytes | None  # 图表数据
-    importance_percent: NotRequired[dict[str, float]]
-
-
-def analyze_feature_importance(
-    df: pd.DataFrame,
-    features: list[str],
-    target: str,
-    method: str = "rf_importance",
-    task_type: str = "auto",
-) -> tuple[FeatureImportanceResult, bytes | None]:
-    """
-    分析特征重要性，但不进行特征选择。
-
-    Args:
-        df (pd.DataFrame): 输入数据框
-        features (List[str]): 要分析的特征列表
-        target (str): 目标变量列名
-        method (str): 特征重要性计算方法，可选:
-                      "rf_importance" - 随机森林特征重要性
-                      "permutation" - 排列重要性
-        task_type (str): 任务类型，"regression"或"classification"，"auto"将自动检测
-
-    Returns:
-        FeatureImportanceResult: 包含特征重要性的结果
-    """
-    # 验证输入参数
-    if not all(f in df.columns for f in features):
-        missing = set(features) - set(df.columns)
-        raise ValueError(f"特征列表中包含不存在的列: {', '.join(missing)}")
-
-    if target not in df.columns:
-        raise ValueError(f"目标列 '{target}' 不存在于数据中")
-
-    X = df[features].copy()
-    y = df[target].copy()
-
-    # 自动检测任务类型
-    if task_type == "auto":
-        if y.dtype == "object" or y.dtype == "category" or len(y.unique()) < 10:
-            task_type = "classification"
-        else:
-            task_type = "regression"
-
-    logger.info(f"开始特征重要性分析，方法: {method}, 任务类型: {task_type}")
-
-    # 初始化结果
-    result: FeatureImportanceResult = {"feature_importance": {}, "message": ""}
-    figure: bytes | None = None
-
-    try:
-        if method == "rf_importance":
-            # 使用随机森林计算特征重要性
-            if task_type == "regression":
-                model = RandomForestRegressor(n_estimators=100, random_state=42)
-            else:
-                model = RandomForestClassifier(n_estimators=100, random_state=42)
-
-            model.fit(X, y)
-            importances = model.feature_importances_
-
-            # 创建特征重要性字典
-            feature_importance = {features[i]: importances[i] for i in range(len(features))}
-
-            # 按重要性降序排列
-            feature_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
-
-            result["feature_importance"] = feature_importance
-            result["message"] = f"使用随机森林计算了 {len(features)} 个特征的重要性"
-
-            # 添加特征重要性百分比
-            total_importance = sum(feature_importance.values())
-            importance_percent = {f: imp / total_importance * 100 for f, imp in feature_importance.items()}
-            result["importance_percent"] = importance_percent
-
-            # 创建图表
-            figure = _create_feature_importance_plot(feature_importance)
-
-        elif method == "permutation":
-            from sklearn.inspection import permutation_importance
-
-            # 使用排列重要性
-            if task_type == "regression":
-                model = RandomForestRegressor(n_estimators=100, random_state=42)
-            else:
-                model = RandomForestClassifier(n_estimators=100, random_state=42)
-
-            model.fit(X, y)
-
-            # 计算排列重要性
-            perm_importance = permutation_importance(model, X, y, n_repeats=10, random_state=42)
-
-            # 创建特征重要性字典
-            feature_importance = {features[i]: perm_importance["importances_mean"][i] for i in range(len(features))}
-
-            # 按重要性降序排列
-            feature_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
-
-            result["feature_importance"] = feature_importance
-            result["message"] = f"使用排列重要性计算了 {len(features)} 个特征的重要性"
-
-            # 创建图表
-            figure = _create_feature_importance_plot(feature_importance)
-
-        else:
-            raise ValueError(f"不支持的方法 '{method}'")
-
-    except Exception as e:
-        logger.error(f"特征重要性分析过程中发生错误: {e}")
-        result["message"] = f"特征重要性分析失败: {e}"
-
-    return result, figure
