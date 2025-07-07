@@ -42,6 +42,7 @@ logger_id_console = logger.add(
     level=0,
     # diagnose=False,
     diagnose=True,  # 生产环境应设置为 False
+    enqueue=True,
     filter=default_filter,
     format=log_format,
 )
@@ -50,6 +51,7 @@ logger_id_file = logger.add(
     rotation="00:00",
     level="DEBUG",
     diagnose=True,
+    enqueue=True,
     filter=default_filter,
     format=log_format,
 )

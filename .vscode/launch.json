@@ -17,7 +17,13 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["app.main:app", "--reload"]
+      "args": [
+        "app.main:app",
+        //  "--reload",
+        "--log-config",
+        "app/log_config.json",
+        "--use-colors"
+      ]
     }
   ],
   "compounds": [

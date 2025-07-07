@@ -6,8 +6,6 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
-from fastapi.staticfiles import StaticFiles
 
 from app.utils import configure_matplotlib_fonts
 
@@ -40,15 +38,6 @@ app.add_middleware(
 
 # 注册API路由
 app.include_router(api_router)
-
-
-# 创建一个支持SPA的静态文件处理类
-class SPAStaticFiles(StaticFiles):
-    async def get_response(self, path: str, scope) -> Response:  # noqa: ANN001
-        try:
-            return await super().get_response(path, scope)
-        except Exception:
-            return await super().get_response("index.html", scope)
 
 
 if __name__ == "__main__":
