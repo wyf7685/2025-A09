@@ -16,6 +16,7 @@ from .columns import (
     create_column,
     create_interaction_term,
 )
+from .inspect import InspectDataframeOptions, InspectDataframeResult, inspect_dataframe
 
 
 def dataframe_tools(
@@ -150,6 +151,29 @@ def dataframe_tools(
             df_ref(), column_name, group_by_column, target_column, aggregation, description
         )
 
+    @tool
+    def inspect_dataframe_tool(options: InspectDataframeOptions | None = None) -> InspectDataframeResult:
+        """
+        全面查看当前数据框的状态，包括数据结构、预览和统计摘要。
+        这个工具特别适合在进行数据修改后使用，例如使用create_column_tool创建新列、
+        或进行其他数据转换操作后，检查数据的最新状态。
+
+        Args:
+            options (dict, optional): 查看选项，可包含：
+                - show_columns (bool): 是否显示完整列列表，默认True
+                - show_dtypes (bool): 是否显示每列的数据类型，默认True
+                - show_null_counts (bool): 是否显示每列的空值数量，默认True
+                - show_summary_stats (bool): 是否显示数值列的统计摘要，默认True
+                - show_unique_counts (bool): 是否显示分类列唯一值数量，默认True
+                - n_rows (int): 预览的行数，默认5
+                - include_columns (list): 仅包含指定列
+                - exclude_columns (list): 排除指定列
+
+        Returns:
+            dict: 包含数据框详细信息的结果
+        """
+        return inspect_dataframe(df_ref(), options)
+
     return [
         correlation_analysis_tool,
         lag_analysis_tool,
@@ -157,6 +181,7 @@ def dataframe_tools(
         create_column_tool,
         create_interaction_term_tool,
         create_aggregated_feature_tool,
+        inspect_dataframe_tool,
     ]
 
 

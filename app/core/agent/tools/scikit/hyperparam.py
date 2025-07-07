@@ -7,14 +7,11 @@ import numpy as np
 import pandas as pd
 from matplotlib.font_manager import FontProperties
 from scipy.stats import randint, uniform
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import Lasso, LogisticRegression, Ridge
 from sklearn.metrics import make_scorer, mean_squared_error
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
-from sklearn.svm import SVC, SVR
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from app.log import logger
+from app.utils import resolve_dot_notation
 
 
 class HyperparamOptResult(TypedDict):
@@ -203,88 +200,177 @@ def optimize_hyperparameters(
     return result, figure
 
 
-def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int) -> tuple[Any, dict[str, Any]]:
-    """获取指定模型类型和任务类型的模型实例和默认参数网格"""
-
-    if task_type == "regression":
-        if model_type == "random_forest":
-            model = RandomForestRegressor(random_state=random_state)
-            param_grid = {
+_MODEL_PARAM_GRID = {
+    "regression": {
+        "random_forest": {
+            "model": "sklearn.ensemble:RandomForestRegressor",
+            "grid": {
                 "n_estimators": [50, 100, 200],
                 "max_depth": [None, 10, 20, 30],
                 "min_samples_split": [2, 5, 10],
                 "min_samples_leaf": [1, 2, 4],
                 "max_features": ["sqrt", "log2", None],
-            }
-        elif model_type == "decision_tree":
-            model = DecisionTreeRegressor(random_state=random_state)
-            param_grid = {
+            },
+        },
+        "decision_tree": {
+            "model": "sklearn.tree:DecisionTreeRegressor",
+            "grid": {
                 "max_depth": [None, 5, 10, 15, 20],
                 "min_samples_split": [2, 5, 10],
                 "min_samples_leaf": [1, 2, 4, 8],
                 "max_features": ["sqrt", "log2", None],
-            }
-        elif model_type == "svm":
-            model = SVR()
-            param_grid = {
+            },
+        },
+        "gradient_boosting_regressor": {
+            "model": "sklearn.ensemble:GradientBoostingRegressor",
+            "grid": {
+                "n_estimators": [50, 100, 200],
+                "learning_rate": [0.01, 0.05, 0.1, 0.2],
+                "max_depth": [3, 5, 7, 9],
+                "min_samples_split": [2, 5, 10],
+                "min_samples_leaf": [1, 2, 4],
+                "subsample": [0.8, 0.9, 1.0],
+            },
+        },
+        "xgboost_regressor": {
+            "model": "xgboost:XGBRegressor",
+            "grid": {
+                "n_estimators": [50, 100, 200],
+                "learning_rate": [0.01, 0.05, 0.1, 0.2],
+                "max_depth": [3, 5, 7, 9],
+                "min_child_weight": [1, 3, 5],
+                "subsample": [0.8, 0.9, 1.0],
+                "colsample_bytree": [0.8, 0.9, 1.0],
+                "gamma": [0, 0.1, 0.2],
+            },
+        },
+        "svm": {
+            "model": "sklearn.svm:SVR",
+            "grid": {
                 "kernel": ["linear", "poly", "rbf"],
                 "C": [0.1, 1, 10, 100],
                 "gamma": ["scale", "auto", 0.1, 1],
-            }
-        elif model_type == "ridge":
-            model = Ridge(random_state=random_state)
-            param_grid = {
+            },
+        },
+        "ridge": {
+            "model": "sklearn.linear_model:Ridge",
+            "grid": {
                 "alpha": [0.1, 1, 10, 100],
                 "fit_intercept": [True, False],
                 "solver": ["auto", "svd", "cholesky", "lsqr", "sparse_cg", "sag", "saga"],
-            }
-        elif model_type == "lasso":
-            model = Lasso(random_state=random_state)
-            param_grid = {
+            },
+        },
+        "lasso": {
+            "model": "sklearn.linear_model:Lasso",
+            "grid": {
                 "alpha": [0.001, 0.01, 0.1, 1, 10],
                 "fit_intercept": [True, False],
                 "selection": ["cyclic", "random"],
-            }
-        else:
-            raise ValueError(f"不支持的回归模型类型: {model_type}")
-
-    elif task_type == "classification":
-        if model_type == "random_forest":
-            model = RandomForestClassifier(random_state=random_state)
-            param_grid = {
+            },
+        },
+    },
+    "classification": {
+        "random_forest": {
+            "model": "sklearn.ensemble:RandomForestClassifier",
+            "grid": {
                 "n_estimators": [50, 100, 200],
                 "max_depth": [None, 10, 20, 30],
                 "min_samples_split": [2, 5, 10],
                 "min_samples_leaf": [1, 2, 4],
                 "max_features": ["sqrt", "log2", None],
-            }
-        elif model_type == "decision_tree":
-            model = DecisionTreeClassifier(random_state=random_state)
-            param_grid = {
+            },
+        },
+        "decision_tree": {
+            "model": "sklearn.tree:DecisionTreeClassifier",
+            "grid": {
                 "max_depth": [None, 5, 10, 15, 20],
                 "min_samples_split": [2, 5, 10],
                 "min_samples_leaf": [1, 2, 4, 8],
                 "max_features": ["sqrt", "log2", None],
-            }
-        elif model_type == "svm":
-            model = SVC(random_state=random_state, probability=True)
-            param_grid = {
+            },
+        },
+        "gradient_boosting_classifier": {
+            "model": "sklearn.ensemble:GradientBoostingClassifier",
+            "grid": {
+                "n_estimators": [50, 100, 200],
+                "learning_rate": [0.01, 0.05, 0.1, 0.2],
+                "max_depth": [3, 5, 7, 9],
+                "min_samples_split": [2, 5, 10],
+                "min_samples_leaf": [1, 2, 4],
+                "subsample": [0.8, 0.9, 1.0],
+            },
+        },
+        "xgboost_classifier": {
+            "model": "xgboost:XGBClassifier",
+            "grid": {
+                "n_estimators": [50, 100, 200],
+                "learning_rate": [0.01, 0.05, 0.1, 0.2],
+                "max_depth": [3, 5, 7, 9],
+                "min_child_weight": [1, 3, 5],
+                "subsample": [0.8, 0.9, 1.0],
+                "colsample_bytree": [0.8, 0.9, 1.0],
+                "gamma": [0, 0.1, 0.2],
+            },
+        },
+        "svm": {
+            "model": "sklearn.svm:SVC",
+            "grid": {
                 "kernel": ["linear", "poly", "rbf"],
                 "C": [0.1, 1, 10, 100],
                 "gamma": ["scale", "auto", 0.1, 1],
-            }
-        elif model_type == "logistic_regression":
-            model = LogisticRegression(random_state=random_state, max_iter=1000)
-            param_grid = {
+                "probability": [True],  # 始终使用概率估计
+            },
+        },
+        "logistic_regression": {
+            "model": "sklearn.linear_model:LogisticRegression",
+            "grid": {
                 "C": [0.1, 1, 10, 100],
                 "penalty": ["l1", "l2", "elasticnet", None],
                 "solver": ["lbfgs", "liblinear", "saga"],
                 "fit_intercept": [True, False],
-            }
-        else:
-            raise ValueError(f"不支持的分类模型类型: {model_type}")
-    else:
+                "max_iter": [1000],
+            },
+        },
+    },
+}
+
+
+def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int) -> tuple[Any, dict[str, Any]]:
+    """获取指定模型类型和任务类型的模型实例和默认参数网格"""
+    import inspect
+
+    # 验证任务类型
+    if task_type not in _MODEL_PARAM_GRID:
         raise ValueError(f"不支持的任务类型: {task_type}")
+
+    # 验证模型类型
+    if model_type not in _MODEL_PARAM_GRID[task_type]:
+        raise ValueError(f"不支持的{task_type}模型类型: {model_type}")
+
+    model_config = _MODEL_PARAM_GRID[task_type][model_type]
+
+    # 尝试导入模型
+    try:
+        # 使用resolve_dot_notation函数导入模型类
+        ModelClass = resolve_dot_notation(model_config["model"], default_attr="")
+    except (ImportError, AttributeError) as e:
+        if "xgboost" in model_config["model"]:
+            raise ImportError(f"未安装XGBoost库，无法使用 xgb 模型: {model_config['model']}") from e
+        raise ImportError(f"无法导入模型 {model_config['model']}: {e}") from e
+
+    # 使用inspect检查构造函数的参数
+    init_params = inspect.signature(ModelClass.__init__).parameters
+
+    # 创建构造函数参数字典
+    init_kwargs = {}
+    if "random_state" in init_params:
+        init_kwargs["random_state"] = random_state
+
+    # 创建模型实例
+    model = ModelClass(**init_kwargs)
+
+    # 获取参数网格
+    param_grid = model_config["grid"]
 
     # 创建两种格式的参数网格
     result = {

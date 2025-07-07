@@ -1,3 +1,4 @@
+import inspect
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
@@ -5,8 +6,6 @@ from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -18,9 +17,9 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from app.log import logger
+from app.utils import resolve_dot_notation
 
 
 class TrainModelResult(TypedDict):
@@ -35,6 +34,72 @@ class TrainModelResult(TypedDict):
     hyperparams: NotRequired[dict[str, Any] | None]  # 存储使用的超参数
 
 
+_MODEL_CONFIG = {
+    "regression": {
+        "linear_regression": "sklearn.linear_model:LinearRegression",
+        "decision_tree_regressor": "sklearn.tree:DecisionTreeRegressor",
+        "random_forest_regressor": "sklearn.ensemble:RandomForestRegressor",
+        "gradient_boosting_regressor": "sklearn.ensemble:GradientBoostingRegressor",
+        "xgboost_regressor": "xgboost:XGBRegressor",
+    },
+    "classification": {
+        "decision_tree_classifier": "sklearn.tree:DecisionTreeClassifier",
+        "random_forest_classifier": "sklearn.ensemble:RandomForestClassifier",
+        "gradient_boosting_classifier": "sklearn.ensemble:GradientBoostingClassifier",
+        "xgboost_classifier": "xgboost:XGBClassifier",
+        "logistic_regression": "sklearn.linear_model:LogisticRegression",
+    },
+}
+
+
+def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
+    """根据模型类型获取模型实例"""
+    # 确定任务类型
+    task_type = "classification" if "classifier" in model_type else "regression"
+
+    # 验证模型类型
+    if model_type not in _MODEL_CONFIG.get(task_type, {}):
+        raise ValueError(f"不支持的模型类型: {model_type}")
+
+    model_path = _MODEL_CONFIG[task_type][model_type]
+
+    # 尝试导入模型
+    try:
+        ModelClass = resolve_dot_notation(model_path, default_attr="")
+    except (ImportError, AttributeError) as e:
+        if "xgboost" in model_path:
+            raise ImportError(f"未安装XGBoost库，无法使用 xgb 模型: {model_path}") from e
+        raise ImportError(f"无法导入模型 {model_path}: {e}") from e
+
+    # 使用inspect检查构造函数的参数
+    init_params = inspect.signature(ModelClass.__init__).parameters
+
+    # 创建构造函数参数字典
+    init_kwargs = {}
+    if "random_state" in init_params:
+        init_kwargs["random_state"] = random_state
+    if model_type == "logistic_regression" and "max_iter" in init_params:
+        init_kwargs["max_iter"] = 1000
+
+    # 创建模型实例
+    model = ModelClass(**init_kwargs)
+    model_name = {
+        "linear_regression": "线性回归模型",
+        "decision_tree_regressor": "决策树回归模型",
+        "random_forest_regressor": "随机森林回归模型",
+        "gradient_boosting_regressor": "梯度提升树回归模型",
+        "xgboost_regressor": "XGBoost回归模型",
+        "decision_tree_classifier": "决策树分类模型",
+        "random_forest_classifier": "随机森林分类模型",
+        "gradient_boosting_classifier": "梯度提升树分类模型",
+        "xgboost_classifier": "XGBoost分类模型",
+        "logistic_regression": "逻辑回归分类模型",
+    }.get(model_type, f"{model_type}模型")
+    logger.info(f"使用{model_name}进行训练")
+
+    return model
+
+
 def train_model(
     df: pd.DataFrame,
     features: list[str],
@@ -46,15 +111,28 @@ def train_model(
 ) -> TrainModelResult:
     """
     训练机器学习模型。
-    支持 'linear_regression', 'decision_tree_regressor', 'random_forest_regressor' (回归任务)。
+
+    支持以下回归模型:
+    - 'linear_regression': 线性回归
+    - 'decision_tree_regressor': 决策树回归
+    - 'random_forest_regressor': 随机森林回归
+    - 'gradient_boosting_regressor': 梯度提升树回归
+    - 'xgboost_regressor': XGBoost回归 (如果安装了xgboost)
+
+    支持以下分类模型:
+    - 'decision_tree_classifier': 决策树分类
+    - 'random_forest_classifier': 随机森林分类
+    - 'gradient_boosting_classifier': 梯度提升树分类
+    - 'xgboost_classifier': XGBoost分类 (如果安装了xgboost)
+    - 'logistic_regression': 逻辑回归分类
+
     自动处理目标变量为非数值的情况（分类任务）。
 
     Args:
         df (pd.DataFrame): 输入的DataFrame。
         features (list[str]): 特征列的名称列表。
         target (str): 目标列的名称。
-        model_type (str): 模型类型，可选值包括 'linear_regression', 'decision_tree_regressor',
-        'random_forest_regressor', 'decision_tree_classifier', 'random_forest_classifier'。
+        model_type (str): 模型类型，详见函数文档。
         test_size (float): 测试集占总数据集的比例。
         random_state (int): 随机种子，用于复现结果。
         hyperparams (dict, optional): 模型超参数，如果提供则应用于模型。
@@ -85,24 +163,11 @@ def train_model(
         assert isinstance(Y_train, pd.Series)
         assert isinstance(Y_test, pd.Series)
 
-    model = None
-    if model_type == "linear_regression":
-        model = LinearRegression()
-        logger.info("使用线性回归模型进行训练")
-    elif model_type == "decision_tree_regressor":
-        model = DecisionTreeRegressor(random_state=random_state)
-        logger.info("使用决策树回归模型进行训练")
-    elif model_type == "random_forest_regressor":
-        model = RandomForestRegressor(random_state=random_state)
-        logger.info("使用随机森林回归模型进行训练")
-    elif model_type == "decision_tree_classifier":  # 新增分类器
-        model = DecisionTreeClassifier(random_state=random_state)
-        logger.info("使用决策树分类模型进行训练")
-    elif model_type == "random_forest_classifier":  # 新增分类器
-        model = RandomForestClassifier(random_state=random_state)
-        logger.info("使用随机森林分类模型进行训练")
-    else:
-        raise ValueError(f"不支持的模型类型: {model_type}")
+    # 通过配置创建模型实例
+    try:
+        model = _get_model_instance(model_type, random_state)
+    except ImportError as e:
+        raise ValueError(f"创建模型失败: {e}") from None
 
     # 应用优化后的超参数（如果提供）
     if hyperparams:
@@ -323,10 +388,27 @@ def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainM
     """
     try:
         model = joblib.load(file_path.with_suffix(".joblib"))
-        metadata_path = file_path.with_suffix(".metadata.json")
-        with metadata_path.open("r", encoding="utf-8") as f:
-            metadata = cast("ModelMetadata", json.load(f))
-        return metadata, resume_train_result(df, metadata, model)
+        metadata = load_model_metadata(file_path)
+        return load_model_metadata(file_path), resume_train_result(df, metadata, model)
     except Exception as e:
         logger.error(f"加载模型失败: {e}")
+        raise
+
+
+def load_model_metadata(file_path: Path) -> ModelMetadata:
+    """
+    从文件加载模型的元数据。
+
+    Args:
+        file_path (Path): 模型文件的路径。
+
+    Returns:
+        ModelMetadata: 加载的模型元数据。
+    """
+    metadata_path = file_path.with_suffix(".metadata.json")
+    try:
+        with metadata_path.open("r", encoding="utf-8") as f:
+            return cast("ModelMetadata", json.load(f))
+    except Exception:
+        logger.exception("加载模型元数据失败")
         raise

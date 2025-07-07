@@ -1,8 +1,10 @@
 import asyncio
 import contextlib
 import functools
+import importlib
 import platform
 from collections.abc import Callable, Coroutine
+from typing import Any
 
 import matplotlib as mpl
 
@@ -56,6 +58,9 @@ def configure_matplotlib_fonts() -> None:
     plt.rcParams["axes.unicode_minus"] = False
 
 
+configure_matplotlib_fonts()
+
+
 def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, R]]:
     """一个用于包装 sync function 为 async function 的装饰器
 
@@ -68,3 +73,17 @@ def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, 
         return await asyncio.to_thread(functools.partial(call, *args, **kwargs))
 
     return _wrapper
+
+
+def resolve_dot_notation(obj_str: str, default_attr: str, default_prefix: str | None = None) -> Any:
+    """解析并导入点分表示法的对象"""
+    modulename, _, cls = obj_str.partition(":")
+    if default_prefix is not None and modulename.startswith("~"):
+        modulename = default_prefix + modulename[1:]
+    module = importlib.import_module(modulename)
+    if not cls:
+        return getattr(module, default_attr)
+    instance = module
+    for attr_str in cls.split("."):
+        instance = getattr(instance, attr_str)
+    return instance

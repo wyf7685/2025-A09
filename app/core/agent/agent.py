@@ -44,7 +44,9 @@ SYSTEM_PROMPT = """\
 {overview}
 
 ## 工具选择指南
-- **数据探索与可视化**：使用analyze_data工具进行灵活的探索性分析和可视化
+- **数据探索与可视化**：
+  - analyze_data工具：进行灵活的探索性分析和可视化
+  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
 - **数据处理与特征工程**：
   - create_column_tool：创建新列或转换现有列
   - create_interaction_term_tool：创建特征交互项
@@ -64,16 +66,61 @@ SYSTEM_PROMPT = """\
   - save_model_tool：保存训练好的模型
 
 ## 推荐分析流程
-1. **数据探索**：使用analyze_data工具探索数据分布、缺失值等基本情况
-2. **数据处理**：使用create_column_tool处理缺失值、异常值，创建新特征
-3. **特征工程**：使用create_interaction_term_tool、create_aggregated_feature_tool构建高级特征
-4. **特征分析与选择**：使用analyze_feature_importance_tool分析特征重要性，使用select_features_tool选择最佳特征子集
-5. **模型训练与优化**：
-   - 先使用optimize_hyperparameters_tool寻找最佳超参数
-   - 使用plot_learning_curve_tool诊断模型偏差/方差问题
-   - 使用train_model_tool训练最终模型，并传入优化后的超参数
+1. **数据理解与目标明确**：
+   - 确定分析目标和关键问题
+   - 了解数据背景和业务含义
+   - 明确分析指标和预期结果
+
+2. **数据探索与描述统计**：
+   - 使用analyze_data工具全面了解数据分布、缺失值、基本统计量
+   - 分析各变量类型、取值范围和统计特征
+   - 识别潜在的数据质量问题
+
+3. **数据清理与预处理**：
+   - 使用create_column_tool处理缺失值、异常值
+   - 标准化/归一化数值特征
+   - 编码分类变量
+   - 处理日期时间数据
+
+4. **探索性数据分析**：
+   - 使用correlation_analysis_tool分析变量间相关关系
+   - 使用detect_outliers_tool识别并处理异常值
+   - 分析数据分布和趋势
+   - 探索关键变量的时间模式(如适用)
+
+5. **高级分析与假设验证**：
+   - 进行分组比较分析
+   - 假设检验和统计推断
+   - 识别关键影响因素
+   - 使用lag_analysis_tool分析时序关系(如适用)
+
+6. **特征工程与数据转换**：
+   - 使用create_interaction_term_tool创建特征交互项
+   - 使用create_aggregated_feature_tool创建聚合特征
+   - 构建业务相关的派生指标
+
+7. **模型构建(如需)**：
+   - 使用analyze_feature_importance_tool分析特征重要性
+   - 使用select_features_tool选择最佳特征子集
+   - 使用train_model_tool训练预测或分类模型
    - 使用evaluate_model_tool评估模型性能
-6. **结果解释与总结**：分析模型结果，提出洞见和建议
+
+8. **结果可视化与解释**：
+   - 创建关键发现的直观图表
+   - 将分析结果与业务问题关联
+   - 提供明确的数据洞察和行动建议
+   - 总结分析局限性和未来分析方向
+
+## 模型使用工作流示例
+
+**训练-评估-保存流程**：
+1. 使用 train_model_tool 训练模型，得到 trained_model_id
+2. 使用 evaluate_model_tool 评估该模型
+3. 使用 save_model_tool 保存模型供未来使用
+
+**加载-评估流程**：
+1. 使用 load_model_tool 加载之前保存的模型，得到 trained_model_id
+2. 使用 evaluate_model_tool 直接评估加载的模型（无需重新训练）
 
 ## 输出格式要求
 - 分析报告应该结构清晰，包含标题、小节和结论
@@ -110,6 +157,7 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
         (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
     ):
         if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
+            logger.info(f"恢复工具调用: {call['name']} - {call['args']}")
             try:
                 result = tool(df=df, **call["args"])
             except Exception as err:

@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import json
 import uuid
 from collections.abc import Callable
@@ -8,6 +9,7 @@ from typing import Any, cast
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
+from app.const import MODEL_DIR
 from app.log import logger
 
 from .feature_importance import FeatureImportanceResult, analyze_feature_importance
@@ -20,6 +22,7 @@ from .model import (
     TrainModelResult,
     evaluate_model,
     load_model,
+    load_model_metadata,
     save_model,
     train_model,
 )
@@ -80,8 +83,20 @@ def scikit_tools(
     ) -> str:
         """
         训练机器学习模型。
-        支持 'linear_regression', 'decision_tree_regressor', 'random_forest_regressor' (回归任务)
-        和 'decision_tree_classifier', 'random_forest_classifier' (分类任务)。
+
+        支持以下回归模型:
+        - 'linear_regression': 线性回归
+        - 'decision_tree_regressor': 决策树回归
+        - 'random_forest_regressor': 随机森林回归
+        - 'gradient_boosting_regressor': 梯度提升树回归
+        - 'xgboost_regressor': XGBoost回归
+
+        支持以下分类模型:
+        - 'decision_tree_classifier': 决策树分类
+        - 'random_forest_classifier': 随机森林分类
+        - 'gradient_boosting_classifier': 梯度提升树分类
+        - 'xgboost_classifier': XGBoost分类
+        - 'logistic_regression': 逻辑回归分类
 
         Args:
             features (list[str]): 特征列的名称列表。
@@ -127,10 +142,12 @@ def scikit_tools(
     def evaluate_model_tool(trained_model_id: TrainModelID) -> EvaluateModelResult:
         """
         评估训练好的机器学习模型。
-        接受 train_model_tool 函数的返回值作为输入。
+        可以评估两种来源的模型：
+        1. 通过 train_model_tool 训练完成的模型
+        2. 通过 load_model_tool 加载的之前保存的模型
 
         Args:
-            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回。
+            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回或由 `load_model_tool` 加载。
 
         Returns:
             dict: 包含模型评估指标、消息和预测结果摘要的字典。
@@ -156,7 +173,9 @@ def scikit_tools(
             raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 train_model_tool 进行训练。")
 
         logger.info(f"保存模型: 训练结果 ID = {trained_model_id}")
-        file_path = Path.cwd() / "output" / "models" / trained_model_id / "model"
+        file_path = MODEL_DIR / trained_model_id / "model"
+        with contextlib.suppress(Exception):
+            file_path = file_path.relative_to(Path.cwd())
         file_path.parent.mkdir(parents=True, exist_ok=True)
         result = save_model(train_model_cache[trained_model_id], file_path)
         saved_models[trained_model_id] = file_path
@@ -172,7 +191,11 @@ def scikit_tools(
         1. 会话中断后恢复：当 agent 会话中断并重新启动时，通过此工具恢复之前保存的模型状态
         2. 跨会话模型使用：在新的分析会话中使用之前训练和保存的模型
 
-        使用此工具时，模型将被加载到内存中，可以立即用于预测或评估等其他操作，无需重新训练。
+        使用此工具时，模型将被加载到内存中，可以立即用于以下操作：
+        - 使用 evaluate_model_tool 直接传入该 trained_model_id 进行模型评估
+        - 使用 save_model_tool 重新保存模型
+
+        注意：加载模型后无需重新训练，可以直接使用模型ID进行其他操作。
 
         Args:
             trained_model_id (str): 训练结果ID，由之前会话中的 `train_model_tool` 返回并通过 `save_model_tool` 保存。
@@ -188,6 +211,17 @@ def scikit_tools(
         metadata, train_result = load_model(df_ref(), file_path)
         train_model_cache[trained_model_id] = train_result
         return metadata
+
+    @tool
+    def list_saved_models_tool() -> dict[TrainModelID, ModelMetadata]:
+        """
+        列出所有已保存的模型元信息。
+
+        Returns:
+            list[ModelMetadata]: 包含所有已保存模型的元信息列表。
+        """
+        logger.info("列出所有已保存的模型")
+        return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
 
     @tool
     def select_features_tool(
@@ -353,6 +387,7 @@ def scikit_tools(
         evaluate_model_tool,
         save_model_tool,
         load_model_tool,
+        list_saved_models_tool,
         select_features_tool,
         analyze_feature_importance_tool,
         optimize_hyperparameters_tool,

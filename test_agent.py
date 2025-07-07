@@ -45,7 +45,7 @@ def test_agent() -> None:
         logger.info(f"  目标列: {model_info['target_column']}")
         if le := model_info.get("label_encoder"):
             logger.info(f"  标签编码器类别: {le['classes']}")
-    for model_id, model_path in agent.saved_models:
+    for model_id, model_path in agent.saved_models.items():
         logger.info(f"模型 {model_id} 已保存到: {model_path}")
 
 
