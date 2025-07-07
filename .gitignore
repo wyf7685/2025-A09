@@ -335,6 +335,9 @@ pyrightconfig.json
 .env.*
 /external
 test.csv
-/data
 # agent state
 state.json
+
+/data
+/output
+/exports
