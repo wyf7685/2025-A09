@@ -4,7 +4,7 @@ import json
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal
 
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
@@ -16,31 +16,36 @@ from .feature_importance import FeatureImportanceResult, analyze_feature_importa
 from .feature_select import FeatureSelectionResult, select_features
 from .hyperparam import HyperparamOptResult, LearningCurveResult, optimize_hyperparameters, plot_learning_curve
 from .model import (
+    CompositeModelOptions,
     EvaluateModelResult,
+    ModelInstanceInfo,
     ModelMetadata,
     SaveModelResult,
     TrainModelResult,
+    create_composite_model,
+    create_model,
     evaluate_model,
+    fit_model,
     load_model,
     load_model_metadata,
     save_model,
-    train_model,
 )
 
 
-def _format_train_result_for_llm(run_id: str, result: TrainModelResult) -> str:
+def _format_train_result_for_llm(model_id: str, result: TrainModelResult) -> str:
     """
     格式化训练结果以便于 LLM 理解。
     包括模型类型、特征列、目标列和模型评估指标。
 
     Args:
+        model_id (str): 模型的唯一标识符。
         result (TrainModelResult): 训练结果。
 
     Returns:
         str: 格式化后的字符串。
     """
     output = (
-        f"训练结果 (ID='{run_id}'):\n "
+        f"训练结果 (ID='{model_id}'):\n "
         f"模型类型: {result['model_type']}\n"
         f"特征列: {', '.join(result['feature_columns'])}\n"
         f"目标列: {result['target_column']}"
@@ -63,26 +68,32 @@ def _fix_hyperparams(params: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
-type TrainModelID = str
+type ModelID = str
 
 
 def scikit_tools(
     df_ref: Callable[[], pd.DataFrame],
-) -> tuple[list[BaseTool], dict[TrainModelID, TrainModelResult], dict[TrainModelID, Path]]:
-    train_model_cache: dict[TrainModelID, TrainModelResult] = {}
-    saved_models: dict[TrainModelID, Path] = {}
+) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
+    model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
+    train_model_cache: dict[ModelID, TrainModelResult] = {}
+    saved_models: dict[ModelID, Path] = {}
+
+    def _cache_model_info(model_info: ModelInstanceInfo) -> ModelID:
+        """
+        缓存模型信息并生成唯一ID。
+        """
+        model_id = str(uuid.uuid4())
+        model_instance_cache[model_id] = model_info
+        return model_id
 
     @tool
-    def train_model_tool(
-        features: list[str],
-        target: str,
+    def create_model_tool(
         model_type: str = "linear_regression",
-        test_size: float = 0.2,
+        hyperparams: dict[str, Any] | str | None = None,
         random_state: int = 42,
-        hyperparams: dict[str, Any] | str | None = None,  # 修改参数类型
     ) -> str:
         """
-        训练机器学习模型。
+        创建机器学习模型实例，但不进行训练。
 
         支持以下回归模型:
         - 'linear_regression': 线性回归
@@ -99,91 +110,207 @@ def scikit_tools(
         - 'logistic_regression': 逻辑回归分类
 
         Args:
-            features (list[str]): 特征列的名称列表。
-            target (str): 目标列的名称。
             model_type (str): 模型类型。
-            test_size (float): 测试集占总数据集的比例。
+            hyperparams (dict|str): 模型超参数，可以是字典或JSON字符串。
             random_state (int): 随机种子。
-            hyperparams (dict | str, optional): 模型超参数，可以是字典或JSON字符串格式。
 
         Returns:
-            str: 训练结果信息，包含训练结果ID(用于评估模型时引用)和模型类型、特征列、目标列等信息。
+            str: 模型ID，可用于fit_model_tool进行模型训练。
         """
-        logger.info(f"开始训练模型: {model_type}，特征: {features}，目标: {target}")
-
-        # 处理超参数
+        # 处理字符串形式的超参数
+        parsed_hyperparams = None
         hyperparams_parse_error = None
-        if hyperparams is not None:
-            # 如果是字符串，尝试解析为JSON
-            if isinstance(hyperparams, str):
-                try:
-                    hyperparams = cast("dict[str, Any]", json.loads(hyperparams))
-                except json.JSONDecodeError as err:
-                    hyperparams_parse_error = (
-                        f"注意: 无法解析超参数JSON字符串 {hyperparams}，使用默认超参数\n错误详情: {err}"
-                    )
-                    logger.warning(f"无法解析超参数JSON字符串: {hyperparams}，使用默认超参数")
-                    hyperparams = None
 
-            # 修复超参数类型问题
-            if hyperparams:
-                hyperparams = _fix_hyperparams(hyperparams)
-                logger.info(f"使用自定义超参数: {hyperparams}")
+        if isinstance(hyperparams, str):
+            try:
+                parsed_hyperparams = json.loads(hyperparams)
+            except Exception as e:
+                hyperparams_parse_error = f"超参数解析错误: {e}，将使用默认参数"
+                logger.warning(hyperparams_parse_error)
+        else:
+            parsed_hyperparams = hyperparams
 
-        result = train_model(df_ref(), features, target, model_type, test_size, random_state, hyperparams)
-        run_id = str(uuid.uuid4())
-        train_model_cache[run_id] = result
-        formatted = _format_train_result_for_llm(run_id, result)
-        if hyperparams_parse_error:
-            formatted += f"\n\n{hyperparams_parse_error}"
-        return formatted
+        if parsed_hyperparams:
+            parsed_hyperparams = _fix_hyperparams(parsed_hyperparams)
+            logger.info(f"使用超参数: {parsed_hyperparams}")
+
+        try:
+            logger.info(f"创建模型: {model_type}")
+            model_info = create_model(model_type, random_state, parsed_hyperparams)
+            model_id = _cache_model_info(model_info)
+
+            formatted = f"成功创建模型！\n模型ID: {model_id}\n模型类型: {model_type}"
+            if parsed_hyperparams:
+                formatted += f"\n应用超参数: {parsed_hyperparams}"
+
+            if hyperparams_parse_error:
+                formatted += f"\n\n{hyperparams_parse_error}"
+
+            return formatted
+        except Exception as e:
+            logger.exception(f"创建模型失败: {model_type}")
+            return f"创建模型失败: {e}"
 
     @tool
-    def evaluate_model_tool(trained_model_id: TrainModelID) -> EvaluateModelResult:
+    def fit_model_tool(
+        model_id: ModelID,
+        features: list[str],
+        target: str,
+        test_size: float = 0.2,
+        random_state: int = 42,
+    ) -> str:
+        """
+        使用指定的模型实例和数据进行训练。
+
+        Args:
+            model_id (str): 由create_model_tool或create_composite_model_tool创建的模型ID
+            features (list[str]): 特征列的名称列表。
+            target (str): 目标列的名称。
+            test_size (float): 测试集占总数据集的比例。
+            random_state (int): 随机种子，用于复现结果。
+
+        Returns:
+            str: 模型训练结果的格式化信息。模型ID保持不变，可直接用于evaluate_model_tool评估。
+        """
+        # 检查模型ID是否存在
+        if model_id not in model_instance_cache:
+            return f"未找到模型ID: {model_id}。请先使用create_model_tool创建模型。"
+
+        model_info = model_instance_cache[model_id]
+        model = model_info["model"]
+        model_type = model_info["model_type"]
+        hyperparams = model_info["hyperparams"]
+
+        try:
+            logger.info(f"训练模型: {model_type}，特征: {features}，目标: {target}")
+            result = fit_model(df_ref(), features, target, model, model_type, test_size, random_state, hyperparams)
+
+            train_model_cache[model_id] = result
+            return _format_train_result_for_llm(model_id, result)
+        except Exception as e:
+            logger.exception(f"训练模型失败: {model_type}")
+            return f"训练模型失败: {e}"
+
+    @tool
+    def create_composite_model_tool(
+        model_ids: list[ModelID],
+        composite_type: str = "voting",
+        weights: list[float] | None = None,
+        voting: Literal["hard", "soft"] | None = None,
+        use_features: list[str] | None = None,
+    ) -> str:
+        """
+        创建复合模型，如投票分类器或回归器，将多个训练好的模型组合成更强大的集成模型。
+
+        Args:
+            model_ids (list[str]): 已训练模型的ID列表，通过fit_model_tool获得
+            composite_type (str): 复合模型类型，目前支持"voting"(投票)
+            weights (list[float], optional): 每个模型的权重，例如[0.7, 0.3]表示第一个模型权重为0.7，
+                第二个模型权重为0.3。权重越高的模型对最终决策的影响越大。
+            voting (str, optional): 投票方式，"hard"(多数投票)或"soft"(概率加权)，仅用于分类
+            use_features (list[str], optional): 指定使用的特征子集
+
+        Returns:
+            str: 复合模型ID，可用于后续的evaluate_model_tool或save_model_tool调用
+
+        Example:
+            # 创建两个模型并训练
+            model1_id = create_model_tool("random_forest_classifier", ...)
+            trained1_id = fit_model_tool(model1_id, ["feature1", "feature2"], "target")
+
+            model2_id = create_model_tool("gradient_boosting_classifier", ...)
+            trained2_id = fit_model_tool(model2_id, ["feature1", "feature2"], "target")
+
+            # 根据性能评估结果确定权重
+            eval1 = evaluate_model_tool(trained1_id)
+            eval2 = evaluate_model_tool(trained2_id)
+            acc1 = eval1["metrics"]["accuracy"]
+            acc2 = eval2["metrics"]["accuracy"]
+
+            # 创建集成模型，给性能更好的模型更高的权重
+            ensemble_id = create_composite_model_tool(
+                model_ids=[trained1_id, trained2_id],
+                weights=[acc1/(acc1+acc2), acc2/(acc1+acc2)],
+                voting="soft"
+            )
+        """
+        # 验证模型ID是否存在
+        model_results: list[TrainModelResult] = []
+        for model_id in model_ids:
+            if model_id not in train_model_cache:
+                raise ValueError(f"未找到训练好的模型 ID '{model_id}'。请确保该模型已通过 fit_model_tool 训练。")
+            model_results.append(train_model_cache[model_id])
+
+        # 构建选项
+        options: CompositeModelOptions = {}
+        if weights:
+            options["weights"] = weights
+        if voting:
+            options["voting"] = voting
+        if use_features:
+            options["use_features"] = use_features
+
+        # 创建复合模型
+        logger.info(f"创建复合模型: 类型={composite_type}, 基础模型数量={len(model_ids)}")
+        model_info = create_composite_model(model_results, composite_type, options)
+
+        # 生成唯一ID并缓存结果
+        model_id = _cache_model_info(model_info)
+
+        base_models = [f"{i}. {model_id}" for i, model_id in enumerate(model_ids, 1)]
+        return (
+            f"复合模型创建成功 (ID={model_id})\n"
+            f"模型类型: {model_info['model_type']}\n"
+            f"基础模型: {', '.join(base_models)}\n"
+            f"超参数: \n{json.dumps(model_info['hyperparams'], indent=2) if model_info['hyperparams'] else '无'}\n"
+        )
+
+    @tool
+    def evaluate_model_tool(trained_model_id: ModelID) -> EvaluateModelResult:
         """
         评估训练好的机器学习模型。
         可以评估两种来源的模型：
-        1. 通过 train_model_tool 训练完成的模型
+        1. 通过 fit_model_tool 训练完成的模型
         2. 通过 load_model_tool 加载的之前保存的模型
 
         Args:
-            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回或由 `load_model_tool` 加载。
+            trained_model_id (str): 模型ID，由 `fit_model_tool` 返回或由 `load_model_tool` 加载。
 
         Returns:
             dict: 包含模型评估指标、消息和预测结果摘要的字典。
         """
         if trained_model_id not in train_model_cache:
-            raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 train_model_tool 进行训练。")
+            raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 fit_model_tool 进行训练。")
 
         logger.info(f"评估模型: 训练结果 ID = {trained_model_id}")
         return evaluate_model(train_model_cache[trained_model_id])
 
     @tool
-    def save_model_tool(trained_model_id: TrainModelID) -> SaveModelResult:
+    def save_model_tool(model_id: ModelID) -> SaveModelResult:
         """
         保存训练好的机器学习模型及其元数据。
 
         Args:
-            trained_model_id (str): 训练结果ID，由 `train_model_tool` 返回。
+            model_id (str): 模型ID，由 `fit_model_tool` 返回。
 
         Returns:
             dict: 包含保存结果消息和模型元信息的字典。
         """
-        if trained_model_id not in train_model_cache:
-            raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 train_model_tool 进行训练。")
+        if model_id not in train_model_cache:
+            raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
-        logger.info(f"保存模型: 训练结果 ID = {trained_model_id}")
-        file_path = MODEL_DIR / trained_model_id / "model"
+        logger.info(f"保存模型: 训练结果 ID = {model_id}")
+        file_path = MODEL_DIR / model_id / "model"
         with contextlib.suppress(Exception):
             file_path = file_path.relative_to(Path.cwd())
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        result = save_model(train_model_cache[trained_model_id], file_path)
-        saved_models[trained_model_id] = file_path
+        result = save_model(train_model_cache[model_id], file_path)
+        saved_models[model_id] = file_path
         logger.info(f"模型已保存到: {file_path.with_suffix('.joblib')}")
         return result
 
     @tool
-    def load_model_tool(trained_model_id: TrainModelID) -> ModelMetadata:
+    def load_model_tool(model_id: ModelID) -> ModelMetadata:
         """
         从文件加载训练好的机器学习模型，恢复模型的使用能力。
 
@@ -192,33 +319,33 @@ def scikit_tools(
         2. 跨会话模型使用：在新的分析会话中使用之前训练和保存的模型
 
         使用此工具时，模型将被加载到内存中，可以立即用于以下操作：
-        - 使用 evaluate_model_tool 直接传入该 trained_model_id 进行模型评估
+        - 使用 evaluate_model_tool 直接传入该 model_id 进行模型评估
         - 使用 save_model_tool 重新保存模型
 
         注意：加载模型后无需重新训练，可以直接使用模型ID进行其他操作。
 
         Args:
-            trained_model_id (str): 训练结果ID，由之前会话中的 `train_model_tool` 返回并通过 `save_model_tool` 保存。
+            model_id (str): 模型ID，由之前会话中的 `fit_model_tool` 返回并通过 `save_model_tool` 保存。
 
         Returns:
             dict: 包含加载的模型元信息，包括模型类型、特征列、目标列和超参数等。
         """
-        if trained_model_id not in saved_models:
-            raise ValueError(f"未找到保存的模型 ID '{trained_model_id}'")
+        if model_id not in saved_models:
+            raise ValueError(f"未找到保存的模型 ID '{model_id}'")
 
-        file_path = saved_models[trained_model_id]
+        file_path = saved_models[model_id]
         logger.info(f"加载模型: {file_path}")
         metadata, train_result = load_model(df_ref(), file_path)
-        train_model_cache[trained_model_id] = train_result
+        train_model_cache[model_id] = train_result
         return metadata
 
     @tool
-    def list_saved_models_tool() -> dict[TrainModelID, ModelMetadata]:
+    def list_saved_models_tool() -> dict[ModelID, ModelMetadata]:
         """
         列出所有已保存的模型元信息。
 
         Returns:
-            list[ModelMetadata]: 包含所有已保存模型的元信息列表。
+            list[ModelMetadata]: 包含所有已保存模型的元信息字典的列表。
         """
         logger.info("列出所有已保存的模型")
         return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
@@ -383,15 +510,22 @@ def scikit_tools(
     plot_learning_curve_tool.response_format = "content_and_artifact"
 
     tools = [
-        train_model_tool,
+        # 特征选择和分析
+        select_features_tool,
+        analyze_feature_importance_tool,
+        # 模型创建和训练
+        create_model_tool,
+        fit_model_tool,
+        # 模型优化
+        optimize_hyperparameters_tool,
+        plot_learning_curve_tool,
+        # 高级模型构建
+        create_composite_model_tool,
+        # 模型评估和管理
         evaluate_model_tool,
         save_model_tool,
         load_model_tool,
         list_saved_models_tool,
-        select_features_tool,
-        analyze_feature_importance_tool,
-        optimize_hyperparameters_tool,
-        plot_learning_curve_tool,
     ]
 
     return tools, train_model_cache, saved_models

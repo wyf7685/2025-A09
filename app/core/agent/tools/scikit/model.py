@@ -1,7 +1,7 @@
 import inspect
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict, cast
 
 import joblib
 import numpy as np
@@ -55,7 +55,7 @@ _MODEL_CONFIG = {
 def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
     """根据模型类型获取模型实例"""
     # 确定任务类型
-    task_type = "classification" if "classifier" in model_type else "regression"
+    task_type = "classification" if "classifier" in model_type or model_type == "logistic_regression" else "regression"
 
     # 验证模型类型
     if model_type not in _MODEL_CONFIG.get(task_type, {}):
@@ -100,45 +100,174 @@ def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
     return model
 
 
-def train_model(
-    df: pd.DataFrame,
-    features: list[str],
-    target: str,
-    model_type: str = "linear_regression",
-    test_size: float = 0.2,
+class ModelInstanceInfo(TypedDict):
+    model: Any
+    model_type: str
+    hyperparams: dict[str, Any] | None
+
+
+def create_model(
+    model_type: str,
     random_state: int = 42,
-    hyperparams: dict[str, Any] | None = None,  # 新增参数，接收优化后的超参数
-) -> TrainModelResult:
+    hyperparams: dict[str, Any] | None = None,
+) -> ModelInstanceInfo:
     """
-    训练机器学习模型。
+    创建机器学习模型实例，但不进行训练。
 
     支持以下回归模型:
     - 'linear_regression': 线性回归
     - 'decision_tree_regressor': 决策树回归
     - 'random_forest_regressor': 随机森林回归
     - 'gradient_boosting_regressor': 梯度提升树回归
-    - 'xgboost_regressor': XGBoost回归 (如果安装了xgboost)
+    - 'xgboost_regressor': XGBoost回归
 
     支持以下分类模型:
     - 'decision_tree_classifier': 决策树分类
     - 'random_forest_classifier': 随机森林分类
     - 'gradient_boosting_classifier': 梯度提升树分类
-    - 'xgboost_classifier': XGBoost分类 (如果安装了xgboost)
+    - 'xgboost_classifier': XGBoost分类
     - 'logistic_regression': 逻辑回归分类
 
-    自动处理目标变量为非数值的情况（分类任务）。
+    Args:
+        model_type (str): 模型类型，详见函数文档。
+        random_state (int): 随机种子，用于复现结果。
+        hyperparams (dict, optional): 模型超参数，如果提供则应用于模型。
+
+    Returns:
+        tuple: (模型实例, 模型类型描述信息)
+    """
+    try:
+        model = _get_model_instance(model_type, random_state)
+    except ImportError as e:
+        raise ValueError(f"创建模型失败: {e}") from None
+
+    # 应用超参数（如果提供）
+    if hyperparams:
+        try:
+            model.set_params(**hyperparams)
+            logger.info(f"已应用超参数: {hyperparams}")
+        except Exception as e:
+            logger.warning(f"应用超参数失败: {e}，将使用默认参数")
+
+    return {
+        "model": model,
+        "model_type": model_type,
+        "hyperparams": hyperparams,
+    }
+
+
+class CompositeModelOptions(TypedDict, total=False):
+    """复合模型的选项参数"""
+
+    weights: list[float] | None  # 各模型的权重，仅用于投票模型
+    voting: Literal["hard", "soft"]  # 投票方式，仅用于分类任务
+    use_features: list[str] | None  # 使用的特征子集，若为None则使用所有特征的并集
+
+
+def create_composite_model(
+    models: list[TrainModelResult],
+    composite_type: str = "voting",
+    options: CompositeModelOptions | None = None,
+) -> ModelInstanceInfo:
+    """
+    创建复合模型，如投票分类器或回归器。
+
+    Args:
+        model_results (list[TrainModelResult]): 已训练模型的结果列表
+        composite_type (str): 复合模型类型，目前支持"voting"(投票)
+        options (CompositeModelOptions, optional): 复合模型的额外选项
+            - weights (list[float], optional): 每个模型的权重
+            - voting (str, optional): 投票方式，"hard"或"soft"，仅用于分类
+            - use_features (list[str], optional): 指定使用的特征子集
+
+    Returns:
+        TrainModelResult: 与普通训练模型结果格式一致的复合模型结果
+
+    Raises:
+        ValueError: 当模型类型不兼容或参数错误时
+    """
+    if not models or len(models) < 2:
+        raise ValueError("需要至少两个模型结果来创建复合模型")
+
+    options = options or {}
+
+    # 确定模型类型（分类或回归）
+    is_classification = "classifier" in models[0]["model_type"]
+
+    # 验证所有模型类型一致
+    for model in models[1:]:
+        current_is_classification = "classifier" in model["model_type"]
+        if current_is_classification != is_classification:
+            raise ValueError("所有模型必须是同一类型（分类或回归）")
+
+    # 验证所有模型训练特征输入
+    feature_sets = [set(model["feature_columns"]) for model in models]
+    if not all(feature_sets[0] == features for features in feature_sets):
+        raise ValueError("所有模型的特征列必须一致")
+
+    # 验证所有模型的目标列一致
+    target_columns = {model["target_column"] for model in models}
+    if len(target_columns) != 1:
+        raise ValueError("所有模型的目标列必须一致")
+
+    # 验证权重列表长度
+    weights = options.get("weights")
+    if weights and len(weights) != len(models):
+        raise ValueError(f"权重列表长度({len(weights)})必须与模型数量({len(models)})相同")
+
+    # 准备构建投票模型
+    estimators = [(f"model_{i}", info["model"]) for i, info in enumerate(models)]
+
+    # 创建复合模型
+    if composite_type == "voting":
+        if is_classification:
+            voting = options.get("voting", "hard")
+            if voting not in ["hard", "soft"]:
+                raise ValueError('分类投票方式必须是"hard"或"soft"')
+            from sklearn.ensemble import VotingClassifier
+
+            composite_model = VotingClassifier(estimators=estimators, voting=voting, weights=weights)
+            logger.info(f"创建投票分类器，投票方式: {voting}，使用{len(estimators)}个基础模型")
+        else:
+            from sklearn.ensemble import VotingRegressor
+
+            composite_model = VotingRegressor(estimators=estimators, weights=weights)
+            logger.info(f"创建投票回归器，使用{len(estimators)}个基础模型")
+    else:
+        raise ValueError(f"不支持的复合模型类型: {composite_type}")
+
+    return {
+        "model": composite_model,
+        "model_type": f"{composite_type}_{'classifier' if is_classification else 'regressor'}",
+        "hyperparams": None,
+    }
+
+
+def fit_model(
+    df: pd.DataFrame,
+    features: list[str],
+    target: str,
+    model: Any,
+    model_type: str,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    hyperparams: dict[str, Any] | None = None,
+) -> TrainModelResult:
+    """
+    使用给定的模型实例和数据进行训练。
 
     Args:
         df (pd.DataFrame): 输入的DataFrame。
         features (list[str]): 特征列的名称列表。
         target (str): 目标列的名称。
-        model_type (str): 模型类型，详见函数文档。
+        model (Any): 由create_model创建的模型实例。
+        model_type (str): 模型类型。
         test_size (float): 测试集占总数据集的比例。
         random_state (int): 随机种子，用于复现结果。
-        hyperparams (dict, optional): 模型超参数，如果提供则应用于模型。
+        hyperparams (dict, optional): 记录模型超参数，仅用于信息记录。
 
     Returns:
-        dict: 包含训练好的模型、测试集数据、模型类型及相关信息的字典。
+        TrainModelResult: 包含训练好的模型、测试集数据、模型类型及相关信息的字典。
     """
     if not all(f in df.columns for f in features):
         raise ValueError(f"部分特征列 {', '.join(set(features) - set(df.columns))} 不存在。")
@@ -163,20 +292,7 @@ def train_model(
         assert isinstance(Y_train, pd.Series)
         assert isinstance(Y_test, pd.Series)
 
-    # 通过配置创建模型实例
-    try:
-        model = _get_model_instance(model_type, random_state)
-    except ImportError as e:
-        raise ValueError(f"创建模型失败: {e}") from None
-
-    # 应用优化后的超参数（如果提供）
-    if hyperparams:
-        try:
-            model.set_params(**hyperparams)
-            logger.info(f"已应用优化的超参数: {hyperparams}")
-        except Exception as e:
-            logger.warning(f"应用超参数失败: {e}，将使用默认参数")
-
+    # 训练模型
     model.fit(X_train, Y_train)
 
     return {
@@ -184,11 +300,11 @@ def train_model(
         "X_test": X_test,
         "Y_test": Y_test,
         "model_type": model_type,
-        "message": f"模型训练成功。模型类型: {model_type}" + ("，应用了优化超参数" if hyperparams else ""),
+        "message": f"模型训练成功。模型类型: {model_type}",
         "feature_columns": features,
         "target_column": target,
-        "label_encoder": le,  # 保存编码器
-        "hyperparams": hyperparams,  # 保存使用的超参数
+        "label_encoder": le,
+        "hyperparams": hyperparams,
     }
 
 

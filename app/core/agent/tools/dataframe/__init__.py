@@ -175,13 +175,16 @@ def dataframe_tools(
         return inspect_dataframe(df_ref(), options)
 
     return [
+        # 数据检查/探索工具（了解数据）
+        inspect_dataframe_tool,
+        # 数据分析工具（分析数据特性）
         correlation_analysis_tool,
-        lag_analysis_tool,
         detect_outliers_tool,
+        lag_analysis_tool,
+        # 数据转换工具（基于分析结果进行数据转换）
         create_column_tool,
         create_interaction_term_tool,
         create_aggregated_feature_tool,
-        inspect_dataframe_tool,
     ]
 
 
