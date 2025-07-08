@@ -366,6 +366,7 @@ class DataAnalyzerAgent:
 
     def invoke(self, user_input: str) -> Generator[AIMessage]:
         """使用用户输入调用 agent"""
+        self.execution_results.clear()  # 保证每次只保存本轮的执行结果
 
         def invoke() -> None:
             self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
