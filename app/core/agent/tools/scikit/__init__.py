@@ -4,7 +4,7 @@ import json
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
@@ -16,19 +16,24 @@ from .feature_importance import FeatureImportanceResult, analyze_feature_importa
 from .feature_select import FeatureSelectionResult, select_features
 from .hyperparam import HyperparamOptResult, LearningCurveResult, optimize_hyperparameters, plot_learning_curve
 from .model import (
-    CompositeModelOptions,
     EvaluateModelResult,
     ModelInstanceInfo,
     ModelMetadata,
     SaveModelResult,
     TrainModelResult,
-    create_composite_model,
     create_model,
     evaluate_model,
     fit_model,
     load_model,
     load_model_metadata,
     save_model,
+)
+from .model_composite import (
+    BlendingOptions,
+    CompositeModelOptions,
+    StackingOptions,
+    VotingOptions,
+    create_composite_model,
 )
 
 
@@ -195,69 +200,80 @@ def scikit_tools(
     def create_composite_model_tool(
         model_ids: list[ModelID],
         composite_type: str = "voting",
+        use_features: list[str] | None = None,
         weights: list[float] | None = None,
         voting: Literal["hard", "soft"] | None = None,
-        use_features: list[str] | None = None,
+        meta_model_type: str | None = None,
+        cv_folds: int | None = None,
+        validation_split: float | None = None,
+        meta_model_hyperparams: dict[str, Any] | None = None,
     ) -> str:
         """
-        创建复合模型，如投票分类器或回归器，将多个训练好的模型组合成更强大的集成模型。
+        创建集成模型，组合多个已训练模型以提高性能。
 
         Args:
             model_ids (list[str]): 已训练模型的ID列表，通过fit_model_tool获得
-            composite_type (str): 复合模型类型，目前支持"voting"(投票)
-            weights (list[float], optional): 每个模型的权重，例如[0.7, 0.3]表示第一个模型权重为0.7，
-                第二个模型权重为0.3。权重越高的模型对最终决策的影响越大。
-            voting (str, optional): 投票方式，"hard"(多数投票)或"soft"(概率加权)，仅用于分类
+            composite_type (str): 集成模型类型:
+                - "voting": 投票/平均集成(默认)
+                - "stacking": 使用交叉验证的堆叠集成
+                - "blending": 使用验证集的混合集成
             use_features (list[str], optional): 指定使用的特征子集
+            weights (list[float], optional): 各模型的权重，仅用于voting
+            voting (str, optional): 投票方式，"hard"或"soft"，仅用于分类的voting
+            meta_model_type (str, optional): 元模型类型，仅用于stacking或blending
+            cv_folds (int, optional): 交叉验证折数，默认5，仅用于stacking
+            validation_split (float, optional): 验证集比例，默认0.2，仅用于blending
+            meta_model_hyperparams (dict, optional): 元模型的超参数，仅用于stacking或blending
 
         Returns:
-            str: 复合模型ID，可用于后续的evaluate_model_tool或save_model_tool调用
-
-        Example:
-            # 创建两个模型并训练
-            model1_id = create_model_tool("random_forest_classifier", ...)
-            trained1_id = fit_model_tool(model1_id, ["feature1", "feature2"], "target")
-
-            model2_id = create_model_tool("gradient_boosting_classifier", ...)
-            trained2_id = fit_model_tool(model2_id, ["feature1", "feature2"], "target")
-
-            # 根据性能评估结果确定权重
-            eval1 = evaluate_model_tool(trained1_id)
-            eval2 = evaluate_model_tool(trained2_id)
-            acc1 = eval1["metrics"]["accuracy"]
-            acc2 = eval2["metrics"]["accuracy"]
-
-            # 创建集成模型，给性能更好的模型更高的权重
-            ensemble_id = create_composite_model_tool(
-                model_ids=[trained1_id, trained2_id],
-                weights=[acc1/(acc1+acc2), acc2/(acc1+acc2)],
-                voting="soft"
-            )
+            str: 集成模型ID，可用于后续的evaluate_model_tool或save_model_tool调用
         """
         # 验证模型ID是否存在
-        model_results: list[TrainModelResult] = []
+        models = []
         for model_id in model_ids:
             if model_id not in train_model_cache:
-                raise ValueError(f"未找到训练好的模型 ID '{model_id}'。请确保该模型已通过 fit_model_tool 训练。")
-            model_results.append(train_model_cache[model_id])
+                raise ValueError(f"未找到训练好的模型 ID '{model_id}'")
+            models.append(train_model_cache[model_id])
 
-        # 构建选项
-        options: CompositeModelOptions = {}
-        if weights:
-            options["weights"] = weights
-        if voting:
-            options["voting"] = voting
-        if use_features:
-            options["use_features"] = use_features
+        # 根据composite_type创建相应的选项
+        options: CompositeModelOptions = {"use_features": use_features} if use_features else {}
+
+        if composite_type == "voting":
+            options = cast("VotingOptions", options)
+            if weights:
+                options["weights"] = weights
+            if voting:
+                options["voting"] = voting
+        elif composite_type == "stacking":
+            if not meta_model_type:
+                raise ValueError("Stacking集成模型需要指定meta_model_type参数")
+            options = cast("StackingOptions", options)
+            options["meta_model_type"] = meta_model_type
+            if cv_folds:
+                options["cv_folds"] = cv_folds
+            if meta_model_hyperparams:
+                options["meta_model_hyperparams"] = meta_model_hyperparams
+        elif composite_type == "blending":
+            if not meta_model_type:
+                raise ValueError("Blending集成模型需要指定meta_model_type参数")
+            options = cast("BlendingOptions", options)
+            options["meta_model_type"] = meta_model_type
+            if validation_split:
+                options["validation_split"] = validation_split
+            if meta_model_hyperparams:
+                options["meta_model_hyperparams"] = meta_model_hyperparams
+        else:
+            raise ValueError(f"不支持的复合模型类型: {composite_type}")
 
         # 创建复合模型
         logger.info(f"创建复合模型: 类型={composite_type}, 基础模型数量={len(model_ids)}")
-        model_info = create_composite_model(model_results, composite_type, options)
+        model_info = create_composite_model(models, composite_type, options)
 
         # 生成唯一ID并缓存结果
-        model_id = _cache_model_info(model_info)
+        model_id = str(uuid.uuid4())
+        model_instance_cache[model_id] = model_info
 
-        base_models = [f"{i}. {model_id}" for i, model_id in enumerate(model_ids, 1)]
+        base_models = [f"{i + 1}. {mid}" for i, mid in enumerate(model_ids)]
         return (
             f"复合模型创建成功 (ID={model_id})\n"
             f"模型类型: {model_info['model_type']}\n"

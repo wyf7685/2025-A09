@@ -1,7 +1,7 @@
 import inspect
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 import joblib
 import numpy as np
@@ -155,92 +155,6 @@ def create_model(
         "hyperparams": hyperparams,
     }
 
-
-class CompositeModelOptions(TypedDict, total=False):
-    """复合模型的选项参数"""
-
-    weights: list[float] | None  # 各模型的权重，仅用于投票模型
-    voting: Literal["hard", "soft"]  # 投票方式，仅用于分类任务
-    use_features: list[str] | None  # 使用的特征子集，若为None则使用所有特征的并集
-
-
-def create_composite_model(
-    models: list[TrainModelResult],
-    composite_type: str = "voting",
-    options: CompositeModelOptions | None = None,
-) -> ModelInstanceInfo:
-    """
-    创建复合模型，如投票分类器或回归器。
-
-    Args:
-        model_results (list[TrainModelResult]): 已训练模型的结果列表
-        composite_type (str): 复合模型类型，目前支持"voting"(投票)
-        options (CompositeModelOptions, optional): 复合模型的额外选项
-            - weights (list[float], optional): 每个模型的权重
-            - voting (str, optional): 投票方式，"hard"或"soft"，仅用于分类
-            - use_features (list[str], optional): 指定使用的特征子集
-
-    Returns:
-        TrainModelResult: 与普通训练模型结果格式一致的复合模型结果
-
-    Raises:
-        ValueError: 当模型类型不兼容或参数错误时
-    """
-    if not models or len(models) < 2:
-        raise ValueError("需要至少两个模型结果来创建复合模型")
-
-    options = options or {}
-
-    # 确定模型类型（分类或回归）
-    is_classification = "classifier" in models[0]["model_type"]
-
-    # 验证所有模型类型一致
-    for model in models[1:]:
-        current_is_classification = "classifier" in model["model_type"]
-        if current_is_classification != is_classification:
-            raise ValueError("所有模型必须是同一类型（分类或回归）")
-
-    # 验证所有模型训练特征输入
-    feature_sets = [set(model["feature_columns"]) for model in models]
-    if not all(feature_sets[0] == features for features in feature_sets):
-        raise ValueError("所有模型的特征列必须一致")
-
-    # 验证所有模型的目标列一致
-    target_columns = {model["target_column"] for model in models}
-    if len(target_columns) != 1:
-        raise ValueError("所有模型的目标列必须一致")
-
-    # 验证权重列表长度
-    weights = options.get("weights")
-    if weights and len(weights) != len(models):
-        raise ValueError(f"权重列表长度({len(weights)})必须与模型数量({len(models)})相同")
-
-    # 准备构建投票模型
-    estimators = [(f"model_{i}", info["model"]) for i, info in enumerate(models)]
-
-    # 创建复合模型
-    if composite_type == "voting":
-        if is_classification:
-            voting = options.get("voting", "hard")
-            if voting not in ["hard", "soft"]:
-                raise ValueError('分类投票方式必须是"hard"或"soft"')
-            from sklearn.ensemble import VotingClassifier
-
-            composite_model = VotingClassifier(estimators=estimators, voting=voting, weights=weights)
-            logger.info(f"创建投票分类器，投票方式: {voting}，使用{len(estimators)}个基础模型")
-        else:
-            from sklearn.ensemble import VotingRegressor
-
-            composite_model = VotingRegressor(estimators=estimators, weights=weights)
-            logger.info(f"创建投票回归器，使用{len(estimators)}个基础模型")
-    else:
-        raise ValueError(f"不支持的复合模型类型: {composite_type}")
-
-    return {
-        "model": composite_model,
-        "model_type": f"{composite_type}_{'classifier' if is_classification else 'regressor'}",
-        "hyperparams": None,
-    }
 
 
 def fit_model(
