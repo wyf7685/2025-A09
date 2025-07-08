@@ -197,33 +197,19 @@ onMounted(() => {
               {{ message.content }}
             </div>
             <div v-else class="assistant-message">
-              <!-- AI回复内容 -->
-              <div class="message-text" v-html="formatMessage(message.content)"></div>
-
-              <!-- 如果有图表，显示图表 -->
-              <div v-if="message.charts" class="charts-container">
-                <div v-for="(chart, chartIndex) in message.charts" :key="chartIndex" class="chart-item">
-                  <img :src="`data:image/png;base64,${chart.data}`" alt="分析图表" />
-                </div>
+              <!-- 文本内容 -->
+              <pre>{{ message.content }}</pre>
+              <!-- 图片内容 -->
+              <div v-if="message.charts && message.charts.length > 0">
+                <img v-for="(chart, cidx) in message.charts" :key="cidx" :src="'data:image/png;base64,' + chart.data" style="max-width: 100%; height: auto;" />
               </div>
-
-              <!-- 执行结果 -->
-              <div v-if="message.execution_results" class="execution-results">
-                <el-collapse>
-                  <el-collapse-item v-for="(result, resultIndex) in message.execution_results" :key="resultIndex"
-                    :title="`执行结果 ${resultIndex + 1}: ${result.query}`">
-                    <div class="result-content">
-                      <div v-if="result.output" class="result-output">
-                        <h5>输出:</h5>
-                        <pre>{{ result.output }}</pre>
-                      </div>
-                      <div v-if="result.figure" class="result-figure">
-                        <h5>图表:</h5>
-                        <img :src="`data:image/png;base64,${result.figure}`" alt="执行结果图表" />
-                      </div>
-                    </div>
-                  </el-collapse-item>
-                </el-collapse>
+              <!-- 结构化结果内容 -->
+              <div v-if="message.execution_results && message.execution_results.length > 0">
+                <div v-for="(result, ridx) in message.execution_results" :key="ridx">
+                  <div v-if="result.output">
+                    <pre>{{ result.output }}</pre>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

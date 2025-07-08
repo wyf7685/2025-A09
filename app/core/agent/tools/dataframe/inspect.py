@@ -94,7 +94,7 @@ def inspect_dataframe(
     if show_summary_stats:
         numeric_cols = filtered_df.select_dtypes(include="number").columns
         if not numeric_cols.empty:
-            result["summary_stats"] = filtered_df[numeric_cols].describe().to_dict()
+            result["summary_stats"] = {str(k): v for k, v in filtered_df[numeric_cols].describe().to_dict().items()}
 
     # 唯一值数量
     if show_unique_counts:
