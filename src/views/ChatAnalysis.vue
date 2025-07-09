@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useAppStore } from '@/stores/app';
-import type { ChatEntry, ChatMessage, ExecutionResult } from '@/types';
+import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
-import { marked } from 'marked';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import AssistantMessage from '@/components/AssistantMessage.vue';
 
 const appStore = useAppStore()
 
@@ -14,12 +14,6 @@ const messagesContainer = ref<HTMLElement | null>(null)
 
 // 计算属性
 const currentDataset = computed(() => appStore.currentDataset)
-
-// 方法
-const formatMessage = async (content: string | undefined): Promise<string> => {
-  // 使用 marked 将 Markdown 转换为 HTML
-  return await marked(content || '')
-}
 
 const formatTime = (timestamp: string | undefined): string => {
   if (!timestamp) return ''
@@ -59,59 +53,83 @@ const sendMessage = async (): Promise<void> => {
 
   try {
     // 创建一个初始的空AI回复消息
-    const assistantMessageIndex = messages.value.length
-    messages.value.push({
+    const assistantMessage = reactive({
       type: 'assistant',
-      content: '',
+      content: [],
       timestamp: new Date().toISOString(),
-      execution_results: [],
-      charts: []
-    })
+      tool_calls: {},
+      loading: true,
+    } as AssistantChatMessage & { loading?: boolean })
+    messages.value.push(assistantMessage)
 
     // 使用流式API
     await appStore.sendStreamChatMessage(
       userMessage,
-      appStore.currentSessionId,
-      currentDataset.value.id,
-      // 处理每个文本块
-      (chunk: string) => {
-        // 更新消息内容
-        if (messages.value[assistantMessageIndex]) {
-          messages.value[assistantMessageIndex].content += chunk
-          nextTick(() => scrollToBottom())
-        }
-      },
-      // 处理结果（如图表等）
-      (results: ExecutionResult[]) => {
-        if (messages.value[assistantMessageIndex]) {
-          messages.value[assistantMessageIndex].execution_results = results
-          // 处理图表数据
-          messages.value[assistantMessageIndex].charts = results
-            .map(result => result.figure)
-            .filter(figure => figure !== undefined && figure !== null)
-        }
-      },
-      // 处理完成回调
-      () => {
-        // 确保滚动到底部
+      (content) => {
+        // LLM 输出
+        assistantMessage.content.push({ type: 'text', content })
         nextTick(() => scrollToBottom())
       },
-      // 处理错误
-      (error: string) => {
-        console.error('流式聊天错误:', error)
-        if (messages.value[assistantMessageIndex]) {
-          messages.value[assistantMessageIndex].content += `\n\n抱歉，处理过程中出现错误: ${error}`
+      (id, name, args) => {
+        // 工具调用
+        if (!assistantMessage.tool_calls) assistantMessage.tool_calls = {}
+        assistantMessage.tool_calls[id] = {
+          name,
+          args,
+          status: 'running'
         }
+        assistantMessage.content.push({ type: 'tool_call', id })
+        nextTick(() => scrollToBottom())
+      },
+      (id, result, artifact) => {
+        // 工具结果
+        // 更新工具调用状态
+        const toolCall = assistantMessage.tool_calls?.[id] || undefined
+        if (toolCall) {
+          toolCall.status = 'success'
+          toolCall.result = result
+          toolCall.artifact = artifact || null
+        }
+
+        nextTick(() => scrollToBottom())
+      },
+      (id, error) => {
+        // 工具错误
+        // 更新工具调用状态
+        const toolCall = assistantMessage.tool_calls?.[id] || undefined
+        if (toolCall) {
+          toolCall.status = 'error'
+          toolCall.error = error
+        }
+
+        nextTick(() => scrollToBottom())
+      },
+      () => {
+        // 完成处理
+        console.log('对话完成')
+        assistantMessage.loading = false
+      },
+      (error) => {
+        // 错误处理
+        console.error('对话处理错误:', error)
+        assistantMessage.loading = false
+        assistantMessage.content.push({
+          type: 'text',
+          content: `\n\n处理出错: ${error}`
+        })
+        assistantMessage.loading = true
+        nextTick(() => scrollToBottom())
       }
     )
 
+    assistantMessage.loading = false
   } catch (error) {
     console.error('发送消息失败:', error)
 
     // 添加错误消息
     messages.value.push({
       type: 'assistant',
-      content: '抱歉，处理您的请求时出现了错误。请稍后重试。',
+      content: [{ type: 'text', content: '抱歉，处理您的请求时出现了错误。请稍后重试。' }],
       timestamp: new Date().toISOString()
     })
 
@@ -134,20 +152,7 @@ const scrollToBottom = (): void => {
 const loadChatHistory = (): void => {
   // 从 store 中加载聊天历史
   const history: ChatEntry[] = appStore.chatHistory
-  messages.value = history.map(entry => [
-    {
-      type: 'user' as const,
-      content: entry.user_message!,
-      timestamp: entry.timestamp
-    },
-    {
-      type: 'assistant' as const,
-      content: entry.assistant_response!,
-      timestamp: entry.timestamp,
-      execution_results: entry.execution_results,
-      charts: entry.execution_results?.map(r => r.figure).filter(figure => figure !== undefined) || []
-    }
-  ]).flat()
+  messages.value = history.map(entry => [entry.user_message, entry.assistant_response]).flat()
 
   nextTick(() => {
     scrollToBottom()
@@ -158,9 +163,11 @@ const loadChatHistory = (): void => {
 watch(currentDataset, (newDataset) => {
   if (newDataset && messages.value.length === 0) {
     // 添加欢迎消息
+    const welcome = `您好！我是您的AI数据分析助手。当前已加载数据集 "${newDataset.id}"，包含 ${newDataset.overview?.shape?.[0] || 0} 行和 ${newDataset.overview?.shape?.[1] || 0} 列数据。\n\n您可以问我：\n- 数据的基本统计信息\n- 绘制各种图表\n- 进行相关性分析\n- 检测异常值\n- 数据聚类分析\n\n请告诉我您想了解什么！`
+
     messages.value.push({
       type: 'assistant',
-      content: `您好！我是您的AI数据分析助手。当前已加载数据集 "${newDataset.id}"，包含 ${newDataset.overview?.shape?.[0] || 0} 行和 ${newDataset.overview?.shape?.[1] || 0} 列数据。\n\n您可以问我：\n- 数据的基本统计信息\n- 绘制各种图表\n- 进行相关性分析\n- 检测异常值\n- 数据聚类分析\n\n请告诉我您想了解什么！`,
+      content: [{ type: 'text', content: welcome }],
       timestamp: new Date().toISOString()
     })
 
@@ -196,35 +203,10 @@ onMounted(() => {
             <div v-if="message.type === 'user'" class="user-message">
               {{ message.content }}
             </div>
-            <div v-else class="assistant-message">
-              <!-- 文本内容 -->
-              <pre>{{ message.content }}</pre>
-              <!-- 图片内容 -->
-              <div v-if="message.charts && message.charts.length > 0">
-                <img v-for="(chart, cidx) in message.charts" :key="cidx" :src="'data:image/png;base64,' + chart.data" style="max-width: 100%; height: auto;" />
-              </div>
-              <!-- 结构化结果内容 -->
-              <div v-if="message.execution_results && message.execution_results.length > 0">
-                <div v-for="(result, ridx) in message.execution_results" :key="ridx">
-                  <div v-if="result.output">
-                    <pre>{{ result.output }}</pre>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AssistantMessage v-else :message="message" class="assistant-message"></AssistantMessage>
           </div>
           <div class="message-time">
             {{ formatTime(message.timestamp) }}
-          </div>
-        </div>
-
-        <!-- 加载状态 -->
-        <div v-if="appStore.loading" class="message-item assistant">
-          <div class="message-content">
-            <el-icon class="rotating">
-              <Loading />
-            </el-icon>
-            <span style="margin-left: 8px;">AI 正在分析中...</span>
           </div>
         </div>
       </div>
@@ -275,7 +257,7 @@ onMounted(() => {
 
 <style scoped>
 .chat-analysis {
-  height: calc(100vh - 140px);
+  height: calc(100vh - 90px);
   display: flex;
   flex-direction: column;
 }
@@ -341,48 +323,101 @@ onMounted(() => {
   margin-top: 4px;
 }
 
-.message-text {
+.assistant-text {
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* 工具调用样式 */
+.tool-calls {
+  margin-top: 15px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.tool-call {
+  background: #f9f9f9;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-left: 3px solid #909399;
+
+  &.running {
+    border-left-color: #E6A23C;
+  }
+
+  &.success {
+    border-left-color: #67C23A;
+  }
+
+  &.error {
+    border-left-color: #F56C6C;
+  }
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+  margin-bottom: 5px;
+
+  .el-icon {
+    margin-right: 5px;
+  }
+}
+
+.tool-args {
+  background: #f5f5f5;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 12px;
+  }
+}
+
+.tool-result {
+  background: #f0f9eb;
+  padding: 8px;
+  border-radius: 4px;
+
+  .result-label {
+    font-weight: bold;
+    color: #67C23A;
+    margin-bottom: 5px;
+  }
+
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 12px;
+  }
+}
+
+.tool-error {
+  background: #fef0f0;
+  padding: 8px;
+  border-radius: 4px;
+
+  .error-label {
+    font-weight: bold;
+    color: #F56C6C;
+    margin-bottom: 5px;
+  }
+
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 12px;
+    color: #F56C6C;
+  }
 }
 
 .charts-container {
   margin-top: 12px;
-}
-
-.chart-item {
-  margin-bottom: 8px;
-}
-
-.chart-item img {
-  max-width: 100%;
-  border-radius: 4px;
-}
-
-.execution-results {
-  margin-top: 12px;
-}
-
-.result-content {
-  padding: 8px 0;
-}
-
-.result-output pre {
-  background: #f5f5f5;
-  padding: 8px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 12px;
-}
-
-.result-figure img {
-  max-width: 100%;
-  border-radius: 4px;
-}
-
-.chat-input {
-  padding: 20px;
-  background: white;
-  border-top: 1px solid #e4e7ed;
 }
 
 .rotating {
@@ -408,5 +443,19 @@ onMounted(() => {
   .chat-input {
     padding: 16px;
   }
+}
+
+.tool-artifact {
+  margin-top: 10px;
+}
+
+.image-artifact {
+  text-align: center;
+}
+
+.image-caption {
+  margin-top: 5px;
+  font-style: italic;
+  color: #666;
 }
 </style>

@@ -46,7 +46,7 @@ def fix_message_content(content: str | list[Any]) -> str:
     """修复消息内容，确保是字符串格式"""
     if isinstance(content, list):
         return "\n".join(str(item) for item in content)
-    return str(content).strip() if content else ""
+    return str(content) if content else ""
 
 
 def process_stream_event(event: Any) -> Generator[StreamEvent]:
@@ -60,7 +60,9 @@ def process_stream_event(event: Any) -> Generator[StreamEvent]:
         case AIMessage():
             yield LlmTokenEvent(content=fix_message_content(message.content), metadata=metadata or {})
             for tool_call in message.tool_calls or []:
-                yield ToolCallEvent(name=tool_call["name"], id=str(tool_call["id"]), args=tool_call["args"])
+                if tool_call["id"] is None:
+                    continue
+                yield ToolCallEvent(name=tool_call["name"], id=tool_call["id"], args=tool_call["args"])
         case ToolMessage() if message.status == "success":
             yield ToolResultEvent(id=message.tool_call_id, result=message.content, artifact=message.artifact)
         case ToolMessage() if message.status == "error":
@@ -87,7 +89,7 @@ class BufferedStreamEventReader:
             return None
 
         content = "".join(event.content for event in self.tokens)
-        if not content.strip():
+        if not content:
             return None
 
         metadata = {k: v for event in self.tokens for k, v in event.metadata.items()}

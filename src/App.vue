@@ -66,7 +66,7 @@ onMounted(async () => {
   }
 
   // 定期检查健康状态
-  setInterval(checkHealth, 30000) // 每30秒检查一次
+  setInterval(checkHealth, 30 * 1000) // 每30秒检查一次
 })
 </script>
 
@@ -99,8 +99,7 @@ onMounted(async () => {
           </el-button>
 
           <!-- 系统状态 -->
-          <el-badge :value="healthStatus.status ? '正常' : '异常'"
-            :type="healthStatus.status ? 'success' : 'danger'">
+          <el-badge :value="healthStatus.status ? '正常' : '异常'" :type="healthStatus.status ? 'success' : 'danger'">
             <el-icon style="color: white; font-size: 20px;">
               <Monitor />
             </el-icon>

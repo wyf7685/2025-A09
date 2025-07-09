@@ -5,6 +5,7 @@ import type {
   Dataset,
   Model,
   Session,
+  ToolCallArtifact,
   UploadResult,
 } from '@/types';
 import { defineStore } from 'pinia';
@@ -94,41 +95,13 @@ export const useAppStore = defineStore('app', () => {
     }
   };
 
-  // 对话分析
-  const sendChatMessage = async (
-    message: string,
-    sessionId: string,
-    datasetId: string | null = null,
-  ): Promise<{ chat_entry: ChatEntry; analysis?: any }> => {
-    loading.value = true;
-    try {
-      const response = await api.post<{
-        chat_entry: ChatEntry;
-        analysis?: any;
-      }>('/chat', {
-        message,
-        session_id: sessionId,
-        dataset_id: datasetId,
-      });
-
-      // 更新聊天历史
-      if (response.data.chat_entry) {
-        chatHistory.value.push(response.data.chat_entry);
-      }
-
-      return response.data;
-    } finally {
-      loading.value = false;
-    }
-  };
-
   // 流式对话分析
   const sendStreamChatMessage = async (
     message: string,
-    sessionId: string,
-    datasetId: string | null = null,
-    onChunk: (chunk: string) => void,
-    onResults: (results: any[]) => void,
+    onMessage: (content: string) => void,
+    onToolCall: (id: string, name: string, args: any) => void,
+    onToolResult: (id: string, result: any, artifact: ToolCallArtifact | null) => void,
+    onToolError: (id: string, error: string) => void,
     onDone: () => void,
     onError: (error: string) => void,
   ): Promise<void> => {
@@ -142,8 +115,8 @@ export const useAppStore = defineStore('app', () => {
         },
         body: JSON.stringify({
           message: message,
-          session_id: sessionId,
-          dataset_id: datasetId,
+          session_id: currentSessionId.value,
+          dataset_id: currentDataset.value!.id,
         }),
       });
 
@@ -180,11 +153,15 @@ export const useAppStore = defineStore('app', () => {
           try {
             const data = JSON.parse(line);
 
-            // 处理不同类型的响应
-            if (data.type === 'chunk') {
-              onChunk(data.content);
-            } else if (data.type === 'results') {
-              onResults(data.results);
+            // 根据后端返回的事件类型处理不同的响应
+            if (data.type === 'message') {
+              onMessage(data.content);
+            } else if (data.type === 'tool_call') {
+              onToolCall(data.id, data.name, data.args);
+            } else if (data.type === 'tool_result') {
+              onToolResult(data.id, data.result, data.artifact || null);
+            } else if (data.type === 'tool_error') {
+              onToolError(data.id, data.error);
             } else if (data.type === 'done') {
               onDone();
             } else if (data.error) {
@@ -303,7 +280,6 @@ export const useAppStore = defineStore('app', () => {
     uploadFile,
     getDremioSources,
     loadDremioData,
-    sendChatMessage,
     sendStreamChatMessage,
     runGeneralAnalysis,
     getModels,

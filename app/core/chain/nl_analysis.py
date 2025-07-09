@@ -46,6 +46,8 @@ PROMPT_GENERATE_CODE = """\
 3. 使用plt.tight_layout()和合适的DPI确保图表清晰
 4. 通过设置图表的字体大小和样式提高可读性
 5. 如果生成图表，将关键统计数据作为字典或DataFrame赋值给'result'变量
+6. 图表中的中文字体设置请使用系统预置字体：'WenQuanYi Micro Hei'、'WenQuanYi Zen Hei'、'AR PL UKai CN'或'AR PL UMing CN'
+7. 不要使用'SimHei'、'SimSun'等Windows专有字体
 
 ## 结果输出要求
 1. DataFrame结果：直接将DataFrame赋值给'result'
@@ -58,6 +60,7 @@ PROMPT_GENERATE_CODE = """\
 2. 禁止在代码中包含任何示例数据
 3. 禁止尝试写入或读取外部文件
 4. 禁止覆盖或重新定义'df'变量
+5. 禁止使用不在Docker环境中的字体，如'SimHei'、'SimSun'、'Microsoft YaHei'等
 
 ## 重要警告
 1. 'df'变量已预先定义，直接使用即可，不需要检查其是否存在
@@ -65,6 +68,7 @@ PROMPT_GENERATE_CODE = """\
 3. 不要添加类似'if "df" not in locals():'或'if df is None:'的检查
 4. 不要使用示例数据替代已经存在的'df'变量
 5. 所有操作都应基于已存在的'df' DataFrame进行，而不是创建新数据
+6. 绘图字体应使用系统提供的字体，如'WenQuanYi Micro Hei'，而不是'SimHei'
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
@@ -126,6 +130,7 @@ PROMPT_FIX_CODE = """\
 2. 类型转换问题：添加适当的类型转换代码，如pd.to_numeric()
 3. 缺失值问题：使用df.fillna()或过滤缺失值
 4. 图表显示问题：确保正确设置字体和图表参数
+5. 字体错误：不要使用'SimHei'等Windows专有字体，应该使用'WenQuanYi Micro Hei'等Docker环境中可用的字体
 
 ## 重要规则
 1. 'df'变量已预先定义，直接使用即可，不要重新定义或检查其是否存在
@@ -135,6 +140,7 @@ PROMPT_FIX_CODE = """\
 5. 确保最终结果存储在'result'变量中
 6. 禁止导入sklearn等机器学习库和其他非标准分析库
 7. 禁止尝试写入或读取外部文件
+8. 绘图字体必须使用Docker环境中可用的字体，如'WenQuanYi Micro Hei'，不要使用'SimHei'、'SimSun'或'Microsoft YaHei'
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
