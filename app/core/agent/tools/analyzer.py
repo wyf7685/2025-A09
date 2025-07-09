@@ -5,7 +5,7 @@ from langchain_core.tools import Tool
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.datasource import DataSource
-from app.core.executor import CodeExecutor, ExecuteResult, format_result
+from app.core.executor import CodeExecutor, format_result
 from app.log import logger
 from app.utils import escape_tag, format_overview
 
@@ -36,7 +36,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(data_source: DataSource, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
+def analyzer_tool(data_source: DataSource, llm: LLM) -> Tool:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -49,12 +49,10 @@ def analyzer_tool(data_source: DataSource, llm: LLM) -> tuple[Tool, list[tuple[s
     """
     analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(data_source))
     overview = format_overview(data_source.get_preview())
-    results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
         result = analyzer.invoke((overview, query))
-        results.append((query, result))
 
         # 处理图片结果
         artifact = {}
@@ -74,4 +72,4 @@ def analyzer_tool(data_source: DataSource, llm: LLM) -> tuple[Tool, list[tuple[s
         func=analyze,
     )
     tool.response_format = "content_and_artifact"
-    return tool, results
+    return tool

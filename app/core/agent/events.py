@@ -28,7 +28,7 @@ class ToolResultEvent(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     id: str
     result: Any
-    artifact: Any | None = None
+    artifact: dict | None = None
 
 
 class ToolErrorEvent(BaseModel):

@@ -1,5 +1,4 @@
 import functools
-import queue
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -15,7 +14,6 @@ from pydantic import BaseModel
 
 from app.core.chain.llm import LLM
 from app.core.datasource import DataSource
-from app.core.executor import deserialize_result, serialize_result
 from app.log import logger
 from app.utils import escape_tag, format_overview
 
@@ -273,7 +271,6 @@ class AgentValues(TypedDict):
 
 class AgentState(BaseModel):
     values: AgentValues
-    results: list[tuple[str, dict]]
     models: dict[str, Path]
 
 
@@ -320,7 +317,7 @@ class DataAnalyzerAgent:
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
         self.data_source = data_source
-        analyzer, results = analyzer_tool(data_source, llm)
+        analyzer = analyzer_tool(data_source, llm)
         df_tools = dataframe_tools(data_source.get_full)
         sk_tools, models, saved_models = scikit_tools(data_source.get_full)
 
@@ -337,11 +334,8 @@ class DataAnalyzerAgent:
                 "configurable": {"thread_id": threading.get_ident()},
             }
         )
-        self.execution_results = results
         self.trained_models = models
         self.saved_models = saved_models
-
-        self.message_queue: queue.Queue[AIMessage] = queue.Queue()
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
@@ -356,7 +350,6 @@ class DataAnalyzerAgent:
 
         values = state.values  # noqa: PD011
         self.agent.update_state(self.config, values)
-        self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
         self.saved_models.update(state.models)
         self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), values["messages"]))
         logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(values['messages'])}</>")
@@ -365,7 +358,6 @@ class DataAnalyzerAgent:
         """将当前 agent 状态保存到指定的状态文件。"""
         state = AgentState(
             values=cast("AgentValues", self.agent.get_state(self.config).values),
-            results=[(query, serialize_result(result)) for query, result in self.execution_results],
             models=self.saved_models,
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
@@ -373,7 +365,6 @@ class DataAnalyzerAgent:
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
-        self.execution_results.clear()  # 保证每次只保存本轮的执行结果
         reader = BufferedStreamEventReader()
 
         for event in self.agent.stream(
@@ -387,7 +378,6 @@ class DataAnalyzerAgent:
 
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
-        self.execution_results.clear()  # 保证每次只保存本轮的执行结果
         reader = BufferedStreamEventReader()
 
         async for event in self.agent.astream(

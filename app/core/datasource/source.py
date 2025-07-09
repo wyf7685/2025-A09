@@ -2,6 +2,8 @@ import abc
 
 import pandas as pd
 
+from app.log import logger
+
 
 class DataSource(abc.ABC):
     _full_data: pd.DataFrame | None = None
@@ -37,6 +39,7 @@ class DataSource(abc.ABC):
         Returns:
             pd.DataFrame: 数据源的预览数据
         """
+        logger.debug(f"读取数据源预览数据: {n_rows = }")
         if self._full_data is not None:
             return self._full_data.head(n_rows)
         return self._load(n_rows)
@@ -48,6 +51,7 @@ class DataSource(abc.ABC):
         Returns:
             pd.DataFrame: 数据源的完整数据
         """
+        logger.debug("获取数据源完整数据")
         if self._full_data is None:
             self._full_data = self._load(None)
         return self._full_data

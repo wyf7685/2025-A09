@@ -39,7 +39,7 @@ log_format = "<g>{time:HH:mm:ss}</g> [<lvl>{level}</lvl>] <c><u>{name}</u></c> |
 logger.remove()
 logger_id_console = logger.add(
     sys.stdout,
-    level=0,
+    level="DEBUG",
     # diagnose=False,
     diagnose=True,  # 生产环境应设置为 False
     enqueue=True,

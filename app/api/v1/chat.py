@@ -2,7 +2,6 @@
 对话式数据分析接口
 """
 
-import base64
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -17,7 +16,6 @@ from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
 from app.core.datasource import PandasDataSource
-from app.core.executor import format_result
 from app.log import logger
 
 router = APIRouter()
@@ -73,14 +71,17 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
         # 流式输出
         async for event in agent.astream(user_message):
-            if event.type != "llm_token":
-                # TODO: 修改前后端接口处理其他事件
-                continue
-
-            if event.content:
-                # 发送当前消息片段
-                full_response += event.content
-                yield json.dumps({"type": "message", "content": event.content}) + "\n"
+            match event.type:
+                case "llm_token":
+                    full_response += event.content
+                    yield json.dumps({"type": "message", "content": event.content}) + "\n"
+                case "tool_call" | "tool_result" | "tool_error":
+                    try:
+                        msg = event.model_dump_json() + "\n"
+                    except Exception:
+                        logger.exception("转换事件为 JSON 失败")
+                    else:
+                        yield msg
 
         # 保存状态
         agent.save_state(STATE_DIR / f"{session_id}.json")
@@ -90,24 +91,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
             "timestamp": start_time,
             "user_message": user_message,
             "ai_response": full_response,
-            "execution_results": [],
         }
-
-        # 添加执行结果（如果有图表）
-        if agent.execution_results:
-            results = [
-                {
-                    "query": query,
-                    "output": format_result(result),
-                    "figure": {"data": base64.b64encode(fig).decode()}
-                    if (fig := result.get("figure")) is not None
-                    else None,
-                }
-                for query, result in agent.execution_results
-            ]
-            chat_entry["execution_results"] = results
-            # 发送执行结果
-            yield json.dumps({"type": "results", "results": results}) + "\n"
 
         sessions[session_id]["chat_history"].append(chat_entry)
 
