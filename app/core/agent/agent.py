@@ -369,11 +369,13 @@ class DataAnalyzerAgent:
         self.execution_results.clear()  # 保证每次只保存本轮的执行结果
 
         def invoke() -> None:
-            self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
-            finished.set()
+            try:
+                self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
+            finally:
+                finished.set()
 
         finished = threading.Event()
-        invoke_thread = threading.Thread(target=invoke)
+        invoke_thread = threading.Thread(target=invoke, daemon=True)
         invoke_thread.start()
 
         while not finished.is_set():
@@ -383,6 +385,10 @@ class DataAnalyzerAgent:
                     yield message
             except queue.Empty:
                 continue
+            except KeyboardInterrupt:
+                logger.warning("中止 agent 执行")
+                invoke_thread.join(timeout=1)
+                raise
 
         invoke_thread.join()
 
