@@ -1,7 +1,7 @@
 import functools
 import queue
 import threading
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -14,10 +14,12 @@ from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel
 
 from app.core.chain.llm import LLM
+from app.core.datasource import DataSource
 from app.core.executor import deserialize_result, serialize_result
 from app.log import logger
-from app.utils import format_overview, run_sync
+from app.utils import format_overview
 
+from .events import BufferedStreamEventReader, StreamEvent
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
 from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 
@@ -305,24 +307,23 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
 class DataAnalyzerAgent:
     def __init__(
         self,
-        df: pd.DataFrame,
+        data_source: DataSource,
         llm: LLM,
         chat_model: BaseChatModel,
         *,
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
-        self.df = df
-        analyzer, results = analyzer_tool(df, llm)
-        df_tools = dataframe_tools(lambda: self.df)
-        sk_tools, models, saved_models = scikit_tools(lambda: self.df)
+        self.data_source = data_source
+        analyzer, results = analyzer_tool(data_source, llm)
+        df_tools = dataframe_tools(data_source.get_full)
+        sk_tools, models, saved_models = scikit_tools(data_source.get_full)
 
         self.agent = create_react_agent(
             model=chat_model,
             tools=[analyzer, *df_tools, *sk_tools],
-            prompt=SYSTEM_PROMPT.format(overview=format_overview(df)),
+            prompt=SYSTEM_PROMPT.format(overview=format_overview(data_source.get_preview())),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
-            post_model_hook=self._post_model_hook,
         )
         self.config = ensure_config(
             {
@@ -351,7 +352,7 @@ class DataAnalyzerAgent:
         self.agent.update_state(self.config, values)
         self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
         self.saved_models.update(state.models)
-        self.df = resume_tool_calls(self.df, values["messages"])
+        self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), values["messages"]))
         logger.info(f"已加载 agent 状态: {len(values['messages'])}")
 
     def save_state(self, state_file: Path) -> None:
@@ -364,44 +365,31 @@ class DataAnalyzerAgent:
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
 
-    def invoke(self, user_input: str) -> Generator[AIMessage]:
-        """使用用户输入调用 agent"""
+    def stream(self, user_input: str) -> Iterator[StreamEvent]:
+        """使用用户输入调用 agent，并以流式方式返回事件"""
         self.execution_results.clear()  # 保证每次只保存本轮的执行结果
+        reader = BufferedStreamEventReader()
 
-        def invoke() -> None:
-            try:
-                self.agent.invoke({"messages": [{"role": "user", "content": user_input}]}, self.config)
-            finally:
-                finished.set()
+        for event in self.agent.stream(
+            {"messages": [{"role": "user", "content": user_input}]},
+            self.config,
+            stream_mode="messages",
+        ):
+            yield from reader.push(event)
+        if evt := reader.flush():
+            yield evt
 
-        finished = threading.Event()
-        invoke_thread = threading.Thread(target=invoke, daemon=True)
-        invoke_thread.start()
+    async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
+        """异步使用用户输入调用 agent，并以流式方式返回事件"""
+        self.execution_results.clear()  # 保证每次只保存本轮的执行结果
+        reader = BufferedStreamEventReader()
 
-        while not finished.is_set():
-            try:
-                message = self.message_queue.get(timeout=1)
-                if isinstance(message, AIMessage):
-                    yield message
-            except queue.Empty:
-                continue
-            except KeyboardInterrupt:
-                logger.warning("中止 agent 执行")
-                invoke_thread.join(timeout=1)
-                raise
-
-        invoke_thread.join()
-
-    async def ainvoke(self, user_input: str) -> AsyncGenerator[AIMessage]:
-        """异步使用用户输入调用 agent"""
-        gen = self.invoke(user_input)
-        step = run_sync(lambda: next(gen, None))
-
-        while message := await step():
-            if isinstance(message, AIMessage):
-                yield message
-
-    def _post_model_hook(self, state: dict) -> dict:
-        messages = state.get("messages", [])
-        self.message_queue.put(messages[-1])
-        return {}
+        async for event in self.agent.astream(
+            {"messages": [{"role": "user", "content": user_input}]},
+            self.config,
+            stream_mode="messages",
+        ):
+            for evt in reader.push(event):
+                yield evt
+        if evt := reader.flush():
+            yield evt

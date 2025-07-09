@@ -1,0 +1,94 @@
+from collections.abc import Generator
+from typing import Any, Literal
+
+from langchain_core.messages import AIMessage, ToolMessage
+from pydantic import BaseModel, Field
+
+
+class LlmTokenEvent(BaseModel):
+    """LLM 生成的单个 token"""
+
+    type: Literal["llm_token"] = "llm_token"
+    content: str
+    metadata: dict = Field(default_factory=dict)
+
+
+class ToolCallEvent(BaseModel):
+    """工具调用事件"""
+
+    type: Literal["tool_call"] = "tool_call"
+    id: str
+    name: str
+    args: dict = Field(default_factory=dict)
+
+
+class ToolResultEvent(BaseModel):
+    """工具调用结果"""
+
+    type: Literal["tool_result"] = "tool_result"
+    id: str
+    result: Any
+
+
+class ToolErrorEvent(BaseModel):
+    """工具调用错误"""
+
+    type: Literal["tool_error"] = "tool_error"
+    id: str
+    error: str
+
+
+type StreamEvent = LlmTokenEvent | ToolCallEvent | ToolResultEvent | ToolErrorEvent
+
+
+def fix_message_content(content: str | list[Any]) -> str:
+    """修复消息内容，确保是字符串格式"""
+    if isinstance(content, list):
+        return "\n".join(str(item) for item in content)
+    return str(content).strip() if content else ""
+
+
+def process_stream_event(event: Any) -> Generator[StreamEvent]:
+    """处理从 stream/astream 方法返回的事件，将其转换为 StreamEvent 对象"""
+    if not isinstance(event, tuple) or len(event) != 2:
+        return
+
+    message, metadata = event
+
+    match message:
+        case AIMessage():
+            yield LlmTokenEvent(content=fix_message_content(message.content), metadata=metadata or {})
+            for tool_call in message.tool_calls or []:
+                yield ToolCallEvent(name=tool_call["name"], id=str(tool_call["id"]), args=tool_call["args"])
+        case ToolMessage() if message.status == "success":
+            yield ToolResultEvent(id=message.tool_call_id, result=message.content)
+        case ToolMessage() if message.status == "error":
+            yield ToolErrorEvent(id=message.tool_call_id, error=str(message.content))
+
+    return None
+
+
+class BufferedStreamEventReader:
+    def __init__(self) -> None:
+        self.tokens: list[LlmTokenEvent] = []
+
+    def push(self, event: Any) -> Generator[StreamEvent]:
+        for evt in process_stream_event(event):
+            if isinstance(evt, LlmTokenEvent):
+                self.tokens.append(evt)
+            else:
+                if msg := self.flush():
+                    yield msg
+                yield evt
+
+    def flush(self) -> LlmTokenEvent | None:
+        if not self.tokens:
+            return None
+
+        content = "".join(event.content for event in self.tokens)
+        if not content.strip():
+            return None
+
+        metadata = {k: v for event in self.tokens for k, v in event.metadata.items()}
+        self.tokens.clear()
+        return LlmTokenEvent(content=content, metadata=metadata)

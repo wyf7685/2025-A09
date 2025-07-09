@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from langchain.prompts import PromptTemplate
 
+from app.core.datasource import PandasDataSource
 from app.core.executor import CodeExecutor, ExecuteResult
 from app.log import logger
 from app.utils import format_overview
@@ -187,7 +188,7 @@ class NL2DataAnalysis(
         if self.executor is None:
             if not isinstance(df, pd.DataFrame):
                 raise ValueError("Data must be a pandas DataFrame")
-            self.executor = CodeExecutor(df)
+            self.executor = CodeExecutor(PandasDataSource(df))
 
         overview = format_overview(df) if isinstance(df, pd.DataFrame) else df
         code = NL2Code(self.llm).invoke((overview, query))

@@ -15,6 +15,7 @@ import pandas as pd
 
 import docker
 import docker.errors
+from app.core.datasource import DataSource
 from app.log import logger
 
 
@@ -104,7 +105,7 @@ class CodeExecutor:
 
     def __init__(
         self,
-        df: pd.DataFrame,
+        data_source: DataSource,
         image: str | None = None,
         memory_limit: str = "512m",
         cpu_shares: int = 2,
@@ -113,6 +114,7 @@ class CodeExecutor:
         初始化代码执行器
 
         Args:
+            data_source: 数据源对象，提供数据访问接口
             image: Docker镜像名称，如果为None则使用环境变量DOCKER_RUNNER_IMAGE
             memory_limit: 内存限制
             cpu_shares: CPU使用限制
@@ -120,6 +122,8 @@ class CodeExecutor:
         image = image or os.getenv("DOCKER_RUNNER_IMAGE")
         if not image:
             raise ValueError("Docker镜像名称未指定，请设置DOCKER_RUNNER_IMAGE环境变量")
+
+        self.data_source = data_source
         self.image = image
         self.memory_limit = memory_limit
         self.cpu_shares = cpu_shares
@@ -127,7 +131,6 @@ class CodeExecutor:
         self.container = None
         self.temp_dir = Path(tempfile.mkdtemp())
 
-        df.to_csv(self.temp_dir / "data.csv", index=False)
         finalize(self, self.stop)
         finalize(self, shutil.rmtree, self.temp_dir)
 
@@ -144,6 +147,8 @@ class CodeExecutor:
         """启动Docker容器"""
         if self.container:
             return
+
+        self.data_source.get_full().to_csv(self.temp_dir / "data.csv", index=False)
 
         try:
             # 创建并启动容器，但不执行任何命令

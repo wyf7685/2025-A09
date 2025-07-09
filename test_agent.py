@@ -1,36 +1,41 @@
 from pathlib import Path
 
-import pandas as pd
 from dotenv import load_dotenv
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm, rate_limiter
+from app.core.datasource.csv import CsvDataSource
 from app.log import logger
+from app.utils import escape_tag
 
 load_dotenv()
 
 
 def test_agent() -> None:
-    # 读取数据
-    df = pd.read_csv(Path("test.csv"), encoding="utf-8")
-
     # 速率限制
     limiter = rate_limiter(14)
     llm = limiter | get_llm()
 
-    agent = DataAnalyzerAgent(df, llm, get_chat_model(), pre_model_hook=limiter)
+    data_source = CsvDataSource(Path("test.csv"))
+    agent = DataAnalyzerAgent(data_source, llm, get_chat_model(), pre_model_hook=limiter)
 
     state_file = Path("state.json")
     agent.load_state(state_file)
 
     while user_input := input(">>> ").strip():
         try:
-            for message in agent.invoke(user_input):
-                content = message.content
-                if isinstance(content, list):
-                    content = "\n".join(str(item) for item in content)
-                if content := content.strip():
-                    logger.info(f"LLM输出:\n{content}")
+            for event in agent.stream(user_input):
+                match event.type:
+                    case "llm_token":
+                        logger.opt(colors=True).info(f"<y>LLM 输出:</>\n{escape_tag(event.content)}")
+                    case "tool_call":
+                        logger.opt(colors=True).info(
+                            f"开始工具调用: <c>{event.id}</>\n{escape_tag(event.name)}({escape_tag(str(event.args))})"
+                        )
+                    case "tool_result":
+                        logger.opt(colors=True).info(f"工具调用结果: <c>{event.id}</>\n{escape_tag(str(event.result))}")
+                    case "tool_error":
+                        logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
         except Exception:
             logger.exception("Agent 执行失败")
             continue

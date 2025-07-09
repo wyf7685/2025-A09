@@ -16,6 +16,7 @@ from app.api.v1.uploads import datasets
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
+from app.core.datasource import PandasDataSource
 from app.core.executor import format_result
 from app.log import logger
 
@@ -59,7 +60,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
         # 获取或创建 Agent
         if session_id not in agents:
-            agents[session_id] = DataAnalyzerAgent(df, get_llm(), get_chat_model())
+            agents[session_id] = DataAnalyzerAgent(PandasDataSource(df), get_llm(), get_chat_model())
             agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
 
         agent = agents[session_id]
@@ -71,13 +72,15 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         full_response = ""
 
         # 流式输出
-        async for message in agent.ainvoke(user_message):
-            if message.content:
-                content = message.content
-                if isinstance(content, list):
-                    content = "\n".join(str(c) for c in content)
-                full_response += content
-                yield json.dumps({"type": "chunk", "content": content}) + "\n"
+        async for event in agent.astream(user_message):
+            if event.type != "llm_token":
+                # TODO: 修改前后端接口处理其他事件
+                continue
+
+            if event.content:
+                # 发送当前消息片段
+                full_response += event.content
+                yield json.dumps({"type": "message", "content": event.content}) + "\n"
 
         # 保存状态
         agent.save_state(STATE_DIR / f"{session_id}.json")

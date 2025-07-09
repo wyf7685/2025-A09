@@ -1,10 +1,10 @@
 import base64
 
-import pandas as pd
 from langchain_core.tools import Tool
 
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
+from app.core.datasource import DataSource
 from app.core.executor import CodeExecutor, ExecuteResult, format_result
 from app.log import logger
 from app.utils import format_overview
@@ -36,7 +36,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
+def analyzer_tool(data_source: DataSource, llm: LLM) -> tuple[Tool, list[tuple[str, ExecuteResult]]]:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -47,8 +47,8 @@ def analyzer_tool(df: pd.DataFrame, llm: LLM) -> tuple[Tool, list[tuple[str, Exe
     Returns:
         Tool: 用于数据分析的LangChain工具。
     """
-    analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(df))
-    overview = format_overview(df)
+    analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(data_source))
+    overview = format_overview(data_source.get_preview())
     results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
