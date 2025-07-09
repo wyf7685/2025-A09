@@ -17,7 +17,7 @@ from app.core.chain.llm import LLM
 from app.core.datasource import DataSource
 from app.core.executor import deserialize_result, serialize_result
 from app.log import logger
-from app.utils import format_overview
+from app.utils import escape_tag, format_overview
 
 from .events import BufferedStreamEventReader, StreamEvent
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
@@ -291,14 +291,20 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
         (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
     ):
         if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
-            logger.info(f"恢复工具调用: {call['name']} - {call['args']}")
+            logger.opt(colors=True).info(
+                f"恢复工具调用: <y>{escape_tag(call['name'])}</> - {escape_tag(str(call['args']))}"
+            )
             try:
                 result = tool(df=df, **call["args"])
             except Exception as err:
-                logger.warning(f"工具调用恢复失败: {call['name']} - {err}")
+                logger.opt(colors=True, exception=True).warning(
+                    f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(str(err))}"
+                )
                 return original
             if not result["success"]:
-                logger.warning(f"工具调用恢复失败: {call['name']} - {result['message']}")
+                logger.opt(colors=True).warning(
+                    f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(result['message'])}"
+                )
                 return original
 
     return df
@@ -353,7 +359,7 @@ class DataAnalyzerAgent:
         self.execution_results[:] = [(query, deserialize_result(result)) for query, result in state.results]
         self.saved_models.update(state.models)
         self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), values["messages"]))
-        logger.info(f"已加载 agent 状态: {len(values['messages'])}")
+        logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(values['messages'])}</>")
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
@@ -363,7 +369,7 @@ class DataAnalyzerAgent:
             models=self.saved_models,
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
-        logger.info(f"已保存 agent 状态: {len(state.values['messages'])}")  # noqa: PD011
+        logger.opt(colors=True).info(f"已保存 agent 状态: <y>{len(state.values['messages'])}</>")  # noqa: PD011
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""

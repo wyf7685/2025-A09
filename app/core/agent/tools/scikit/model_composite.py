@@ -5,6 +5,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 
 from app.log import logger
+from app.utils import escape_tag
 
 from .model import ModelInstanceInfo, TrainModelResult, create_model
 
@@ -143,14 +144,16 @@ def _create_voting_model(
         from sklearn.ensemble import VotingClassifier
 
         composite_model = VotingClassifier(estimators=estimators, voting=voting, weights=weights)
-        logger.info(f"创建投票分类器，投票方式: {voting}，使用{len(estimators)}个基础模型")
+        logger.opt(colors=True).info(
+            f"<g>创建投票分类器</>，投票方式: <y>{escape_tag(str(voting))}</y>，使用<e>{len(estimators)}</e>个基础模型"
+        )
         model_type = "voting_classifier"
     else:
         voting = None
         from sklearn.ensemble import VotingRegressor
 
         composite_model = VotingRegressor(estimators=estimators, weights=weights)
-        logger.info(f"创建投票回归器，使用{len(estimators)}个基础模型")
+        logger.opt(colors=True).info(f"<g>创建投票回归器</>，使用<e>{len(estimators)}</e>个基础模型")
         model_type = "voting_regressor"
 
     # 构建超参数字典
@@ -191,13 +194,21 @@ def _create_stacking_model(
         composite_model = StackingClassifier(
             estimators=estimators, final_estimator=meta_estimator, cv=cv_folds, stack_method="auto"
         )
-        logger.info(f"创建堆叠分类器，使用{len(estimators)}个基础模型，元模型: {meta_model_type}")
+        logger.opt(colors=True).info(
+            f"<g>创建堆叠分类器</>，"
+            f"使用<e>{len(estimators)}</e>个基础模型，"
+            f"元模型: <y>{escape_tag(meta_model_type)}</y>"
+        )
         model_type = "stacking_classifier"
     else:
         from sklearn.ensemble import StackingRegressor
 
         composite_model = StackingRegressor(estimators=estimators, final_estimator=meta_estimator, cv=cv_folds)
-        logger.info(f"创建堆叠回归器，使用{len(estimators)}个基础模型，元模型: {meta_model_type}")
+        logger.opt(colors=True).info(
+            f"<g>创建堆叠回归器</>，"
+            f"使用<e>{len(estimators)}</e>个基础模型，"
+            f"元模型: <y>{escape_tag(meta_model_type)}</y>"
+        )
         model_type = "stacking_regressor"
 
     # 构建超参数字典
@@ -315,11 +326,19 @@ def _create_blending_model(
 
     if is_classification:
         composite_model = BlendingClassifier(base_models, meta_estimator, validation_split)
-        logger.info(f"创建混合分类器，使用{len(base_models)}个基础模型，元模型: {meta_model_type}")
+        logger.opt(colors=True).info(
+            f"<g>创建混合分类器</>，"
+            f"使用<e>{len(base_models)}</e>个基础模型，"
+            f"元模型: <y>{escape_tag(meta_model_type)}</y>"
+        )
         model_type = "blending_classifier"
     else:
         composite_model = BlendingRegressor(base_models, meta_estimator, validation_split)
-        logger.info(f"创建混合回归器，使用{len(base_models)}个基础模型，元模型: {meta_model_type}")
+        logger.opt(colors=True).info(
+            f"<g>创建混合回归器</>，"
+            f"使用<e>{len(base_models)}</e>个基础模型，"
+            f"元模型: <y>{escape_tag(meta_model_type)}</y>"
+        )
         model_type = "blending_regressor"
 
     # 构建超参数字典

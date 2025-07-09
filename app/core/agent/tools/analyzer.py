@@ -7,7 +7,7 @@ from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.datasource import DataSource
 from app.core.executor import CodeExecutor, ExecuteResult, format_result
 from app.log import logger
-from app.utils import format_overview
+from app.utils import escape_tag, format_overview
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -52,7 +52,7 @@ def analyzer_tool(data_source: DataSource, llm: LLM) -> tuple[Tool, list[tuple[s
     results: list[tuple[str, ExecuteResult]] = []
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
-        logger.info(f"分析数据 - 查询内容:\n{query}")
+        logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
         result = analyzer.invoke((overview, query))
         results.append((query, result))
 

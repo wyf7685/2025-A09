@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from app.log import logger
-from app.utils import resolve_dot_notation
+from app.utils import escape_tag, resolve_dot_notation
 
 
 class TrainModelResult(TypedDict):
@@ -95,7 +95,7 @@ def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
         "xgboost_classifier": "XGBoost分类模型",
         "logistic_regression": "逻辑回归分类模型",
     }.get(model_type, f"{model_type}模型")
-    logger.info(f"使用{model_name}进行训练")
+    logger.opt(colors=True).info(f"创建模型: <e>{escape_tag(model_name)}</e>")
 
     return model
 
@@ -145,16 +145,15 @@ def create_model(
     if hyperparams:
         try:
             model.set_params(**hyperparams)
-            logger.info(f"已应用超参数: {hyperparams}")
+            logger.opt(colors=True).info(f"已应用超参数: <y>{escape_tag(str(hyperparams))}</y>")
         except Exception as e:
-            logger.warning(f"应用超参数失败: {e}，将使用默认参数")
+            logger.opt(colors=True).warning(f"应用超参数失败: <r>{escape_tag(str(e))}</r>，将使用默认参数")
 
     return {
         "model": model,
         "model_type": model_type,
         "hyperparams": hyperparams,
     }
-
 
 
 def fit_model(
@@ -196,7 +195,9 @@ def fit_model(
     if Y.dtype == "object" or Y.dtype == "category":
         le = LabelEncoder()
         Y = le.fit_transform(Y)
-        logger.info(f"目标变量 '{target}' 已进行标签编码。原始类别: {le.classes_}")
+        logger.opt(colors=True).info(
+            f"目标变量 '<e>{escape_tag(target)}</e>' 已进行标签编码。原始类别: <c>{escape_tag(str(le.classes_))}</c>"
+        )
 
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=test_size, random_state=random_state)
 
@@ -420,8 +421,8 @@ def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainM
         model = joblib.load(file_path.with_suffix(".joblib"))
         metadata = load_model_metadata(file_path)
         return load_model_metadata(file_path), resume_train_result(df, metadata, model)
-    except Exception as e:
-        logger.error(f"加载模型失败: {e}")
+    except Exception:
+        logger.opt(colors=True).exception("<r>加载模型失败</r>")
         raise
 
 
@@ -440,5 +441,5 @@ def load_model_metadata(file_path: Path) -> ModelMetadata:
         with metadata_path.open("r", encoding="utf-8") as f:
             return cast("ModelMetadata", json.load(f))
     except Exception:
-        logger.exception("加载模型元数据失败")
+        logger.opt(colors=True).exception("<r>加载模型元数据失败</r>")
         raise

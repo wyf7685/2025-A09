@@ -5,6 +5,7 @@ import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
 from app.log import logger
+from app.utils import escape_tag
 
 from .analysis import corr_analys, detect_outliers, lag_analys
 from .columns import (
@@ -36,7 +37,9 @@ def dataframe_tools(
         Returns:
             dict: 包含相关系数和p值的结果字典。
         """
-        logger.info(f"执行相关性分析: {col1} 与 {col2}，方法: {method}")
+        logger.opt(colors=True).info(
+            f"执行<g>相关性分析</>: <y>{escape_tag(col1)}</> 与 <y>{escape_tag(col2)}</>, 方法: {escape_tag(method)}"
+        )
         return corr_analys(df_ref(), col1, col2, method)
 
     @tool
@@ -51,7 +54,9 @@ def dataframe_tools(
         Returns:
             dict: 包含平均时滞、最大时滞、最小时滞、标准差、时滞异常点和时滞分布描述的结果字典。
         """
-        logger.info(f"执行时滞分析: {time_col1} 与 {time_col2}")
+        logger.opt(colors=True).info(
+            f"执行<g>时滞分析</>: <y>{escape_tag(time_col1)}</> 与 <y>{escape_tag(time_col2)}</>"
+        )
         return lag_analys(df_ref(), time_col1, time_col2)
 
     @tool
@@ -68,7 +73,12 @@ def dataframe_tools(
         Returns:
             pd.DataFrame: 包含检测到的异常值的DataFrame。
         """
-        logger.info(f"检测异常值: 列 {column}，方法: {method}，阈值: {threshold}")
+        logger.opt(colors=True).info(
+            f"<g>检测异常值</>: "
+            f"列 <y>{escape_tag(column)}</>, "
+            f"方法: <y>{escape_tag(method)}</>, "
+            f"阈值: <y>{threshold}</>"
+        )
         return detect_outliers(df_ref(), column, method, threshold)
 
     @tool

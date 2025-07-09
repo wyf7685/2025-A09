@@ -14,6 +14,7 @@ from sklearn.feature_selection import (
 )
 
 from app.log import logger
+from app.utils import escape_tag
 
 from .feature_importance import _create_feature_importance_plot
 
@@ -26,7 +27,6 @@ class FeatureSelectionResult(TypedDict):
     n_features_selected: int
     method_used: str
     additional_info: dict[str, Any]
-    # figure: bytes | None  # 图表数据
 
 
 def select_features(
@@ -77,14 +77,15 @@ def select_features(
     if task_type == "auto":
         if y.dtype == "object" or y.dtype == "category" or len(y.unique()) < 10:
             task_type = "classification"
-            logger.info(f"自动检测到分类任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>分类任务</>，目标列: <e>{escape_tag(target)}</e>")
+
         else:
             task_type = "regression"
-            logger.info(f"自动检测到回归任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>回归任务</>，目标列: <e>{escape_tag(target)}</e>")
 
     # 检查数据问题
     if cast("pd.Series", X.isna().any()).any():
-        logger.warning("数据中包含缺失值，这可能影响特征选择结果")
+        logger.opt(colors=True).warning("<y>数据中包含缺失值</>，这可能影响特征选择结果")
 
     # 初始化结果
     result: FeatureSelectionResult = {
@@ -123,7 +124,7 @@ def select_features(
                 raise ValueError(f"不支持的方法 '{method}' 或方法与任务类型 '{task_type}' 不匹配")
 
     except Exception as e:
-        logger.error(f"特征选择过程中发生错误: {e}")
+        logger.opt(colors=True).exception("<r>特征选择过程中发生错误</>")
         result["message"] = f"特征选择失败: {e}"
         return result, None
 
@@ -139,10 +140,10 @@ def select_features(
     if result["feature_importance"]:
         figure = _create_feature_importance_plot(result["feature_importance"])
 
-    logger.info(
-        f"特征选择完成。"
-        f"方法: {method}, 从 {result['n_features_original']} 个特征中"
-        f"选择了 {result['n_features_selected']} 个"
+    logger.opt(colors=True).info(
+        f"<g>特征选择完成</>。"
+        f"方法: <y>{escape_tag(method)}</y>, 从 <c>{result['n_features_original']}</c> 个特征中"
+        f"选择了 <c>{result['n_features_selected']}</c> 个"
     )
     return result, figure
 

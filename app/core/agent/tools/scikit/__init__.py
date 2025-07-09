@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool, tool
 
 from app.const import MODEL_DIR
 from app.log import logger
+from app.utils import escape_tag
 
 from .feature_importance import FeatureImportanceResult, analyze_feature_importance
 from .feature_select import FeatureSelectionResult, select_features
@@ -131,16 +132,17 @@ def scikit_tools(
                 parsed_hyperparams = json.loads(hyperparams)
             except Exception as e:
                 hyperparams_parse_error = f"超参数解析错误: {e}，将使用默认参数"
-                logger.warning(hyperparams_parse_error)
+                logger.opt(colors=True).warning(f"<y>超参数解析错误</y>: {escape_tag(str(e))}，将使用默认参数")
+
         else:
             parsed_hyperparams = hyperparams
 
         if parsed_hyperparams:
             parsed_hyperparams = _fix_hyperparams(parsed_hyperparams)
-            logger.info(f"使用超参数: {parsed_hyperparams}")
+            logger.opt(colors=True).info(f"使用超参数: <y>{escape_tag(str(parsed_hyperparams))}</y>")
 
         try:
-            logger.info(f"创建模型: {model_type}")
+            logger.opt(colors=True).info(f"<g>创建模型</>: <e>{escape_tag(model_type)}</e>")
             model_info = create_model(model_type, random_state, parsed_hyperparams)
             model_id = _cache_model_info(model_info)
 
@@ -153,7 +155,7 @@ def scikit_tools(
 
             return formatted
         except Exception as e:
-            logger.exception(f"创建模型失败: {model_type}")
+            logger.opt(colors=True).exception(f"<r>创建模型失败</>: <e>{escape_tag(model_type)}</e>")
             return f"创建模型失败: {e}"
 
     @tool
@@ -187,13 +189,17 @@ def scikit_tools(
         hyperparams = model_info["hyperparams"]
 
         try:
-            logger.info(f"训练模型: {model_type}，特征: {features}，目标: {target}")
+            logger.opt(colors=True).info(
+                f"<g>训练模型</>: <e>{escape_tag(model_type)}</e>，"
+                f"特征: <c>{escape_tag(str(features))}</c>，"
+                f"目标: <e>{escape_tag(target)}</e>"
+            )
             result = fit_model(df_ref(), features, target, model, model_type, test_size, random_state, hyperparams)
 
             train_model_cache[model_id] = result
             return _format_train_result_for_llm(model_id, result)
         except Exception as e:
-            logger.exception(f"训练模型失败: {model_type}")
+            logger.opt(colors=True).exception(f"<r>训练模型失败</>: <e>{escape_tag(model_type)}</e>")
             return f"训练模型失败: {e}"
 
     @tool
@@ -266,7 +272,9 @@ def scikit_tools(
             raise ValueError(f"不支持的复合模型类型: {composite_type}")
 
         # 创建复合模型
-        logger.info(f"创建复合模型: 类型={composite_type}, 基础模型数量={len(model_ids)}")
+        logger.opt(colors=True).info(
+            f"<g>创建复合模型</>: 类型=<e>{escape_tag(composite_type)}</e>, 基础模型数量=<c>{len(model_ids)}</c>"
+        )
         model_info = create_composite_model(models, composite_type, options)
 
         # 生成唯一ID并缓存结果
@@ -298,7 +306,7 @@ def scikit_tools(
         if trained_model_id not in train_model_cache:
             raise ValueError(f"未找到训练结果 ID '{trained_model_id}'。请先调用 fit_model_tool 进行训练。")
 
-        logger.info(f"评估模型: 训练结果 ID = {trained_model_id}")
+        logger.opt(colors=True).info(f"<g>评估模型</>, ID = <c>{escape_tag(trained_model_id)}</y>")
         return evaluate_model(train_model_cache[trained_model_id])
 
     @tool
@@ -315,14 +323,14 @@ def scikit_tools(
         if model_id not in train_model_cache:
             raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
-        logger.info(f"保存模型: 训练结果 ID = {model_id}")
+        logger.opt(colors=True).info(f"<g>保存模型</>: 训练结果 ID = <c>{escape_tag(model_id)}</y>")
         file_path = MODEL_DIR / model_id / "model"
         with contextlib.suppress(Exception):
             file_path = file_path.relative_to(Path.cwd())
         file_path.parent.mkdir(parents=True, exist_ok=True)
         result = save_model(train_model_cache[model_id], file_path)
         saved_models[model_id] = file_path
-        logger.info(f"模型已保存到: {file_path.with_suffix('.joblib')}")
+        logger.opt(colors=True).info(f"<g>模型已保存到</>: <c>{escape_tag(str(file_path.with_suffix('.joblib')))}</c>")
         return result
 
     @tool
@@ -350,7 +358,7 @@ def scikit_tools(
             raise ValueError(f"未找到保存的模型 ID '{model_id}'")
 
         file_path = saved_models[model_id]
-        logger.info(f"加载模型: {file_path}")
+        logger.opt(colors=True).info(f"<g>加载模型</>: <c>{escape_tag(str(file_path))}</c>")
         metadata, train_result = load_model(df_ref(), file_path)
         train_model_cache[model_id] = train_result
         return metadata
@@ -363,7 +371,7 @@ def scikit_tools(
         Returns:
             list[ModelMetadata]: 包含所有已保存模型的元信息字典的列表。
         """
-        logger.info("列出所有已保存的模型")
+        logger.opt(colors=True).info("<g>列出所有已保存的模型</>")
         return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
 
     @tool
@@ -396,7 +404,9 @@ def scikit_tools(
         Returns:
             dict: 包含选择结果的字典，包括选择的特征列表、特征重要性和相关统计信息
         """
-        logger.info(f"开始特征选择，方法: {method}, 候选特征数: {len(features)}")
+        logger.opt(colors=True).info(
+            f"<g>开始特征选择</>，方法: <y>{escape_tag(method)}</y>, 候选特征数: <c>{len(features)}</c>"
+        )
         result, figure = select_features(df_ref(), features, target, method, task_type, n_features, threshold)
         artifact = {}
         if figure is not None:
@@ -429,7 +439,9 @@ def scikit_tools(
         Returns:
             dict: 包含特征重要性分析结果的字典
         """
-        logger.info(f"开始分析特征重要性，方法: {method}, 特征数: {len(features)}")
+        logger.opt(colors=True).info(
+            f"<g>开始分析特征重要性</>，方法: <y>{escape_tag(method)}</y>, 特征数: <c>{len(features)}</c>"
+        )
         result, figure = analyze_feature_importance(df_ref(), features, target, method, task_type)
         artifact = {}
         if figure is not None:
@@ -473,7 +485,9 @@ def scikit_tools(
         Returns:
             优化结果，包含最佳参数、得分等
         """
-        logger.info(f"开始超参数优化，模型: {model_type}, 方法: {method}")
+        logger.opt(colors=True).info(
+            f"<g>开始超参数优化</>，模型: <e>{escape_tag(model_type)}</e>, 方法: <y>{escape_tag(method)}</y>"
+        )
         result, figure = optimize_hyperparameters(
             df_ref(), features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
         )
@@ -512,7 +526,7 @@ def scikit_tools(
         Returns:
             学习曲线结果及可视化图表
         """
-        logger.info(f"开始生成学习曲线，模型: {model_type}")
+        logger.opt(colors=True).info(f"<g>开始生成学习曲线</>，模型: <e>{escape_tag(model_type)}</e>")
         result, figure = plot_learning_curve(
             df_ref(), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
         )

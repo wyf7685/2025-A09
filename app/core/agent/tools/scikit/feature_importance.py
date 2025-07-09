@@ -7,6 +7,7 @@ import pandas as pd
 from matplotlib.font_manager import FontProperties
 
 from app.log import logger
+from app.utils import escape_tag
 
 
 def _create_feature_importance_plot(feature_importance: dict[str, float]) -> bytes:
@@ -112,7 +113,9 @@ def analyze_feature_importance(
         else:
             task_type = "regression"
 
-    logger.info(f"开始特征重要性分析，方法: {method}, 任务类型: {task_type}")
+    logger.opt(colors=True).info(
+        f"<g>开始特征重要性分析</>，方法: <y>{escape_tag(method)}</>，任务类型: <e>{escape_tag(task_type)}</>"
+    )
 
     # 初始化结果
     result: FeatureImportanceResult = {"feature_importance": {}, "message": ""}
@@ -121,7 +124,7 @@ def analyze_feature_importance(
     try:
         result, figure = fns[method](task_type, X, y, features, result)
     except Exception as e:
-        logger.exception("特征重要性分析失败")
+        logger.opt(colors=True).exception("<r>特征重要性分析失败</>")
         result["message"] = f"特征重要性分析失败: {e}"
 
     return result, figure

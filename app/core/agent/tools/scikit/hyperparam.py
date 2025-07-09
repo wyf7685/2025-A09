@@ -11,7 +11,7 @@ from sklearn.metrics import make_scorer, mean_squared_error
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
 
 from app.log import logger
-from app.utils import resolve_dot_notation
+from app.utils import escape_tag, resolve_dot_notation
 
 
 class HyperparamOptResult(TypedDict):
@@ -85,14 +85,14 @@ def optimize_hyperparameters(
     if task_type == "auto":
         if y.dtype == "object" or y.dtype == "category" or len(y.unique()) < 10:
             task_type = "classification"
-            logger.info(f"自动检测到分类任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>分类任务</>，目标列: <e>{escape_tag(target)}</e>")
         else:
             task_type = "regression"
-            logger.info(f"自动检测到回归任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>回归任务</>，目标列: <e>{escape_tag(target)}</e>")
 
     # 检查数据问题
     if X.isna().any().any():  # type:ignore
-        logger.warning("数据中包含缺失值，这可能影响超参数优化结果")
+        logger.opt(colors=True).warning("<y>数据中包含缺失值</>，这可能影响超参数优化结果")
 
     # 选择评分指标
     if scoring is None:
@@ -144,7 +144,10 @@ def optimize_hyperparameters(
         raise ValueError(f"不支持的优化方法: {method}")
 
     # 执行搜索
-    logger.info(f"开始{method}搜索优化 {model_type} 模型超参数...")
+    logger.opt(colors=True).info(
+        f"开始<g>{escape_tag(method)}搜索优化</> <e>{escape_tag(model_type)}</e> 模型超参数..."
+    )
+
     search.fit(X, y)
 
     # 计算参数重要性
@@ -192,10 +195,10 @@ def optimize_hyperparameters(
     if cv_scores:
         result["additional_info"]["cv_fold_scores"] = cv_scores
 
-    logger.info(
-        f"超参数优化完成。方法: {method}, "
-        f"最佳得分 ({scoring_name}): {search.best_score_:.4f}, "
-        f"最佳参数: {search.best_params_}"
+    logger.opt(colors=True).info(
+        f"<g>超参数优化完成</>。方法: <y>{escape_tag(method)}</y>, "
+        f"最佳得分 (<c>{escape_tag(scoring_name)}</c>): <e>{search.best_score_:.4f}</e>, "
+        f"最佳参数: <y>{escape_tag(str(search.best_params_))}</y>"
     )
     return result, figure
 
@@ -554,10 +557,10 @@ def plot_learning_curve(
     if task_type == "auto":
         if y.dtype == "object" or y.dtype == "category" or len(y.unique()) < 10:
             task_type = "classification"
-            logger.info(f"自动检测到分类任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>分类任务</>，目标列: <e>{escape_tag(target)}</e>")
         else:
             task_type = "regression"
-            logger.info(f"自动检测到回归任务，目标列: {target}")
+            logger.opt(colors=True).info(f"自动检测到<y>回归任务</>，目标列: <e>{escape_tag(target)}</e>")
 
     # 选择评分指标
     if scoring is None:
@@ -575,7 +578,7 @@ def plot_learning_curve(
         train_sizes = [0.1, 0.3, 0.5, 0.7, 0.9]
 
     # 生成学习曲线
-    logger.info(f"开始生成 {model_type} 模型的学习曲线...")
+    logger.opt(colors=True).info(f"<g>开始生成</> <e>{escape_tag(model_type)}</e> <g>模型的学习曲线...</>")
     train_sizes_abs, train_scores, test_scores = learning_curve(  # type:ignore
         model,
         X,
@@ -649,5 +652,5 @@ def plot_learning_curve(
     plt.close()
     buffer.seek(0)
 
-    logger.info("学习曲线生成完成")
+    logger.opt(colors=True).info("<g>学习曲线生成完成</>")
     return result, buffer.getvalue()

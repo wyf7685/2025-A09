@@ -28,6 +28,7 @@ class ToolResultEvent(BaseModel):
     type: Literal["tool_result"] = "tool_result"
     id: str
     result: Any
+    artifact: Any | None = None
 
 
 class ToolErrorEvent(BaseModel):
@@ -61,7 +62,7 @@ def process_stream_event(event: Any) -> Generator[StreamEvent]:
             for tool_call in message.tool_calls or []:
                 yield ToolCallEvent(name=tool_call["name"], id=str(tool_call["id"]), args=tool_call["args"])
         case ToolMessage() if message.status == "success":
-            yield ToolResultEvent(id=message.tool_call_id, result=message.content)
+            yield ToolResultEvent(id=message.tool_call_id, result=message.content, artifact=message.artifact)
         case ToolMessage() if message.status == "error":
             yield ToolErrorEvent(id=message.tool_call_id, error=str(message.content))
 

@@ -3,6 +3,7 @@ from typing import Any, TypedDict, cast
 import pandas as pd
 
 from app.log import logger
+from app.utils import escape_tag
 
 
 class InspectDataframeOptions(TypedDict, total=False):
@@ -50,7 +51,7 @@ def inspect_dataframe(
     Returns:
         dict: 包含数据框详细信息的结果
     """
-    logger.info(f"检查数据当前状态: {options}")
+    logger.opt(colors=True).info(f"<g>检查数据当前状态</>: <y>{escape_tag(str(options))}</>")
 
     options = options or {}
     n_rows_preview = options.get("n_rows_preview", 5)

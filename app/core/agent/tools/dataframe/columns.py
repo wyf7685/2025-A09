@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from app.log import logger
+from app.utils import escape_tag
 
 
 class OperationFailed(TypedDict):
@@ -43,7 +44,11 @@ def create_column(
     Returns:
         dict: 包含操作结果的字典，包括新列的基本统计信息和样本值。
     """
-    logger.info(f"创建新列: {column_name}，基于表达式: {expression}，使用列: {columns_used or '未指定'}")
+    logger.opt(colors=True).info(
+        f"创建新列: <e>{escape_tag(column_name)}</>, "
+        f"基于表达式: <y>{escape_tag(expression)}</>, "
+        f"使用列: <c>{escape_tag(str(columns_used or '未指定'))}</>"
+    )
 
     try:
         # 安全性检查：验证所有提到的列都存在
@@ -87,7 +92,7 @@ def create_column(
         return result
 
     except Exception as e:
-        logger.exception(f"创建列 '{column_name}' 时出错")
+        logger.opt(colors=True).exception(f"创建列 '<e>{escape_tag(column_name)}</>' 时出错")
         return {"success": False, "message": f"错误: {e}"}
 
 
@@ -123,7 +128,11 @@ def create_interaction_term(
     Returns:
         dict: 包含操作结果的字典。
     """
-    logger.info(f"创建交互项: {column_name}，基于列: {columns_to_interact}，交互方式: {interaction_type}")
+    logger.opt(colors=True).info(
+        f"创建交互项: <e>{escape_tag(column_name)}</>, "
+        f"基于列: <c>{escape_tag(str(columns_to_interact))}</>, "
+        f"交互方式: <y>{escape_tag(interaction_type)}</>"
+    )
 
     try:
         if len(columns_to_interact) < 2:
@@ -211,7 +220,7 @@ def create_interaction_term(
         }
 
     except Exception as e:
-        logger.exception(f"创建交互项 '{column_name}' 时出错")
+        logger.opt(colors=True).exception(f"创建交互项 '<b>{escape_tag(column_name)}</>' 时出错")
         return {"success": False, "message": f"错误: {e}"}
 
 
@@ -250,8 +259,10 @@ def create_aggregated_feature(
     Returns:
         dict: 包含操作结果的字典。
     """
-    logger.info(
-        f"创建聚合特征: {column_name}，基于分组: {group_by_column}，目标列: {target_column}，聚合方式: {aggregation}"
+    logger.opt(colors=True).info(
+        f"创建聚合特征: <b>{escape_tag(column_name)}</b>, "
+        f"基于分组: <c>{escape_tag(group_by_column)}</c>, "
+        f"目标列: <c>{escape_tag(target_column)}</c>，聚合方式: <y>{escape_tag(aggregation)}</y>"
     )
 
     try:
@@ -317,5 +328,5 @@ def create_aggregated_feature(
         return result
 
     except Exception as e:
-        logger.exception(f"创建聚合特征 '{column_name}' 时出错")
+        logger.opt(colors=True).exception(f"创建聚合特征 '<e>{escape_tag(column_name)}</>' 时出错")
         return {"success": False, "message": f"错误: {e}"}
