@@ -56,7 +56,7 @@ async def get_sessions() -> list[dict[str, Any]]:
             session_list.append(
                 {
                     "id": session_id,
-                    "name": f"会话 {session_id[:8]}",
+                    "name": session_data.get("name") or f"会话 {session_id[:8]}",
                     "created_at": session_data["created_at"],
                     "dataset_loaded": session_data["current_dataset"] is not None,
                     "chat_count": len(session_data["chat_history"]),

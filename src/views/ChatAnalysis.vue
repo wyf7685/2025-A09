@@ -36,6 +36,7 @@ const sendMessage = async (): Promise<void> => {
   }
 
   const userMessage = inputMessage.value.trim()
+  const isFirstMessage = messages.value.length === 0 // 检查是否为第一条消息
 
   // 添加用户消息
   messages.value.push({
@@ -108,6 +109,12 @@ const sendMessage = async (): Promise<void> => {
         // 完成处理
         console.log('对话完成')
         assistantMessage.loading = false
+        
+        // 如果是第一条消息，触发父组件重新加载会话列表（以获取更新的会话名称）
+        if (isFirstMessage) {
+          // 发送自定义事件通知父组件重新加载会话
+          window.dispatchEvent(new CustomEvent('session-name-updated'))
+        }
       },
       (error) => {
         // 错误处理

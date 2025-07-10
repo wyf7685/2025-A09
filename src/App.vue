@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import type { Session } from '@/types'
@@ -67,6 +67,13 @@ onMounted(async () => {
 
   // 定期检查健康状态
   setInterval(checkHealth, 30 * 1000) // 每30秒检查一次
+
+  // 监听会话名称更新事件
+  window.addEventListener('session-name-updated', loadSessions)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('session-name-updated', loadSessions)
 })
 </script>
 
@@ -87,7 +94,7 @@ onMounted(async () => {
         <div style="display: flex; align-items: center; gap: 16px;">
           <!-- 会话选择器 -->
           <el-select v-model="currentSessionId" placeholder="选择会话" style="width: 200px;" @change="switchSession">
-            <el-option v-for="session in sessions" :key="session.id" :label="`会话 ${session.id.slice(0, 8)}...`"
+            <el-option v-for="session in sessions" :key="session.id" :label="(session.name && session.name.length > 11 ? session.name.slice(0, 11) + '...' : session.name) || `会话 ${session.id.slice(0, 8)}...`"
               :value="session.id" />
           </el-select>
 

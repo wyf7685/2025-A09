@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
-import type { Dataset, ChatEntry, AnalysisResult } from '@/types';
+import type { Dataset, ChatEntry, AnalysisResult, Session } from '@/types';
 
 const appStore = useAppStore()
 
@@ -11,11 +11,14 @@ const datasets = ref<Dataset[]>([])
 const chatHistory = ref<ChatEntry[]>([])
 const analysisResults = ref<AnalysisResult[]>([])
 const recentActivity = ref<ChatEntry[]>([])
+const sessions = ref<Session[]>([])
 
 // 计算属性
-const sessionInfo = computed<string>(() => {
-  const sessionId = appStore.currentSessionId
-  return sessionId ? `${sessionId.slice(0, 8)}...` : '无'
+const currentSessionId = computed(() => appStore.currentSessionId)
+const currentSessionName = computed(() => {
+  const session = sessions.value.find(s => s.id === currentSessionId.value)
+  const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无')
+  return name.length > 11 ? name.slice(0, 11) + '...' : name
 })
 
 // 方法
@@ -40,6 +43,9 @@ const loadData = async (): Promise<void> => {
         currentDataset.value = datasets.value.find(d => d.id === session.current_dataset) || null
       }
     }
+    // 新增：加载所有会话
+    const sessionsResponse = await appStore.getSessions()
+    sessions.value = sessionsResponse || []
   } catch (error) {
     console.error('加载数据失败:', error)
   }
@@ -67,7 +73,7 @@ onMounted(() => {
       <el-row :gutter="24" class="stats-row">
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="当前会话" :value="sessionInfo" />
+            <el-statistic title="当前会话" :value="currentSessionName" />
           </div>
         </el-col>
         <el-col :span="6">

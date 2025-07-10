@@ -319,7 +319,12 @@ class DataAnalyzerAgent:
         self.data_source = data_source
         analyzer = analyzer_tool(data_source, llm)
         df_tools = dataframe_tools(data_source.get_full)
-        sk_tools, models, saved_models = scikit_tools(data_source.get_full)
+        
+        # 创建agent引用函数
+        def get_agent():
+            return self
+        
+        sk_tools, models, saved_models = scikit_tools(data_source.get_full, get_agent)
 
         self.agent = create_react_agent(
             model=chat_model,
@@ -336,6 +341,35 @@ class DataAnalyzerAgent:
         )
         self.trained_models = models
         self.saved_models = saved_models
+        self._first_user_message = None  # 存储用户第一次提问的内容
+
+    def get_first_user_message(self) -> str | None:
+        """获取用户第一次提问的内容"""
+        if self._first_user_message is not None:
+            return self._first_user_message
+        
+        # 从agent状态中获取消息历史
+        try:
+            state = self.agent.get_state(self.config)
+            messages = state.values.get("messages", [])
+            
+            # 查找第一条用户消息
+            for message in messages:
+                if hasattr(message, 'type') and message.type == 'human':
+                    self._first_user_message = message.content
+                    return self._first_user_message
+                elif hasattr(message, 'role') and message.role == 'user':
+                    self._first_user_message = message.content
+                    return self._first_user_message
+        except Exception:
+            pass
+        
+        return None
+
+    def set_first_user_message(self, message: str) -> None:
+        """设置用户第一次提问的内容"""
+        if self._first_user_message is None:
+            self._first_user_message = message
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
@@ -365,6 +399,9 @@ class DataAnalyzerAgent:
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
+        # 如果是第一次调用，设置用户消息
+        self.set_first_user_message(user_input)
+        
         reader = BufferedStreamEventReader()
 
         for event in self.agent.stream(
@@ -378,6 +415,9 @@ class DataAnalyzerAgent:
 
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
+        # 如果是第一次调用，设置用户消息
+        self.set_first_user_message(user_input)
+        
         reader = BufferedStreamEventReader()
 
         async for event in self.agent.astream(

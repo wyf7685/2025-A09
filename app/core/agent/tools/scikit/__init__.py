@@ -79,6 +79,7 @@ type ModelID = str
 
 def scikit_tools(
     df_ref: Callable[[], pd.DataFrame],
+    agent_ref: Callable[[], Any] | None = None,
 ) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
     train_model_cache: dict[ModelID, TrainModelResult] = {}
@@ -324,7 +325,28 @@ def scikit_tools(
             raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
         logger.opt(colors=True).info(f"<g>保存模型</>: 训练结果 ID = <c>{escape_tag(model_id)}</y>")
-        file_path = MODEL_DIR / model_id / "model"
+        
+        # 尝试获取用户第一次提问的内容作为模型名称
+        model_name = None
+        if agent_ref:
+            try:
+                agent = agent_ref()
+                first_message = agent.get_first_user_message()
+                if first_message:
+                    # 清理消息内容，移除特殊字符，限制长度
+                    import re
+                    model_name = re.sub(r'[^\w\s\u4e00-\u9fff]', '', first_message)
+                    model_name = model_name.strip()[:50]  # 限制长度为50个字符
+                    if not model_name:
+                        model_name = None
+            except Exception:
+                pass
+        
+        # 如果没有获取到有效的模型名称，使用默认的model_id
+        if not model_name:
+            model_name = model_id
+        
+        file_path = MODEL_DIR / model_name / "model"
         with contextlib.suppress(Exception):
             file_path = file_path.relative_to(Path.cwd())
         file_path.parent.mkdir(parents=True, exist_ok=True)
