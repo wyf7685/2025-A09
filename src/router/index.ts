@@ -12,16 +12,9 @@ const routes = [
     meta: { title: '工作台' }
   },
   {
-    path: '/data-upload',
-    name: 'DataUpload',
-    component: () => import('../views/DataUpload.vue'),
-    meta: { title: '数据上传' }
-  },
-  {
-    path: '/data-sources',
-    name: 'DataSources',
-    component: () => import('../views/DataSources.vue'),
-    meta: { title: '数据源' }
+    path: '/data-management',
+    name: 'DataManagement',
+    component: () => import('../views/DataManagement.vue')
   },
   {
     path: '/chat-analysis',

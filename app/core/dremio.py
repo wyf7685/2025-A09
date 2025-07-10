@@ -456,19 +456,17 @@ class DremioClient:
         password: str,
         table: str | None = None,
     ) -> TemporaryDataSource:
-        source_name = self.add_data_source_postgres(host, port, database, user, password)
-        tables = self.query_source_tables(source_name)
-        if not tables:
-            raise ValueError(f"数据源 {source_name} 中没有可用的表")
+        source_id = self.add_data_source_postgres(host, port, database, user, password)
+        if table:
+            return TemporaryDataSource(self, "database", [source_id, table])
+        return TemporaryDataSource(self, "database", [source_id])
 
-        if table is None:
-            source_name = tables[0]
-        else:
-            for table_path in tables:
-                if table_path[-1] == table:
-                    source_name = table_path
-                    break
-            else:
-                raise ValueError(f"数据源 {source_name} 中没有找到表 {table}")
+    def init(self) -> None:
+        if not self.external_dir.exists():
+            self.external_dir.mkdir(parents=True)
 
-        return TemporaryDataSource(self, "database", source_name)
+    def close(self) -> None:
+        pass
+
+
+dremio_client = DremioClient()

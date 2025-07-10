@@ -19,6 +19,7 @@ export const useAppStore = defineStore('app', () => {
   const loading = ref<boolean>(false);
   const chatHistory = ref<ChatEntry[]>([]);
   const analysisResults = ref<AnalysisResult[]>([]);
+  const sessions = ref<Session[]>([]); // Add sessions state
 
   // 设置当前会话
   const setCurrentSession = (sessionId: string): void => {
@@ -44,12 +45,25 @@ export const useAppStore = defineStore('app', () => {
 
   const getSessions = async (): Promise<Session[]> => {
     const response = await api.get('/sessions');
+    sessions.value = response.data; // Store sessions in the state
     return response.data;
   };
 
   const getSession = async (sessionId: string): Promise<Session> => {
     const response = await api.get(`/sessions/${sessionId}`);
     return response.data;
+  };
+
+  const createNewSessionAndSetCurrent = async (): Promise<void> => {
+    try {
+      const newSessionData = await createSession();
+      await getSessions(); // Refresh the list of sessions
+      setCurrentSession(newSessionData.session_id); // Set the new session as current
+    } catch (error) {
+      console.error("Failed to create and set new session:", error);
+      // Optionally re-throw or handle the error for the UI
+      throw error;
+    }
   };
 
   // 文件上传
@@ -266,6 +280,7 @@ export const useAppStore = defineStore('app', () => {
     loading,
     chatHistory,
     analysisResults,
+    sessions, // Expose sessions state
 
     // 计算属性
     currentSession,
@@ -277,6 +292,7 @@ export const useAppStore = defineStore('app', () => {
     createSession,
     getSessions,
     getSession,
+    createNewSessionAndSetCurrent, // Expose the new action
     uploadFile,
     getDremioSources,
     loadDremioData,

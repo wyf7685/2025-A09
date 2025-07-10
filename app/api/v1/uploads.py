@@ -9,6 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.const import UPLOAD_DIR
+from app.core.dremio import dremio_client
 from app.log import logger
 
 router = APIRouter()
@@ -52,17 +53,25 @@ async def upload_file(file: UploadFile = File(), session_id: str | None = Form(N
         # 读取数据
         try:
             if filepath.suffix.lower() == ".csv":
-                df = pd.read_csv(filepath)
+                # 直接使用Dremio客户端来添加数据源
+                source_name_parts = dremio_client.add_data_source_csv(filepath)
+                dataset_id = ".".join(source_name_parts)
+                df = dremio_client.read_source(source_name_parts)
+
             elif filepath.suffix.lower() in [".xlsx", ".xls"]:
+                # 对于Excel，我们仍然需要先转换为CSV
                 df = pd.read_excel(filepath)
+                csv_path = filepath.with_suffix(".csv")
+                df.to_csv(csv_path, index=False)
+                
+                source_name_parts = dremio_client.add_data_source_csv(csv_path)
+                dataset_id = ".".join(source_name_parts)
             else:
                 raise HTTPException(status_code=400, detail="Unsupported file format")
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to read file: {e}") from e
+            raise HTTPException(status_code=400, detail=f"Failed to read or process file for Dremio: {e}") from e
 
-        # 存储数据集
-        dataset_id = f"{session_id}_dataset"
-        datasets[dataset_id] = df
+        # 更新会话中的当前数据集
         sessions[session_id]["current_dataset"] = dataset_id
 
         # 数据概览

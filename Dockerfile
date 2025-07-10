@@ -1,4 +1,5 @@
-FROM python:3.12-slim-bookworm
+# 使用官方 Python 镜像作为基础
+FROM python:3.11-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -9,21 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
 
-# 安装uv
+# 安装 uv
 RUN pip install uv
 
 # 复制依赖文件
-COPY pyproject.toml .
+COPY pyproject.toml uv.lock ./
 
-# 使用uv安装依赖
-# RUN uv pip install --system -r requirements.txt
+# 使用 uv 来同步依赖
 RUN uv pip sync pyproject.toml
 
-# 复制应用代码
-COPY ./app /app/app
+# 复制所有项目文件到工作目录
+COPY ./app ./app
 
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 运行应用的命令
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 

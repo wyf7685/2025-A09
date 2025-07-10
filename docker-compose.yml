@@ -1,4 +1,20 @@
 services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./external:/app/external
+      - ./uploads:/app/uploads
+    environment:
+      - DREMIO_BASE_URL=http://dremio:9047
+      - DREMIO_USERNAME=dremio
+      - DREMIO_PASSWORD=dremio123
+      - DREMIO_EXTERNAL_DIR=/app/external
+    depends_on:
+      - dremio
+
   dremio:
     image: dremio/dremio-oss:latest
     ports:

@@ -9,7 +9,7 @@ from app.api.v1.models import router as models_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.uploads import router as uploads_router
 
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 # 注册各个路由
 router.include_router(health_router)

@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Python
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Node.js
+node_modules/
+.pnpm-lock.yaml
+frontend/
+dist/
+build/
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Other
+/uploads
+/external
+/matplotlib_cache
+/states
+.env 

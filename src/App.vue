@@ -1,46 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import type { Session } from '@/types'
 
-
-const router = useRouter()
 const appStore = useAppStore()
 
 // 响应式数据
 const sidebarCollapsed = ref(false)
-const currentSessionId = ref('')
-const sessions = ref<Session[]>([])
 const healthStatus = ref({ status: '' })
 
 // 方法
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
-}
-
-const createNewSession = async () => {
-  try {
-    const session = await appStore.createSession()
-    currentSessionId.value = session.session_id
-    await loadSessions()
-    router.push('/dashboard')
-  } catch (error) {
-    console.error('创建会话失败:', error)
-  }
-}
-
-const switchSession = (sessionId: string) => {
-  appStore.setCurrentSession(sessionId)
-}
-
-const loadSessions = async () => {
-  try {
-    const response = await appStore.getSessions()
-    sessions.value = response || []
-  } catch (error) {
-    console.error('加载会话失败:', error)
-  }
 }
 
 const checkHealth = async () => {
@@ -55,16 +25,6 @@ const checkHealth = async () => {
 // 生命周期
 onMounted(async () => {
   await checkHealth()
-  await loadSessions()
-
-  // 如果没有当前会话，创建一个新会话
-  if (sessions.value.length === 0) {
-    await createNewSession()
-  } else {
-    currentSessionId.value = sessions.value[0].id
-    appStore.setCurrentSession(currentSessionId.value)
-  }
-
   // 定期检查健康状态
   setInterval(checkHealth, 30 * 1000) // 每30秒检查一次
 })
@@ -85,19 +45,6 @@ onMounted(async () => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 16px;">
-          <!-- 会话选择器 -->
-          <el-select v-model="currentSessionId" placeholder="选择会话" style="width: 200px;" @change="switchSession">
-            <el-option v-for="session in sessions" :key="session.id" :label="`会话 ${session.id.slice(0, 8)}...`"
-              :value="session.id" />
-          </el-select>
-
-          <el-button @click="createNewSession" type="primary" size="small">
-            <el-icon>
-              <Plus />
-            </el-icon>
-            新建会话
-          </el-button>
-
           <!-- 系统状态 -->
           <el-badge :value="healthStatus.status ? '正常' : '异常'" :type="healthStatus.status ? 'success' : 'danger'">
             <el-icon style="color: white; font-size: 20px;">
@@ -122,18 +69,11 @@ onMounted(async () => {
             <span>工作台</span>
           </el-menu-item>
 
-          <el-menu-item index="/data-upload">
+          <el-menu-item index="/data-management">
             <el-icon>
-              <Upload />
+              <Collection />
             </el-icon>
-            <span>数据上传</span>
-          </el-menu-item>
-
-          <el-menu-item index="/data-sources">
-            <el-icon>
-              <Database />
-            </el-icon>
-            <span>数据源</span>
+            <span>数据管理</span>
           </el-menu-item>
 
           <el-menu-item index="/chat-analysis">
