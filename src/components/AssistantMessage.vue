@@ -1,26 +1,27 @@
 <script setup lang="ts">
 import type { AssistantChatMessage } from '@/types';
 import { formatMessage } from '@/utils/tools';
-import { ref, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
+import AssistantMessageText from '@/components/AssistantMessageText.vue'
 
 const props = defineProps<{
   message: AssistantChatMessage & { loading?: boolean };
 }>();
 
-// 为每个文本部分创建一个格式化后的内容
-const formattedContents = ref<Record<number, string>>({});
+// // 为每个文本部分创建一个格式化后的内容
+// const formattedContents = ref<Record<number, string>>({});
 
-// 监听消息内容变化，异步格式化每个文本部分
-watch(() => props.message.content, async (newContent) => {
-  if (!newContent) return;
+// // 监听消息内容变化，异步格式化每个文本部分
+// watch(() => props.message.content, async (newContent) => {
+//   if (!newContent) return;
 
-  for (let i = 0; i < newContent.length; i++) {
-    const part = newContent[i];
-    if (part.type === 'text') {
-      formattedContents.value[i] = await formatMessage(part.content);
-    }
-  }
-}, { immediate: true });
+//   for (let i = 0; i < newContent.length; i++) {
+//     const part = newContent[i];
+//     if (part.type === 'text') {
+//       formattedContents.value[i] = await formatMessage(part.content);
+//     }
+//   }
+// }, { immediate: true });
 
 const parseJsonString = (value: any) => {
   try {
@@ -35,9 +36,7 @@ const parseJsonString = (value: any) => {
 <template>
   <div v-for="(part, partIndex) in message.content" :key="partIndex">
     <div v-if="part.type === 'text'" class="text-container">
-      <div v-if="formattedContents[partIndex]" class="assistant-text markdown-body"
-        v-html="formattedContents[partIndex]"></div>
-      <div v-else class="assistant-text">{{ part.content }}</div>
+      <AssistantMessageText class="assistant-text" :md="part.content.replace('\n\n', '\n')"></AssistantMessageText>
     </div>
     <div v-else-if="part.type === 'tool_call'">
       <div v-if="message.tool_calls && part.id in message.tool_calls"
