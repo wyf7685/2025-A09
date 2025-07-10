@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAppStore } from '@/stores/app';
-import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
+import type { AssistantChatMessage, ChatEntry, ChatMessageWithSuggestions } from '@/types';
 import { ElMessage } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
@@ -9,7 +9,7 @@ const appStore = useAppStore()
 
 // 响应式数据
 const inputMessage = ref<string>('')
-const messages = ref<ChatMessage[]>([])
+const messages = ref<ChatMessageWithSuggestions[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
 
 // 计算属性
@@ -22,6 +22,37 @@ const formatTime = (timestamp: string | undefined): string => {
 
 const addSampleQuestion = (question: string): void => {
   inputMessage.value = question
+}
+
+// 只提取“下一步建议”或“下一步行动建议”区域的建议
+const extractSuggestions = (content: string): string[] => {
+  // 兼容“**下一步建议**”或“**下一步行动建议**”后有冒号、空行，提取后续所有内容直到下一个空行或结尾
+  const match = content.match(/\*\*(下一步建议|下一步行动建议)\*\*[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/)
+  if (!match) return []
+  // 只提取第一个有序列表（1. ...）开始的所有有序条目
+  const lines = match[2].split('\n')
+  const suggestions: string[] = []
+  let inList = false
+  for (const line of lines) {
+    if (/^\d+\.\s+/.test(line)) {
+      inList = true
+      suggestions.push(line.replace(/^\d+\.\s+/, '').trim())
+    } else if (inList && !line.trim()) {
+      // 有序列表后遇到空行则停止
+      break
+    } else if (inList && !/^\d+\.\s+/.test(line)) {
+      // 有序列表中遇到非有序项也停止
+      break
+    }
+  }
+  return suggestions
+}
+
+// 工具函数：去除markdown粗体、冒号和多余空格，只取建议标题部分
+const stripSuggestion = (s: string) => {
+  const clean = s.replace(/\*\*/g, '').trim()
+  const idx = clean.indexOf('：')
+  return idx !== -1 ? clean.slice(0, idx) : clean
 }
 
 const sendMessage = async (): Promise<void> => {
@@ -60,7 +91,8 @@ const sendMessage = async (): Promise<void> => {
       timestamp: new Date().toISOString(),
       tool_calls: {},
       loading: true,
-    } as AssistantChatMessage & { loading?: boolean })
+      suggestions: [] // 新增：建议数组
+    } as AssistantChatMessage & { loading?: boolean, suggestions?: string[] })
     messages.value.push(assistantMessage)
 
     // 使用流式API
@@ -69,6 +101,11 @@ const sendMessage = async (): Promise<void> => {
       (content) => {
         // LLM 输出
         assistantMessage.content.push({ type: 'text', content })
+        // 新增：自动提取建议
+        const suggestions = extractSuggestions(content)
+        if (suggestions.length) {
+          assistantMessage.suggestions = suggestions
+        }
         nextTick(() => scrollToBottom())
       },
       (id, name, args) => {
@@ -211,6 +248,18 @@ onMounted(() => {
               {{ message.content }}
             </div>
             <AssistantMessage v-else :message="message" class="assistant-message"></AssistantMessage>
+            <!-- 新增：建议按钮渲染 -->
+            <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
+              <el-button
+                v-for="(suggestion, idx) in message.suggestions"
+                :key="idx"
+                size="small"
+                @click="addSampleQuestion(stripSuggestion(suggestion))"
+                style="margin: 4px 4px 0 0;"
+              >
+                {{ stripSuggestion(suggestion) }}
+              </el-button>
+            </div>
           </div>
           <div class="message-time">
             {{ formatTime(message.timestamp) }}
@@ -464,5 +513,12 @@ onMounted(() => {
   margin-top: 5px;
   font-style: italic;
   color: #666;
+}
+
+.suggestion-buttons {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>
