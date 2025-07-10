@@ -7,6 +7,7 @@ WORKDIR /app
 # 安装中文字体，修复matplotlib中文显示问题
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-wqy-microhei \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
 
@@ -17,7 +18,7 @@ RUN pip install uv
 COPY pyproject.toml uv.lock ./
 
 # 使用 uv 来同步依赖
-RUN uv pip sync pyproject.toml
+RUN uv pip sync --system pyproject.toml
 
 # 复制所有项目文件到工作目录
 COPY ./app ./app

@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
   "docker>=7.1.0",
   "fastapi[standard]>=0.115.14",
+  "uvicorn>=0.30.3",
   "joblib>=1.5.1",
   "langchain>=0.3.26",
   "langchain-community>=0.3.26",
