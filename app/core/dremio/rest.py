@@ -175,10 +175,10 @@ class DremioClient:
             dict[str, Any]: 查询结果
         """
         job_id = self.create_query_job(sql_query)
-        logger.info(f"查询提交成功，Job ID: {job_id}")
+        logger.opt(colors=True).info(f"查询提交成功，Job ID: <c>{job_id}</>")
 
         self.wait_for_job_completion(job_id)
-        logger.success("查询完成")
+        logger.opt(colors=True).success(f"查询完成: <c>{job_id}</>")
 
         return self.get_job_result(job_id)
 

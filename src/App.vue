@@ -107,7 +107,7 @@ onMounted(async () => {
             <el-icon>
               <DataBoard />
             </el-icon>
-            <span>数据源</span>
+            <span>数据源管理</span>
           </el-menu-item>
 
           <el-menu-item index="/chat-analysis">

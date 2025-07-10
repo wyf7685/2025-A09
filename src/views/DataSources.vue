@@ -337,7 +337,7 @@ onMounted(() => {
     <!-- 添加数据源卡片行 -->
     <div class="data-source-cards">
       <el-row :gutter="20">
-        <el-col :span="8">
+        <el-col :span="12">
           <el-card class="add-source-card" @click="openFileUploadDialog">
             <div class="card-content">
               <el-icon class="icon">
@@ -348,7 +348,7 @@ onMounted(() => {
             </div>
           </el-card>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="12">
           <el-card class="add-source-card" @click="openDbConnectionDialog">
             <div class="card-content">
               <el-icon class="icon">
@@ -359,7 +359,7 @@ onMounted(() => {
             </div>
           </el-card>
         </el-col>
-        <el-col :span="8">
+        <!-- <el-col :span="8">
           <el-card class="add-source-card" @click="openDremioDialog">
             <div class="card-content">
               <el-icon class="icon">
@@ -369,7 +369,7 @@ onMounted(() => {
               <p>连接到Dremio数据源</p>
             </div>
           </el-card>
-        </el-col>
+        </el-col> -->
       </el-row>
     </div>
 
