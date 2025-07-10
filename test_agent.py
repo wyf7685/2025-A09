@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm, rate_limiter
-from app.core.datasource.csv import CsvDataSource
+from app.core.datasource import create_csv_source
 from app.log import logger
 from app.utils import escape_tag
 
@@ -16,7 +16,7 @@ def test_agent() -> None:
     limiter = rate_limiter(14)
     llm = limiter | get_llm()
 
-    data_source = CsvDataSource(Path("test.csv"))
+    data_source = create_csv_source(Path("test.csv"))
     agent = DataAnalyzerAgent(data_source, llm, get_chat_model(), pre_model_hook=limiter)
 
     state_file = Path("state.json")

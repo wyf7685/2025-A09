@@ -12,12 +12,6 @@ const routes = [
     meta: { title: '工作台' }
   },
   {
-    path: '/data-upload',
-    name: 'DataUpload',
-    component: () => import('../views/DataUpload.vue'),
-    meta: { title: '数据上传' }
-  },
-  {
     path: '/data-sources',
     name: 'DataSources',
     component: () => import('../views/DataSources.vue'),
@@ -28,18 +22,6 @@ const routes = [
     name: 'ChatAnalysis',
     component: () => import('../views/ChatAnalysis.vue'),
     meta: { title: '对话分析' }
-  },
-  {
-    path: '/auto-analysis',
-    name: 'AutoAnalysis',
-    component: () => import('../views/AutoAnalysis.vue'),
-    meta: { title: '自动分析' }
-  },
-  {
-    path: '/reports',
-    name: 'Reports',
-    component: () => import('../views/Reports.vue'),
-    meta: { title: '分析报告' }
   },
   {
     path: '/models',

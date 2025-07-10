@@ -1,13 +1,4 @@
-import type {
-  AnalysisReport,
-  AnalysisResult,
-  ChatEntry,
-  Dataset,
-  Model,
-  Session,
-  ToolCallArtifact,
-  UploadResult,
-} from '@/types';
+import type { ChatEntry, Dataset, Model, Session, ToolCallArtifact, UploadResult } from '@/types';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
@@ -18,7 +9,6 @@ export const useAppStore = defineStore('app', () => {
   const currentDataset = ref<Dataset | null>(null);
   const loading = ref<boolean>(false);
   const chatHistory = ref<ChatEntry[]>([]);
-  const analysisResults = ref<AnalysisResult[]>([]);
 
   // 设置当前会话
   const setCurrentSession = (sessionId: string): void => {
@@ -180,24 +170,24 @@ export const useAppStore = defineStore('app', () => {
     }
   };
 
-  // 自动分析
-  const runGeneralAnalysis = async (sessionId: string): Promise<AnalysisReport> => {
-    loading.value = true;
-    try {
-      const response = await api.post('/analysis/general', {
-        session_id: sessionId,
-      });
+  // // 自动分析
+  // const runGeneralAnalysis = async (sessionId: string): Promise<AnalysisReport> => {
+  //   loading.value = true;
+  //   try {
+  //     const response = await api.post('/analysis/general', {
+  //       session_id: sessionId,
+  //     });
 
-      // 更新分析结果
-      if (response.data.report) {
-        analysisResults.value.push(response.data);
-      }
+  //     // 更新分析结果
+  //     if (response.data.report) {
+  //       analysisResults.value.push(response.data);
+  //     }
 
-      return response.data;
-    } finally {
-      loading.value = false;
-    }
-  };
+  //     return response.data;
+  //   } finally {
+  //     loading.value = false;
+  //   }
+  // };
 
   // 模型管理
   const getModels = async (sessionId: string): Promise<Model[]> => {
@@ -250,25 +240,12 @@ export const useAppStore = defineStore('app', () => {
     return response.data;
   };
 
-  // 获取当前会话信息
-  const currentSession = computed<Session>(() => {
-    return {
-      id: currentSessionId.value,
-      current_dataset: currentDataset.value?.id,
-      chat_history: chatHistory.value,
-      analysis_results: analysisResults.value,
-    };
-  });
   return {
     // 状态
     currentSessionId,
     currentDataset,
     loading,
     chatHistory,
-    analysisResults,
-
-    // 计算属性
-    currentSession,
 
     // 方法
     setCurrentSession,
@@ -281,7 +258,7 @@ export const useAppStore = defineStore('app', () => {
     getDremioSources,
     loadDremioData,
     sendStreamChatMessage,
-    runGeneralAnalysis,
+    // runGeneralAnalysis,
     getModels,
     deleteModel,
     getDatasets,

@@ -96,8 +96,7 @@ const parseJsonString = (value: any) => {
 }
 
 .assistant-text {
-  line-height: 1.6;
-  white-space: pre-wrap;
+  line-height: 1.3;
 }
 
 /* 覆盖一些 GitHub 样式以更好地适应聊天界面 */

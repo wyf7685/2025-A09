@@ -4,16 +4,25 @@ import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
+import { useSessionStore } from '@/stores/session';
+import { useDataSourceStore } from '@/stores/datasource';
 
-const appStore = useAppStore()
+// const appStore = useAppStore()
+const sessionStore = useSessionStore();
+const dataSourceStore = useDataSourceStore();
 
 // 响应式数据
 const inputMessage = ref<string>('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
+const loading = ref<boolean>(false);
 
 // 计算属性
-const currentDataset = computed(() => appStore.currentDataset)
+const currentDataset = computed(() =>
+  sessionStore.currentSession
+    ? dataSourceStore.dataSources[sessionStore.currentSession.dataset_id]
+    : null
+);
 
 const formatTime = (timestamp: string | undefined): string => {
   if (!timestamp) return ''
@@ -63,7 +72,7 @@ const sendMessage = async (): Promise<void> => {
     messages.value.push(assistantMessage)
 
     // 使用流式API
-    await appStore.sendStreamChatMessage(
+    await sessionStore.sendStreamChatMessage(
       userMessage,
       (content) => {
         // LLM 输出
@@ -151,7 +160,7 @@ const scrollToBottom = (): void => {
 
 const loadChatHistory = (): void => {
   // 从 store 中加载聊天历史
-  const history: ChatEntry[] = appStore.chatHistory
+  const history: ChatEntry[] = sessionStore.chatHistory
   messages.value = history.map(entry => [entry.user_message, entry.assistant_response]).flat()
 
   nextTick(() => {
@@ -163,7 +172,7 @@ const loadChatHistory = (): void => {
 watch(currentDataset, (newDataset) => {
   if (newDataset && messages.value.length === 0) {
     // 添加欢迎消息
-    const welcome = `您好！我是您的AI数据分析助手。当前已加载数据集 "${newDataset.id}"，包含 ${newDataset.overview?.shape?.[0] || 0} 行和 ${newDataset.overview?.shape?.[1] || 0} 列数据。\n\n您可以问我：\n- 数据的基本统计信息\n- 绘制各种图表\n- 进行相关性分析\n- 检测异常值\n- 数据聚类分析\n\n请告诉我您想了解什么！`
+    const welcome = `您好！我是您的AI数据分析助手。当前已加载数据集 "${newDataset.id}"，包含 ${newDataset.row_count || 0} 行和 ${newDataset.column_count || 0} 列数据。\n\n您可以问我：\n- 数据的基本统计信息\n- 绘制各种图表\n- 进行相关性分析\n- 检测异常值\n- 数据聚类分析\n\n请告诉我您想了解什么！`
 
     messages.value.push({
       type: 'assistant',
@@ -188,7 +197,24 @@ onMounted(() => {
     <div class="chat-container">
       <!-- 聊天消息区域 -->
       <div class="chat-messages" ref="messagesContainer">
-        <div v-if="messages.length === 0" class="empty-state">
+        <div v-if="!sessionStore.currentSession" class="empty-state">
+          <el-empty>
+            <template #image>
+              <el-icon style="font-size: 64px; color: #ddd;">
+                <DataBoard />
+              </el-icon>
+            </template>
+            <template #description>
+              <p>暂无会话，请先从数据源创建会话</p>
+              <br>
+              <el-button type="primary" @click="$router.push('/data-sources')">
+                前往数据源
+              </el-button>
+            </template>
+          </el-empty>
+        </div>
+
+        <div v-else-if="messages.length === 0" class="empty-state">
           <el-empty description="开始您的数据分析对话吧！">
             <template #image>
               <el-icon style="font-size: 64px; color: #ddd;">
@@ -198,29 +224,31 @@ onMounted(() => {
           </el-empty>
         </div>
 
-        <div v-for="(message, index) in messages" :key="index" :class="['message-item', message.type]">
-          <div class="message-content">
-            <div v-if="message.type === 'user'" class="user-message">
-              {{ message.content }}
+        <template v-else>
+          <div v-for="(message, index) in messages" :key="index" :class="['message-item', message.type]">
+            <div class="message-content">
+              <div v-if="message.type === 'user'" class="user-message">
+                {{ message.content }}
+              </div>
+              <AssistantMessage v-else :message="message" class="assistant-message"></AssistantMessage>
             </div>
-            <AssistantMessage v-else :message="message" class="assistant-message"></AssistantMessage>
+            <div class="message-time">
+              {{ formatTime(message.timestamp) }}
+            </div>
           </div>
-          <div class="message-time">
-            {{ formatTime(message.timestamp) }}
-          </div>
-        </div>
+        </template>
       </div>
 
       <!-- 输入区域 -->
       <div class="chat-input">
         <el-input v-model="inputMessage" type="textarea" :rows="3"
           placeholder="输入您想了解的数据分析问题，例如：分析数据的基本统计信息、查找异常值、绘制相关性热力图等..." @keydown.ctrl.enter="sendMessage"
-          :disabled="!currentDataset || appStore.loading" />
+          :disabled="!currentDataset || loading" />
 
         <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <el-tag v-if="currentDataset" type="success" size="small">
-              当前数据集: {{ currentDataset.id }}
+              当前数据集: {{ currentDataset.name }}
             </el-tag>
             <el-tag v-else type="warning" size="small">
               未选择数据集
@@ -241,7 +269,7 @@ onMounted(() => {
 
           <div>
             <el-button @click="clearChat" size="small">清空对话</el-button>
-            <el-button type="primary" @click="sendMessage" :loading="appStore.loading"
+            <el-button type="primary" @click="sendMessage" :loading="loading"
               :disabled="!inputMessage.trim() || !currentDataset">
               <el-icon>
                 <Promotion />

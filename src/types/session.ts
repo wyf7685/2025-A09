@@ -1,12 +1,22 @@
 import type { ChatEntry } from './chat';
-import type { AnalysisResult } from './analysis';
 
 /**
  * 会话信息
  */
 export interface Session {
   id: string;
-  current_dataset?: string;
+  dataset_id: string;
+  name: string;
   chat_history: ChatEntry[];
-  analysis_results: AnalysisResult[];
+  created_at: string;
+}
+
+/**
+ * 会话列表项
+ */
+export interface SessionListItem {
+  id: string;
+  name: string;
+  created_at: string;
+  chat_count: number;
 }
