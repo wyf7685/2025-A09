@@ -9,8 +9,8 @@ export interface ChatEntry {
 }
 
 export interface ToolCallArtifact {
-  type: 'image',
-  base64_data: string,
+  type: 'image'; // 当前仅包含图片
+  base64_data: string;
   caption?: string; // 可选的图像说明
 }
 
@@ -22,7 +22,6 @@ export interface ToolCall {
   artifact?: ToolCallArtifact | null; // 工具调用的工件
   error?: string; // 错误信息，如果有的话
 }
-
 
 export interface UserChatMessage {
   type: 'user';
