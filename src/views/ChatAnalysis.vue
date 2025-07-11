@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
-import { computed, inject, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
-import { sessionNameUpdatedKey } from '@/utils/keys';
 
 type ChatMessageWithSuggestions = ChatMessage & { suggestions?: string[] }
 
@@ -170,9 +169,11 @@ const sendMessage = async (): Promise<void> => {
 
         // 如果是第一条消息，触发父组件重新加载会话列表（以获取更新的会话名称）
         if (isFirstMessage) {
-          // 发送自定义事件通知父组件重新加载会话
-          // window.dispatchEvent(new CustomEvent('session-name-updated'))
-          inject(sessionNameUpdatedKey)?.()
+          // 重新加载会话
+          nextTick(() => {
+            sessionStore.listSessions()
+            scrollToBottom()
+          })
         }
       },
       (error) => {
@@ -198,11 +199,6 @@ const sendMessage = async (): Promise<void> => {
     await nextTick()
     scrollToBottom()
   }
-}
-
-const clearChat = (): void => {
-  messages.value = []
-  ElMessage.success('对话已清空')
 }
 
 const scrollToBottom = (): void => {
@@ -328,7 +324,6 @@ onMounted(() => {
           </div>
 
           <div>
-            <el-button @click="clearChat" size="small">清空对话</el-button>
             <el-button type="primary" @click="sendMessage" :loading="loading"
               :disabled="!inputMessage.trim() || !currentDataset">
               <el-icon>

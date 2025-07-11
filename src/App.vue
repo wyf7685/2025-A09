@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, provide, computed } from 'vue'
-import type { SessionListItem } from '@/types'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { checkHealth as checkHealthApi } from '@/utils/api'
-import { sessionNameUpdatedKey } from '@/utils/keys';
 
 const sessionStore = useSessionStore();
 
 // 响应式数据
 const sidebarCollapsed = ref(false)
 const currentSessionId = ref('')
-const sessions = computed(() => sessionStore.sessions || [])
+const sessions = computed(() => sessionStore.sessions)
 const healthStatus = ref({ status: '' })
 
 // 方法
@@ -47,8 +45,6 @@ watch(
   },
   { immediate: true }
 )
-
-provide(sessionNameUpdatedKey, () => { loadSessions() })
 
 // 生命周期
 onMounted(async () => {

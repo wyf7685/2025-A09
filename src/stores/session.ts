@@ -98,7 +98,7 @@ export const useSessionStore = defineStore('session', () => {
             const data = JSON.parse(line);
 
             // 根据后端返回的事件类型处理不同的响应
-            if (data.type === 'message') {
+            if (data.type === 'llm_token') {
               onMessage(data.content);
             } else if (data.type === 'tool_call') {
               onToolCall(data.id, data.name, data.args);
