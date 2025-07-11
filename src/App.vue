@@ -1,31 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { useSessionStore } from '@/stores/session'
+import { ref, onMounted } from 'vue'
 import { checkHealth as checkHealthApi } from '@/utils/api'
-
-const sessionStore = useSessionStore();
 
 // 响应式数据
 const sidebarCollapsed = ref(false)
-const currentSessionId = ref('')
-const sessions = computed(() => sessionStore.sessions)
 const healthStatus = ref({ status: '' })
 
 // 方法
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
-}
-
-const switchSession = async (sessionId: string) => {
-  await sessionStore.setCurrentSessionById(sessionId)
-}
-
-const loadSessions = async () => {
-  try {
-    await sessionStore.listSessions()
-  } catch (error) {
-    console.error('加载会话失败:', error)
-  }
 }
 
 const checkHealth = async () => {
@@ -37,19 +20,9 @@ const checkHealth = async () => {
   }
 }
 
-watch(
-  () => sessionStore.currentSession?.id,
-  (newSessionId) => {
-    if (newSessionId)
-      currentSessionId.value = newSessionId
-  },
-  { immediate: true }
-)
-
 // 生命周期
 onMounted(async () => {
   await checkHealth()
-  await loadSessions()
 
   // 定期检查健康状态
   setInterval(checkHealth, 3 * 60 * 1000)
@@ -71,13 +44,6 @@ onMounted(async () => {
         </div>
 
         <div style="display: flex; align-items: center; gap: 16px;">
-          <!-- 会话选择器 -->
-          <el-select v-model="currentSessionId" placeholder="选择会话" style="width: 200px;" @change="switchSession">
-            <el-option v-for="session in sessions" :key="session.id"
-              :label="(session.name && session.name.length > 11 ? session.name.slice(0, 11) + '...' : session.name) || `会话 ${session.id.slice(0, 8)}...`"
-              :value="session.id" />
-          </el-select>
-
           <!-- 系统状态 -->
           <el-badge :value="healthStatus.status ? '正常' : '异常'" :type="healthStatus.status ? 'success' : 'danger'">
             <el-icon style="color: white; font-size: 20px;">
@@ -102,11 +68,11 @@ onMounted(async () => {
             <span>工作台</span>
           </el-menu-item>
 
-          <el-menu-item index="/data-sources">
+          <el-menu-item index="/data-management">
             <el-icon>
-              <DataBoard />
+              <Collection />
             </el-icon>
-            <span>数据源管理</span>
+            <span>数据管理</span>
           </el-menu-item>
 
           <el-menu-item index="/chat-analysis">

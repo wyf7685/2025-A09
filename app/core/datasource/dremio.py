@@ -24,7 +24,7 @@ class DremioDataSource(DataSource):
             metadata = DataSourceMetadata(
                 id=f"dremio_{source_name}",
                 name=source_name,
-                source_type="dremio",
+                source_type=f"dremio:{source.type}",
                 description=getattr(source, "description", ""),
             )
 

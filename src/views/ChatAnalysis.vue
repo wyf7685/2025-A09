@@ -5,32 +5,75 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
+import { Plus, ChatDotRound, Delete, Edit, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router';
 
 type ChatMessageWithSuggestions = ChatMessage & { suggestions?: string[] }
 
+const router = useRouter()
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 
-// 响应式数据
-const inputMessage = ref<string>('')
+// --- State for new UI ---
+const isSidebarOpen = ref(true)
+
+const userInput = ref<string>('')
 const messages = ref<ChatMessageWithSuggestions[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
-const loading = ref<boolean>(false);
+const isProcessingChat = ref<boolean>(false)
+const selectDatasetDialogVisible = ref<boolean>(false)
 
-// 计算属性
+const sessions = computed(() => sessionStore.sessions)
+const currentSessionId = computed(() => sessionStore.currentSession?.id)
 const currentDataset = computed(() =>
   sessionStore.currentSession
     ? dataSourceStore.dataSources[sessionStore.currentSession.dataset_id]
     : null
 );
 
-const formatTime = (timestamp: string | undefined): string => {
-  if (!timestamp) return ''
-  return new Date(timestamp).toLocaleTimeString('zh-CN')
+// --- Methods for new UI ---
+const loadSessions = async () => {
+  try {
+    await sessionStore.listSessions()
+  } catch (error) {
+    console.error('加载会话失败:', error)
+  }
 }
 
-const addSampleQuestion = (question: string): void => {
-  inputMessage.value = question
+const createNewSession = async (sourceId: string) => {
+  try {
+    const session = await sessionStore.createSession(sourceId)
+    sessionStore.setCurrentSession(session)
+    messages.value = [] // Clear messages for new session
+  } catch (error) {
+    console.error('创建新会话失败:', error)
+    ElMessage.error('创建新会话失败')
+  }
+}
+
+const switchSession = async (sessionId: string) => {
+  await sessionStore.setCurrentSessionById(sessionId)
+  messages.value = []
+  ElMessage.success(`切换到会话 ${sessionId.slice(0, 8)}...`)
+}
+
+// --- Method to add quick prompts ---
+const addSampleQuestion = (question: string) => {
+  userInput.value = question
+}
+
+// --- Method to navigate to data management ---
+const goToAddData = () => {
+  router.push('/data-management')
+}
+
+// --- Existing Chat Logic Methods ---
+const scrollToBottom = (): void => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
 }
 
 // 只提取“下一步建议”或“下一步行动建议”区域的建议
@@ -65,33 +108,24 @@ const stripSuggestion = (s: string) => {
 }
 
 const sendMessage = async (): Promise<void> => {
-  if (!inputMessage.value.trim()) {
-    ElMessage.warning('请输入消息内容')
-    return
-  }
-
+  if (!userInput.value.trim()) return
   if (!currentDataset.value) {
-    ElMessage.warning('请先上传数据集')
+    ElMessage.warning('请先选择或上传一个数据集。')
     return
   }
+  if (isProcessingChat.value) return
 
-  const userMessage = inputMessage.value.trim()
+  isProcessingChat.value = true
+  const userMessage = userInput.value.trim()
   const isFirstMessage = messages.value.length === 0 // 检查是否为第一条消息
 
-  // 添加用户消息
   messages.value.push({
     type: 'user',
     content: userMessage,
     timestamp: new Date().toISOString()
   })
-
-  // 清空输入
-  inputMessage.value = ''
-
-  // 滚动到底部
-  await nextTick()
+  userInput.value = ''
   scrollToBottom()
-
   try {
     // 创建一个初始的空AI回复消息
     const assistantMessage = reactive({
@@ -198,322 +232,360 @@ const sendMessage = async (): Promise<void> => {
 
     await nextTick()
     scrollToBottom()
+  } finally {
+    isProcessingChat.value = false
   }
 }
 
-const scrollToBottom = (): void => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-  }
-}
-
-const loadChatHistory = (): void => {
-  // 从 store 中加载聊天历史
-  const history: ChatEntry[] = sessionStore.chatHistory
-  messages.value = history.map(entry => [entry.user_message, entry.assistant_response]).flat()
-
-  nextTick(() => {
-    scrollToBottom()
-  })
-}
-
-// 监听数据集变化
-watch(currentDataset, (newDataset) => {
-  if (newDataset && messages.value.length === 0) {
-    // 添加欢迎消息
-    const welcome = `您好！我是您的AI数据分析助手。当前已加载数据集 "${newDataset.id}"，包含 ${newDataset.row_count || 0} 行和 ${newDataset.column_count || 0} 列数据。\n\n您可以问我：\n- 数据的基本统计信息\n- 绘制各种图表\n- 进行相关性分析\n- 检测异常值\n- 数据聚类分析\n\n请告诉我您想了解什么！`
-
-    messages.value.push({
-      type: 'assistant',
-      content: [{ type: 'text', content: welcome }],
-      timestamp: new Date().toISOString()
-    })
-
-    nextTick(() => {
-      scrollToBottom()
-    })
-  }
-})
-
-// 生命周期
-onMounted(() => {
-  loadChatHistory()
+// --- Lifecycle Hooks ---
+onMounted(async () => {
+  await loadSessions()
+  // if (!currentSessionId.value && appStore.sessions.length > 0) {
+  //   appStore.setCurrentSession(appStore.sessions[0].id)
+  // } else if (appStore.sessions.length === 0) {
+  //   await createNewSession()
+  // }
 })
 </script>
 
 <template>
-  <div class="chat-analysis">
-    <div class="chat-container">
-      <!-- 聊天消息区域 -->
-      <div class="chat-messages" ref="messagesContainer">
-        <div v-if="!sessionStore.currentSession" class="empty-state">
-          <el-empty>
-            <template #image>
-              <el-icon style="font-size: 64px; color: #ddd;">
-                <DataBoard />
-              </el-icon>
-            </template>
-            <template #description>
-              <p>暂无会话，请先从数据源创建会话</p>
-              <br>
-              <el-button type="primary" @click="$router.push('/data-sources')">
-                前往数据源
-              </el-button>
-            </template>
-          </el-empty>
-        </div>
+  <div class="chat-analysis-container">
 
-        <div v-else-if="messages.length === 0" class="empty-state">
-          <el-empty description="开始您的数据分析对话吧！">
-            <template #image>
-              <el-icon style="font-size: 64px; color: #ddd;">
-                <ChatDotRound />
-              </el-icon>
-            </template>
-          </el-empty>
-        </div>
-
-        <template v-else>
-          <div v-for="(message, index) in messages" :key="index" :class="['message-item', message.type]">
-            <div class="message-content">
-              <div v-if="message.type === 'user'" class="user-message">
-                {{ message.content }}
-              </div>
-              <AssistantMessage v-else :message="message" class="assistant-message"></AssistantMessage>
-            </div>
-            <div class="message-time">
-              {{ formatTime(message.timestamp) }}
-            </div>
-            <!-- 建议按钮渲染 -->
-            <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
-              <el-button v-for="(suggestion, idx) in message.suggestions" :key="idx" size="small"
-                @click="addSampleQuestion(stripSuggestion(suggestion))" style="margin: 4px 4px 0 0;">
-                {{ stripSuggestion(suggestion) }}
-              </el-button>
-            </div>
-          </div>
-        </template>
+    <!-- Session Sidebar -->
+    <div :class="['session-sidebar', { 'is-closed': !isSidebarOpen }]">
+      <div class="sidebar-header">
+        <el-button class="new-chat-btn" @click="selectDatasetDialogVisible = true" :icon="Plus">
+          新对话
+        </el-button>
+        <el-button @click="isSidebarOpen = false" :icon="DArrowLeft" text class="toggle-btn" />
       </div>
-
-      <!-- 输入区域 -->
-      <div class="chat-input">
-        <el-input v-model="inputMessage" type="textarea" :rows="3"
-          placeholder="输入您想了解的数据分析问题，例如：分析数据的基本统计信息、查找异常值、绘制相关性热力图等..." @keydown.ctrl.enter="sendMessage"
-          :disabled="!currentDataset || loading" />
-
-        <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <el-tag v-if="currentDataset" type="success" size="small">
-              当前数据集: {{ currentDataset.name }}
-            </el-tag>
-            <el-tag v-else type="warning" size="small">
-              未选择数据集
-            </el-tag>
-            <el-button size="small" @click="addSampleQuestion('分析数据的基本统计信息')">
-              基本统计
-            </el-button>
-            <el-button size="small" @click="addSampleQuestion('绘制各列的相关性热力图')">
-              相关性分析
-            </el-button>
-            <el-button size="small" @click="addSampleQuestion('检测并可视化异常值')">
-              异常检测
-            </el-button>
-            <el-button size="small" @click="addSampleQuestion('对数据进行聚类分析')">
-              聚类分析
-            </el-button>
-          </div>
-
-          <div>
-            <el-button type="primary" @click="sendMessage" :loading="loading"
-              :disabled="!inputMessage.trim() || !currentDataset">
-              <el-icon>
-                <Promotion />
-              </el-icon>
-              发送 (Ctrl+Enter)
-            </el-button>
+      <div class="session-list">
+        <div v-for="session in sessions" :key="session.id"
+          :class="['session-item', { active: session.id === currentSessionId }]" @click="switchSession(session.id)">
+          <el-icon class="session-icon">
+            <ChatDotRound />
+          </el-icon>
+          <span class="session-name">会话 {{ session.id.slice(0, 8) }}</span>
+          <div class="session-actions">
+            <el-button type="text" :icon="Edit" size="small" class="action-btn" />
+            <el-button type="text" :icon="Delete" size="small" class="action-btn" />
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-panel-header">
+        <el-button v-if="!isSidebarOpen" @click="isSidebarOpen = true" :icon="DArrowRight" text class="toggle-btn" />
+        <span class="session-title" v-if="currentSessionId">
+          会话: {{ currentSessionId.slice(0, 8) }}...
+        </span>
+      </div>
+
+      <div class="chat-messages" ref="messagesContainer">
+        <div v-if="!messages.length" class="empty-state">
+          <el-empty description="开始您的数据分析对话吧！" />
+        </div>
+        <div v-for="(message, index) in messages" :key="index">
+          <AssistantMessage v-if="message.type === 'assistant'" :message="message" />
+          <div v-else class="user-message-container">
+            <div class="user-message">
+              {{ message.content }}
+            </div>
+          </div>
+          <!-- 建议按钮渲染 -->
+          <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
+            <el-button v-for="(suggestion, idx) in message.suggestions" :key="idx" size="small"
+              @click="addSampleQuestion(stripSuggestion(suggestion))" style="margin: 4px 4px 0 0;">
+              {{ stripSuggestion(suggestion) }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+          <el-input v-model="userInput" placeholder="输入你的问题..." @keyup.enter.native.prevent="sendMessage" resize="none"
+            type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" :disabled="isProcessingChat" />
+          <el-button @click="sendMessage" :disabled="isProcessingChat || !userInput.trim()" type="primary"
+            class="send-button">
+            发送
+          </el-button>
+        </div>
+        <div class="quick-actions">
+          <div class="dataset-indicator">
+            <template v-if="currentDataset">
+              当前数据集: <strong>{{ currentDataset.id.slice(0, 12) }}...</strong> ( <el-link type="primary"
+                @click="goToAddData" :underline="false">更换</el-link> )
+            </template>
+            <template v-else>
+              <el-link type="warning" @click="goToAddData" :underline="false">请先选择一个数据集进行分析</el-link>
+            </template>
+          </div>
+          <el-tag class="action-tag" @click="addSampleQuestion('分析数据的基本统计信息')">基本统计</el-tag>
+          <el-tag class="action-tag" @click="addSampleQuestion('绘制各列的相关性热力图')">相关性热力图</el-tag>
+          <el-tag class="action-tag" @click="addSampleQuestion('检测并可视化异常值')">异常值检测</el-tag>
+        </div>
+      </div>
+    </div>
+
+    <!-- Select Dataset Dialog -->
+    <el-dialog :v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
+      <el-empty v-if="!dataSourceStore.dataSources.length">
+        <template #description>暂无数据集，请先上传或选择一个数据集。
+          <el-button type="primary" @click="goToAddData">前往添加数据集</el-button>
+        </template>
+      </el-empty>
+      <el-list v-else>
+        <el-list-item v-for="[sourceId, metadata] in Object.entries(dataSourceStore.dataSources)" :key="sourceId"
+          @click="sessionStore.createSession(sourceId)">
+          {{ metadata.name }}
+        </el-list-item>
+      </el-list>
+      <template #footer>
+        <el-button @click="selectDatasetDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
-<style scoped>
-.chat-analysis {
-  height: calc(100vh - 90px);
+<style lang="scss" scoped>
+.chat-analysis-container {
   display: flex;
-  flex-direction: column;
+  height: calc(100vh - 80px);
+  background-color: #f7f7f8;
 }
 
-.chat-container {
-  height: 100%;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+// --- Sidebar Styles ---
+.session-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background-color: #202123;
+  color: white;
   display: flex;
   flex-direction: column;
+  transition: width 0.3s ease;
+  overflow: hidden;
+
+  &.is-closed {
+    width: 0;
+  }
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.new-chat-btn {
+  flex-grow: 1;
+  margin-right: 8px;
+  background-color: transparent;
+  border: 1px solid #4a4a4f;
+  color: white;
+  justify-content: flex-start;
+
+  &:hover {
+    background-color: #2a2b2e;
+  }
+}
+
+.toggle-btn {
+  color: #a9a9a9;
+
+  &:hover {
+    color: white;
+    background-color: #2a2b2e;
+  }
+}
+
+
+.session-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #43464a;
+    border-radius: 3px;
+  }
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+
+
+  .session-icon {
+    margin-right: 12px;
+  }
+
+  .session-name {
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-actions {
+    display: none;
+    align-items: center;
+
+    .action-btn {
+      color: #b0b0b5;
+      padding: 4px;
+
+      &:hover {
+        color: white;
+      }
+    }
+  }
+
+  &:hover {
+    background-color: #2a2b2e;
+
+    .session-actions {
+      display: flex;
+    }
+  }
+
+  &.active {
+    background-color: #343541;
+  }
+}
+
+
+// --- Chat Panel Styles ---
+.chat-panel {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Important for flex-grow to work correctly */
+  height: 100%;
+  position: relative;
+  background: white;
+}
+
+.chat-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 49px; // Match sidebar header height
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+
+  .session-title {
+    font-weight: 500;
+    margin-left: 8px;
+  }
 }
 
 .chat-messages {
-  flex: 1;
+  flex-grow: 1;
   overflow-y: auto;
-  padding: 20px;
-  background: #f8f9fa;
-}
-
-.empty-state {
-  height: 100%;
+  padding: 24px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.message-item {
-  margin-bottom: 20px;
-
-  &.user {
-    text-align: right;
-
-    .message-content {
-      background: #409EFF;
-      color: white;
-      border-radius: 18px 18px 6px 18px;
-    }
-  }
-
-  &.assistant {
-    text-align: left;
-
-    .message-content {
-      background: white;
-      color: #333;
-      border-radius: 18px 18px 18px 6px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-  }
+.user-message-container {
+  display: flex;
+  justify-content: flex-end;
 }
 
-.message-content {
-  display: inline-block;
+.user-message {
+  background: #3b82f6;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 18px 18px 6px 18px;
   max-width: 75%;
-  padding: 12px 16px;
   word-wrap: break-word;
 }
 
-.message-time {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
 
-.assistant-text {
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-/* 工具调用样式 */
-.tool-calls {
-  margin-top: 15px;
-  border-top: 1px solid #eee;
-  padding-top: 10px;
-}
-
-.tool-call {
-  background: #f9f9f9;
-  border-radius: 6px;
-  padding: 10px;
-  margin-bottom: 10px;
-  border-left: 3px solid #909399;
-
-  &.running {
-    border-left-color: #E6A23C;
-  }
-
-  &.success {
-    border-left-color: #67C23A;
-  }
-
-  &.error {
-    border-left-color: #F56C6C;
-  }
-}
-
-.tool-header {
+.empty-state {
   display: flex;
   align-items: center;
-  font-weight: bold;
-  margin-bottom: 5px;
-
-  .el-icon {
-    margin-right: 5px;
-  }
+  justify-content: center;
+  height: 100%;
 }
 
-.tool-args {
-  background: #f5f5f5;
+.chat-input-area {
+  padding: 16px 24px;
+  background-color: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chat-input-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background-color: #f4f4f5;
+  border-radius: 12px;
   padding: 8px;
-  border-radius: 4px;
-  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  transition: box-shadow 0.2s;
 
-  pre {
-    margin: 0;
-    white-space: pre-wrap;
-    font-size: 12px;
+  &:focus-within {
+    border-color: #c0c4cc;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
   }
 }
 
-.tool-result {
-  background: #f0f9eb;
-  padding: 8px;
-  border-radius: 4px;
-
-  .result-label {
-    font-weight: bold;
-    color: #67C23A;
-    margin-bottom: 5px;
-  }
-
-  pre {
-    margin: 0;
-    white-space: pre-wrap;
-    font-size: 12px;
+.el-textarea {
+  :deep(textarea) {
+    box-shadow: none !important;
+    background: transparent;
+    border: none;
+    padding-right: 10px;
   }
 }
 
-.tool-error {
-  background: #fef0f0;
-  padding: 8px;
-  border-radius: 4px;
-
-  .error-label {
-    font-weight: bold;
-    color: #F56C6C;
-    margin-bottom: 5px;
-  }
-
-  pre {
-    margin: 0;
-    white-space: pre-wrap;
-    font-size: 12px;
-    color: #F56C6C;
-  }
+.send-button {
+  flex-shrink: 0;
 }
 
-.charts-container {
+.quick-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-.rotating {
-  animation: rotating 2s linear infinite;
+.dataset-indicator {
+  font-size: 12px;
+  color: #606266;
+  margin-right: 8px;
 }
 
-@keyframes rotating {
-  0% {
-    transform: rotate(0deg);
-  }
+.action-tag {
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: #f0f2f5;
+  color: #606266;
+  border-color: #e5e7eb;
 
-  100% {
-    transform: rotate(360deg);
+  &:hover {
+    background-color: #e4e7ed;
+    color: #303133;
+    border-color: #dcdfe6;
   }
 }
 

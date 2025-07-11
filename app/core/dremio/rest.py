@@ -14,8 +14,6 @@ import requests
 
 from app.log import logger
 
-from .tmp_source import TemporaryDataSource
-
 
 @dataclass
 class DremioSource:
@@ -201,7 +199,7 @@ class DremioClient:
             return ".".join(f'"{part}"' for part in source_name)
         return f'"{source_name}"'
 
-    def add_data_source_csv(self, file: Path) -> list[str]:
+    def add_data_source_csv(self, file: Path) -> DremioSource:
         """
         添加 CSV 数据源到 Dremio 外部目录
 
@@ -242,7 +240,24 @@ class DremioClient:
         )
         response.raise_for_status()
 
-        return [self.external_name, source_name]
+        return DremioSource(
+            id=f"{self.external_name}.{source_name}",
+            path=[self.external_name, source_name],
+            type="FILE",
+        )
+
+    def add_data_source_excel(self, file: Path) -> DremioSource:
+        if self.external_dir is None:
+            raise ValueError("外部数据源目录未设置")
+
+        source_name = f"{uuid.uuid4()}{file.suffix}"
+        shutil.copyfile(file, self.external_dir / source_name)
+
+        return DremioSource(
+            id=f"{self.external_name}.{source_name}",
+            path=[self.external_name, source_name],
+            type="FILE",
+        )
 
     # TODO: 改写为通用数据库连接
     def add_data_source_postgres(
@@ -298,15 +313,15 @@ class DremioClient:
         response.raise_for_status()
         return source_name
 
-    def query_source_tables(self, source_name: str | list[str]) -> list[DremioSource]:
+    def query_source_children(self, source_name: str | list[str]) -> list[DremioSource]:
         """
-        查询指定数据源的所有表
+        查询指定数据源(数据库)的所有子项
 
         Args:
             source_name: 数据源名称
 
         Returns:
-            list[list[str]]: 表路径列表
+            list[DremioSource]: 数据源子项列表
         """
         logger.info(f"查询数据源 {source_name} 的子项...")
         if isinstance(source_name, list):
@@ -318,10 +333,10 @@ class DremioClient:
         sources: list[DremioSource] = []
         for child in response.json()["children"]:
             path: list[str] = child["path"]
-            if child["type"] in {"DATASET", "FILE"}:
-                sources.append(DremioSource(id=child["id"], path=path, type=child["type"]))
+            if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
+                sources.append(DremioSource(id=child["id"], path=path, type=ds_type))
             elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
-                sources.extend(self.query_source_tables("/".join(path)))
+                sources.extend(self.query_source_children("/".join(path)))
 
         return sources
 
@@ -411,36 +426,6 @@ class DremioClient:
 
         return row_count, col_count
 
-    def data_source_csv(self, file: Path) -> TemporaryDataSource:
-        source_name = self.add_data_source_csv(file)
-        return TemporaryDataSource(self, "csv", source_name)
-
-    def data_source_postgres(
-        self,
-        host: str,
-        port: int,
-        database: str,
-        user: str,
-        password: str,
-        table: str | None = None,
-    ) -> TemporaryDataSource:
-        source_name = self.add_data_source_postgres(host, port, database, user, password)
-        tables = self.query_source_tables(source_name)
-        if not tables:
-            raise ValueError(f"数据源 {source_name} 中没有可用的表")
-
-        if table is None:
-            source_name = tables[0].path
-        else:
-            for t in tables:
-                if t.path[-1] == table:
-                    source_name = t.path
-                    break
-            else:
-                raise ValueError(f"数据源 {source_name} 中没有找到表 {table}")
-
-        return TemporaryDataSource(self, "database", source_name)
-
     def list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")
         url = f"{self.base_url}/api/v3/catalog"
@@ -457,5 +442,5 @@ class DremioClient:
         logger.info("查询 Dremio 中的所有数据源...")
         sources: list[DremioSource] = []
         for container in self.list_containers():
-            sources.extend(self.query_source_tables(container.path))
+            sources.extend(self.query_source_children(container.path))
         return sources

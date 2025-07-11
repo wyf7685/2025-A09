@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
-from app.core.datasource import DataSource, create_csv_source, create_dremio_source
+from app.core.datasource import DataSource, create_dremio_source
 from app.core.datasource.source import DataSourceMetadata
 from app.core.dremio import DremioSource
 from app.core.dremio.rest import DremioClient
@@ -79,12 +79,16 @@ async def upload_file(
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
 
+        if not file.filename.lower().endswith((".csv", ".xlsx", ".xls")):
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+
         # 保存文件
         file_path = UPLOAD_DIR / file.filename
         file_path.write_bytes(await file.read())
 
-        # 创建CSV数据源
-        source = create_csv_source(file_path, name=source_name or file.filename)
+        client = DremioClient()
+        meth = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
+        source = create_dremio_source(await run_sync(meth)(file_path), source_name)
         source_id = register_datasource(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
@@ -106,7 +110,7 @@ async def list_datasources() -> list[str]:
                 if not any(
                     source.metadata.name == source_name
                     for source in datasources.values()
-                    if source.metadata.source_type == "dremio"
+                    if source.metadata.source_type.startswith("dremio")
                 ):
                     register_datasource(create_dremio_source(ds))
         return list(datasources)

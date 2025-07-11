@@ -53,7 +53,7 @@ def create_dremio_source(
     metadata = DataSourceMetadata(
         id=f"dremio_{source_name.replace('.', '_')}",
         name=name or source_name,
-        source_type="dremio",
+        source_type=f"dremio:{dremio_source.type}",
         description=getattr(dremio_source, "description", ""),
     )
 

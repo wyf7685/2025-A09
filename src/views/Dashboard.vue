@@ -1,43 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useSessionStore } from '@/stores/session';
-import type { Dataset, ChatEntry, AnalysisResult, Session, SessionListItem } from '@/types';
+import { useDataSourceStore } from '@/stores/datasource';
 
 const sessionStore = useSessionStore();
-
-// 响应式数据
-const datasets = ref<Dataset[]>([])
-const chatHistory = ref<ChatEntry[]>([])
-const recentActivity = ref<ChatEntry[]>([])
-const sessionList = ref<SessionListItem[]>([])
+const dataSourceStore = useDataSourceStore();
 
 // 计算属性
 const currentSessionId = computed(() => sessionStore.currentSession?.id)
 const currentSessionName = computed(() => {
   if (!currentSessionId.value) return '无'
-  const session = sessionList.value.find(s => s.id === currentSessionId.value)
+  const session = sessionStore.sessions.find(s => s.id === currentSessionId.value)
   const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无')
   return name.length > 11 ? name.slice(0, 11) + '...' : name
 })
-
-const loadData = async (): Promise<void> => {
-  try {
-    const session = sessionStore.currentSession
-    if (session) {
-      chatHistory.value = session.chat_history || []
-      recentActivity.value = session.chat_history || []
-    }
-    // 加载所有会话
-    const sessionsResponse = await sessionStore.listSessions()
-    sessionList.value = sessionsResponse || []
-  } catch (error) {
-    console.error('加载数据失败:', error)
-  }
-}
+const dataSourceCount = computed(() => Object.keys(dataSourceStore.dataSources).length)
+const chatHistoryLength = computed(() => sessionStore.currentSession?.chat_history.length || 0)
 
 // 生命周期
 onMounted(() => {
-  loadData()
+  sessionStore.listSessions().catch(error => {
+    console.error('加载会话列表失败:', error)
+  })
 })
 </script>
 
@@ -62,12 +46,12 @@ onMounted(() => {
         </el-col>
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="已上传数据集" :value="datasets.length" />
+            <el-statistic title="已上传数据集" :value="dataSourceCount" />
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="分析会话" :value="chatHistory.length" />
+            <el-statistic title="分析会话" :value="chatHistoryLength" />
           </div>
         </el-col>
       </el-row>

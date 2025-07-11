@@ -1,10 +1,9 @@
-import type { DataSourceMetadata, DremioSource } from '@/types';
+import type { DataSourceMetadata, DataSourceMetadataWithID, DremioSource, SourceID } from '@/types';
 import api from '@/utils/api';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export const useDataSourceStore = defineStore('dataSource', () => {
-  type SourceID = string;
   const dataSources = ref<Record<SourceID, DataSourceMetadata>>({});
 
   const getDataSource = async (sourceId: SourceID) => {
@@ -34,10 +33,10 @@ export const useDataSourceStore = defineStore('dataSource', () => {
         }
       }
       dataSources.value = newDataSources;
-      return Object.entries(dataSources.value)
-        .map(([id, ds]) => ({ ...ds, source_id: id })) as (DataSourceMetadata & {
-        source_id: SourceID;
-      })[];
+      return Object.entries(dataSources.value).map(([id, ds]) => ({
+        ...ds,
+        source_id: id,
+      })) as DataSourceMetadataWithID[];
     } catch (error) {
       console.error('Failed to fetch data sources:', error);
       throw error;
