@@ -46,7 +46,7 @@ def get_llm() -> LLM:
         from langchain_google_genai import GoogleGenerativeAI
 
         logger.info("使用 Google Generative AI 模型")
-        return GoogleGenerativeAI(model=model_name)
+        return GoogleGenerativeAI(model=model_name, transport="rest")
 
     if "OPENAI_API_KEY" in os.environ:
         from langchain_openai import ChatOpenAI
@@ -77,7 +77,7 @@ def get_chat_model() -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         logger.info("使用 Google Generative AI 模型")
-        return ChatGoogleGenerativeAI(model=model_name)
+        return ChatGoogleGenerativeAI(model=model_name, transport="rest")
 
     if "OPENAI_API_KEY" in os.environ:
         from langchain_openai import ChatOpenAI
