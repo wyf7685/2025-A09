@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAppStore } from '@/stores/app'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Model } from '@/types';
+import { useSessionStore } from '@/stores/session';
+import { useModelStore } from '@/stores/model';
 
-// 定义类型接口
-const router = useRouter()
-const appStore = useAppStore()
+const sessionStore = useSessionStore();
+const modelStore = useModelStore();
 
 // 响应式数据
 const loading = ref<boolean>(false)
@@ -19,9 +18,9 @@ const selectedModel = ref<Model | null>(null)
 const refreshModels = async (): Promise<void> => {
   loading.value = true
   try {
-    const sessionId = appStore.currentSessionId
+    const sessionId = sessionStore.currentSession?.id
     if (sessionId) {
-      const response = await appStore.getModels(sessionId)
+      const response = await modelStore.getModels(sessionId)
       models.value = response || []
     }
   } catch (error) {
@@ -55,7 +54,7 @@ const deleteModel = async (modelId: string): Promise<void> => {
       }
     )
 
-    await appStore.deleteModel(modelId)
+    await modelStore.deleteModel(modelId)
     await refreshModels()
     ElMessage.success('模型删除成功')
   } catch (error) {
