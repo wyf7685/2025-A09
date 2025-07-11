@@ -5,7 +5,7 @@ import { ref } from 'vue';
 
 export const useDataSourceStore = defineStore('dataSource', () => {
   type SourceID = string;
-  const dataSources = ref<Record<SourceID, DataSourceMetadata | null>>({});
+  const dataSources = ref<Record<SourceID, DataSourceMetadata>>({});
 
   const getDataSource = async (sourceId: SourceID) => {
     if (dataSources.value[sourceId]) {
@@ -24,18 +24,17 @@ export const useDataSourceStore = defineStore('dataSource', () => {
   const listDataSources = async () => {
     try {
       const response = await api.get<SourceID[]>('/datasources');
+      const newDataSources = {} as Record<SourceID, DataSourceMetadata>;
       for (const id of response.data) {
-        if (!dataSources.value[id]) {
-          try {
-            const source = await getDataSource(id);
-            dataSources.value[id] = source;
-          } catch (error) {
-            console.error(`Failed to fetch data source ${id}:`, error);
-          }
+        try {
+          const source = await getDataSource(id);
+          newDataSources[id] = source;
+        } catch (error) {
+          console.error(`Failed to fetch data source ${id}:`, error);
         }
       }
+      dataSources.value = newDataSources;
       return Object.entries(dataSources.value)
-        .filter(([_, ds]) => ds !== null)
         .map(([id, ds]) => ({ ...ds, source_id: id })) as (DataSourceMetadata & {
         source_id: SourceID;
       })[];

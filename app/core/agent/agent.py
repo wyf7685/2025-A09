@@ -1,3 +1,6 @@
+# ruff: noqa: PD011
+
+import contextlib
 import functools
 import threading
 from collections.abc import AsyncIterator, Iterator
@@ -6,7 +9,7 @@ from typing import TypedDict, cast
 
 import pandas as pd
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
@@ -17,7 +20,7 @@ from app.core.datasource import DataSource
 from app.log import logger
 from app.utils import escape_tag, format_overview
 
-from .events import BufferedStreamEventReader, StreamEvent
+from .events import BufferedStreamEventReader, StreamEvent, fix_message_content
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
 from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 
@@ -253,6 +256,12 @@ ensemble_eval = evaluate_model_tool(ensemble_id)
    - 指出哪些问题仍未解答以及如何进一步探索
 
 无论用户是否明确要求，在每次分析结束时，主动提供一个"下一步建议"部分，包含3-5个具体、可操作的建议，帮助用户进一步提升分析质量或模型性能。
+格式如下：
+**下一步建议**（只输出如下格式，便于前端提取）：
+1.建议1内容
+2.建议2内容
+3.建议3内容
+4.建议4内容
 
 ## 输出格式要求
 - 分析报告应该结构清晰，包含标题、小节和结论
@@ -336,6 +345,27 @@ class DataAnalyzerAgent:
         )
         self.trained_models = models
         self.saved_models = saved_models
+        self._first_user_message = None  # 存储用户第一次提问的内容
+
+    def get_first_user_message(self) -> str | None:
+        """获取用户第一次提问的内容"""
+        if self._first_user_message is not None:
+            return self._first_user_message
+
+        # 从agent状态中获取消息历史
+        with contextlib.suppress(Exception):
+            for message in self.agent.get_state(self.config).values.get("messages", []):
+                match message:
+                    case HumanMessage(content=content):
+                        self._first_user_message = fix_message_content(content)
+                        return self._first_user_message
+
+        return None
+
+    def set_first_user_message(self, message: str) -> None:
+        """设置用户第一次提问的内容"""
+        if self._first_user_message is None:
+            self._first_user_message = message
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
@@ -348,11 +378,10 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        values = state.values  # noqa: PD011
-        self.agent.update_state(self.config, values)
+        self.agent.update_state(self.config, state.values)
         self.saved_models.update(state.models)
-        self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), values["messages"]))
-        logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(values['messages'])}</>")
+        self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), state.values["messages"]))
+        logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(state.values['messages'])}</>")
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
@@ -361,10 +390,13 @@ class DataAnalyzerAgent:
             models=self.saved_models,
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
-        logger.opt(colors=True).info(f"已保存 agent 状态: <y>{len(state.values['messages'])}</>")  # noqa: PD011
+        logger.opt(colors=True).info(f"已保存 agent 状态: <y>{len(state.values['messages'])}</>")
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
+        # 如果是第一次调用，设置用户消息
+        self.set_first_user_message(user_input)
+
         reader = BufferedStreamEventReader()
 
         for event in self.agent.stream(
@@ -378,6 +410,9 @@ class DataAnalyzerAgent:
 
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
+        # 如果是第一次调用，设置用户消息
+        self.set_first_user_message(user_input)
+
         reader = BufferedStreamEventReader()
 
         async for event in self.agent.astream(

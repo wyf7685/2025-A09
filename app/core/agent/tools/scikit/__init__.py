@@ -324,6 +324,8 @@ def scikit_tools(
             raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
         logger.opt(colors=True).info(f"<g>保存模型</>: 训练结果 ID = <c>{escape_tag(model_id)}</y>")
+
+
         file_path = MODEL_DIR / model_id / "model"
         with contextlib.suppress(Exception):
             file_path = file_path.relative_to(Path.cwd())

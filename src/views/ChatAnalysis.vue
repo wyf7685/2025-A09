@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { useAppStore } from '@/stores/app';
 import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
+import { sessionNameUpdatedKey } from '@/utils/keys';
 
-// const appStore = useAppStore()
+type ChatMessageWithSuggestions = ChatMessage & { suggestions?: string[] }
+
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 
 // 响应式数据
 const inputMessage = ref<string>('')
-const messages = ref<ChatMessage[]>([])
+const messages = ref<ChatMessageWithSuggestions[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
 const loading = ref<boolean>(false);
 
@@ -33,6 +34,37 @@ const addSampleQuestion = (question: string): void => {
   inputMessage.value = question
 }
 
+// 只提取“下一步建议”或“下一步行动建议”区域的建议
+const extractSuggestions = (content: string): string[] => {
+  // 兼容“**下一步建议**”或“**下一步行动建议**”后有冒号、空行，提取后续所有内容直到下一个空行或结尾
+  const match = content.match(/\*\*(下一步建议|下一步行动建议)\*\*[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/)
+  if (!match) return []
+  // 只提取第一个有序列表（1. ...）开始的所有有序条目
+  const lines = match[2].split('\n')
+  const suggestions: string[] = []
+  let inList = false
+  for (const line of lines) {
+    if (/^\d+\.\s+/.test(line)) {
+      inList = true
+      suggestions.push(line.replace(/^\d+\.\s+/, '').trim())
+    } else if (inList && !line.trim()) {
+      // 有序列表后遇到空行则停止
+      break
+    } else if (inList && !/^\d+\.\s+/.test(line)) {
+      // 有序列表中遇到非有序项也停止
+      break
+    }
+  }
+  return suggestions
+}
+
+// 工具函数：去除markdown粗体、冒号和多余空格，只取建议标题部分
+const stripSuggestion = (s: string) => {
+  const clean = s.replace(/\*\*/g, '').trim()
+  const idx = clean.indexOf('：')
+  return idx !== -1 ? clean.slice(0, idx) : clean
+}
+
 const sendMessage = async (): Promise<void> => {
   if (!inputMessage.value.trim()) {
     ElMessage.warning('请输入消息内容')
@@ -45,6 +77,7 @@ const sendMessage = async (): Promise<void> => {
   }
 
   const userMessage = inputMessage.value.trim()
+  const isFirstMessage = messages.value.length === 0 // 检查是否为第一条消息
 
   // 添加用户消息
   messages.value.push({
@@ -68,15 +101,32 @@ const sendMessage = async (): Promise<void> => {
       timestamp: new Date().toISOString(),
       tool_calls: {},
       loading: true,
-    } as AssistantChatMessage & { loading?: boolean })
+      suggestions: [],
+    } as AssistantChatMessage & { loading?: boolean, suggestions?: string[] })
     messages.value.push(assistantMessage)
+
+    const pushText = (content: string) => {
+      if (!assistantMessage.content.length || assistantMessage.content[assistantMessage.content.length - 1].type !== 'text') {
+        assistantMessage.content.push({ type: 'text', content })
+        return content
+      }
+      const lastText = assistantMessage.content[assistantMessage.content.length - 1] as { content: string }
+      lastText.content += content
+      return lastText.content
+    }
 
     // 使用流式API
     await sessionStore.sendStreamChatMessage(
       userMessage,
       (content) => {
-        // LLM 输出
-        assistantMessage.content.push({ type: 'text', content })
+        content = pushText(content)
+
+        // 自动提取建议
+        const suggestions = extractSuggestions(content)
+        if (suggestions.length) {
+          assistantMessage.suggestions = suggestions
+        }
+
         nextTick(() => scrollToBottom())
       },
       (id, name, args) => {
@@ -117,16 +167,19 @@ const sendMessage = async (): Promise<void> => {
         // 完成处理
         console.log('对话完成')
         assistantMessage.loading = false
+
+        // 如果是第一条消息，触发父组件重新加载会话列表（以获取更新的会话名称）
+        if (isFirstMessage) {
+          // 发送自定义事件通知父组件重新加载会话
+          // window.dispatchEvent(new CustomEvent('session-name-updated'))
+          inject(sessionNameUpdatedKey)?.()
+        }
       },
       (error) => {
         // 错误处理
         console.error('对话处理错误:', error)
-        assistantMessage.loading = false
-        assistantMessage.content.push({
-          type: 'text',
-          content: `\n\n处理出错: ${error}`
-        })
-        assistantMessage.loading = true
+        ElMessage.error(`处理消息时出错: ${error}`)
+        pushText(`\n\n处理出错: ${error}`)
         nextTick(() => scrollToBottom())
       }
     )
@@ -234,6 +287,13 @@ onMounted(() => {
             </div>
             <div class="message-time">
               {{ formatTime(message.timestamp) }}
+            </div>
+            <!-- 建议按钮渲染 -->
+            <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
+              <el-button v-for="(suggestion, idx) in message.suggestions" :key="idx" size="small"
+                @click="addSampleQuestion(stripSuggestion(suggestion))" style="margin: 4px 4px 0 0;">
+                {{ stripSuggestion(suggestion) }}
+              </el-button>
             </div>
           </div>
         </template>
@@ -485,5 +545,12 @@ onMounted(() => {
   margin-top: 5px;
   font-style: italic;
   color: #666;
+}
+
+.suggestion-buttons {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

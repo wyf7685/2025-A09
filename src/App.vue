@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, watch, provide, computed } from 'vue'
 import type { SessionListItem } from '@/types'
 import { useSessionStore } from '@/stores/session'
 import { checkHealth as checkHealthApi } from '@/utils/api'
+import { sessionNameUpdatedKey } from '@/utils/keys';
 
 const sessionStore = useSessionStore();
 
 // 响应式数据
 const sidebarCollapsed = ref(false)
 const currentSessionId = ref('')
-const sessions = ref<SessionListItem[]>([])
+const sessions = computed(() => sessionStore.sessions || [])
 const healthStatus = ref({ status: '' })
 
 // 方法
@@ -23,8 +24,7 @@ const switchSession = async (sessionId: string) => {
 
 const loadSessions = async () => {
   try {
-    const response = await sessionStore.listSessions()
-    sessions.value = response || []
+    await sessionStore.listSessions()
   } catch (error) {
     console.error('加载会话失败:', error)
   }
@@ -48,13 +48,15 @@ watch(
   { immediate: true }
 )
 
+provide(sessionNameUpdatedKey, () => { loadSessions() })
+
 // 生命周期
 onMounted(async () => {
   await checkHealth()
   await loadSessions()
 
   // 定期检查健康状态
-  setInterval(checkHealth, 30 * 1000) // 每30秒检查一次
+  setInterval(checkHealth, 3 * 60 * 1000)
 })
 </script>
 
@@ -75,8 +77,9 @@ onMounted(async () => {
         <div style="display: flex; align-items: center; gap: 16px;">
           <!-- 会话选择器 -->
           <el-select v-model="currentSessionId" placeholder="选择会话" style="width: 200px;" @change="switchSession">
-            <el-option v-for="session in sessionStore.sessions" :key="session.id"
-              :label="`会话 ${session.id.slice(0, 8)}...`" :value="session.id" />
+            <el-option v-for="session in sessions" :key="session.id"
+              :label="(session.name && session.name.length > 11 ? session.name.slice(0, 11) + '...' : session.name) || `会话 ${session.id.slice(0, 8)}...`"
+              :value="session.id" />
           </el-select>
 
           <!-- 系统状态 -->

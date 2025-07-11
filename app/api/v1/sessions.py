@@ -3,23 +3,14 @@
 """
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.api.v1.datasources import datasources
+from app.core.schema.session import Session, SessionListItem
 from app.log import logger
-
-
-class Session(BaseModel):
-    id: str
-    dataset_id: str
-    name: str = Field(default="新会话")
-    chat_history: list[dict[str, Any]] = []
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-
 
 # 模拟数据存储，在实际项目中应替换为数据库
 sessions: dict[str, Session] = {}
@@ -68,13 +59,6 @@ async def get_session(session_id: str) -> Session:
     return sessions[session_id]
 
 
-class SessionListItem(BaseModel):
-    id: str
-    name: str
-    created_at: str
-    chat_count: int
-
-
 @router.get("/sessions")
 async def get_sessions() -> list[SessionListItem]:
     """获取所有会话列表"""
@@ -82,7 +66,7 @@ async def get_sessions() -> list[SessionListItem]:
         session_list = [
             SessionListItem(
                 id=session.id,
-                name=f"会话 {session.id[:8]}",
+                name=session.name or f"会话 {session.id[:8]}",
                 created_at=session.created_at,
                 chat_count=len(session.chat_history),
             )

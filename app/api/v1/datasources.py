@@ -2,6 +2,7 @@
 数据源管理接口
 """
 
+import contextlib
 import uuid
 from typing import Any
 
@@ -99,15 +100,15 @@ async def list_datasources() -> list[str]:
     获取数据源列表
     """
     try:
-        client = DremioClient()
-        for ds in await run_sync(client.list_sources)():
-            source_name = ".".join(ds.path)
-            if not any(
-                source.metadata.name == source_name
-                for source in datasources.values()
-                if source.metadata.source_type == "dremio"
-            ):
-                register_datasource(create_dremio_source(ds))
+        with contextlib.suppress(Exception):
+            for ds in await run_sync(DremioClient().list_sources)():
+                source_name = ".".join(ds.path)
+                if not any(
+                    source.metadata.name == source_name
+                    for source in datasources.values()
+                    if source.metadata.source_type == "dremio"
+                ):
+                    register_datasource(create_dremio_source(ds))
         return list(datasources)
     except HTTPException:
         raise

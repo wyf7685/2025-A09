@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import type { Dataset, ChatEntry } from '@/types';
 import { useSessionStore } from '@/stores/session';
+import type { Dataset, ChatEntry, AnalysisResult, Session, SessionListItem } from '@/types';
 
 const sessionStore = useSessionStore();
 
@@ -9,11 +9,15 @@ const sessionStore = useSessionStore();
 const datasets = ref<Dataset[]>([])
 const chatHistory = ref<ChatEntry[]>([])
 const recentActivity = ref<ChatEntry[]>([])
+const sessionList = ref<SessionListItem[]>([])
 
 // 计算属性
-const sessionInfo = computed<string>(() => {
-  const sessionId = sessionStore.currentSession?.id;
-  return sessionId ? `${sessionId.slice(0, 8)}...` : '无'
+const currentSessionId = computed(() => sessionStore.currentSession?.id)
+const currentSessionName = computed(() => {
+  if (!currentSessionId.value) return '无'
+  const session = sessionList.value.find(s => s.id === currentSessionId.value)
+  const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无')
+  return name.length > 11 ? name.slice(0, 11) + '...' : name
 })
 
 const loadData = async (): Promise<void> => {
@@ -23,6 +27,9 @@ const loadData = async (): Promise<void> => {
       chatHistory.value = session.chat_history || []
       recentActivity.value = session.chat_history || []
     }
+    // 加载所有会话
+    const sessionsResponse = await sessionStore.listSessions()
+    sessionList.value = sessionsResponse || []
   } catch (error) {
     console.error('加载数据失败:', error)
   }
@@ -50,7 +57,7 @@ onMounted(() => {
       <el-row :gutter="24" class="stats-row">
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="当前会话" :value="sessionInfo" />
+            <el-statistic title="当前会话" :value="currentSessionName" />
           </div>
         </el-col>
         <el-col :span="6">
