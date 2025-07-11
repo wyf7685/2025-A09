@@ -3,12 +3,27 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from app.core.agent import DataAnalyzerAgent
+from app.core.agent.events import BufferedStreamEventReader, StreamEvent
 from app.core.chain import get_chat_model, get_llm, rate_limiter
 from app.core.datasource import create_csv_source
 from app.log import logger
 from app.utils import escape_tag
 
 load_dotenv()
+
+
+def log_event(event: StreamEvent) -> None:
+    match event.type:
+        case "llm_token":
+            logger.opt(colors=True).info(f"<y>LLM 输出:</>\n{escape_tag(event.content)}")
+        case "tool_call":
+            logger.opt(colors=True).info(
+                f"开始工具调用: <c>{event.id}</>\n{escape_tag(event.name)}({escape_tag(str(event.args))})"
+            )
+        case "tool_result":
+            logger.opt(colors=True).info(f"工具调用结果: <c>{event.id}</>\n{escape_tag(str(event.result))}")
+        case "tool_error":
+            logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
 
 
 def test_agent() -> None:
@@ -23,19 +38,13 @@ def test_agent() -> None:
     agent.load_state(state_file)
 
     while user_input := input(">>> ").strip():
+        reader = BufferedStreamEventReader()
         try:
             for event in agent.stream(user_input):
-                match event.type:
-                    case "llm_token":
-                        logger.opt(colors=True).info(f"<y>LLM 输出:</>\n{escape_tag(event.content)}")
-                    case "tool_call":
-                        logger.opt(colors=True).info(
-                            f"开始工具调用: <c>{event.id}</>\n{escape_tag(event.name)}({escape_tag(str(event.args))})"
-                        )
-                    case "tool_result":
-                        logger.opt(colors=True).info(f"工具调用结果: <c>{event.id}</>\n{escape_tag(str(event.result))}")
-                    case "tool_error":
-                        logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
+                for evt in reader.push(event):
+                    log_event(evt)
+            if evt := reader.flush():
+                log_event(evt)
         except Exception:
             logger.exception("Agent 执行失败")
             continue
