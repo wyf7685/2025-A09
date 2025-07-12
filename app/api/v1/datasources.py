@@ -100,6 +100,39 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
 
 
+class UpdateDataSourceRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+@router.put("/{source_id}", response_model=DataSourceMetadata)
+async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> DataSourceMetadata:
+    """
+    更新数据源信息
+
+    支持修改数据源的名称和描述
+    """
+    try:
+        if source_id not in datasources:
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        source = datasources[source_id]
+
+        # 更新元数据
+        if data.name is not None:
+            source.metadata.name = data.name
+
+        if data.description is not None:
+            source.metadata.description = data.description
+
+        return source.metadata
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("更新数据源失败")
+        raise HTTPException(status_code=500, detail=f"Failed to update datasource: {e}") from e
+
+
 list_ds_sem = asyncio.Semaphore(1)
 
 
@@ -203,6 +236,27 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Datasource not found")
 
     try:
+        source = datasources[source_id]
+
+        # 如果是Dremio数据源，尝试从Dremio中删除
+        if source.metadata.source_type.startswith("dremio"):
+            try:
+                # 这里需要根据实际情况实现Dremio数据源的删除
+                # 目前Dremio REST API没有直接删除数据源的接口，但可以根据实际情况处理
+                # 例如，如果是上传的文件，可以从external目录中删除
+                if hasattr(source.metadata, "id") and source.metadata.id.startswith("external."):
+                    # 从路径中提取文件名
+                    file_name = source.metadata.id.split(".", 1)[1] if "." in source.metadata.id else ""
+                    if file_name:
+                        # 删除external目录中的文件
+                        client = get_dremio_client()
+                        external_dir = client.external_dir
+                        if external_dir and (fp := external_dir / file_name).exists():
+                            fp.unlink()
+                            logger.info(f"已从Dremio external目录删除文件: {file_name}")
+            except Exception as e:
+                logger.warning(f"从Dremio中删除数据源失败: {e}")
+
         # 从数据源字典中删除
         datasources.pop(source_id)
 

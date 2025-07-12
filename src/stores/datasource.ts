@@ -81,6 +81,17 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
+  const updateDataSource = async (sourceId: SourceID, updates: { name?: string; description?: string }) => {
+    try {
+      const response = await api.put<DataSourceMetadata>(`/datasources/${sourceId}`, updates);
+      dataSources.value[sourceId] = response.data;
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to update data source ${sourceId}:`, error);
+      throw error;
+    }
+  };
+
   const getSourceData = async (sourceId: SourceID, skip: number = 0, limit: number = 100) => {
     try {
       const response = await api.get<{
@@ -124,6 +135,7 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     listDataSources,
     registerDremioSource,
     uploadCsvSource,
+    updateDataSource,
     getSourceData,
     deleteDataSource,
     getSourceId,
