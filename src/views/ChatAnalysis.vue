@@ -54,7 +54,8 @@ const createNewSession = async (sourceId: string) => {
 const switchSession = async (sessionId: string) => {
   await sessionStore.setCurrentSessionById(sessionId)
   messages.value = []
-  ElMessage.success(`切换到会话 ${sessionId.slice(0, 8)}...`)
+  const session = sessions.value.find(s => s.id === sessionId)
+  ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`)
 }
 
 // --- Method to add quick prompts ---
@@ -118,6 +119,12 @@ const sendMessage = async (): Promise<void> => {
   isProcessingChat.value = true
   const userMessage = userInput.value.trim()
   const isFirstMessage = messages.value.length === 0 // 检查是否为第一条消息
+
+  // 如果是第一条消息，立即更新会话名称
+  if (isFirstMessage && currentSessionId.value) {
+    const sessionName = userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage
+    sessionStore.updateSessionName(currentSessionId.value, sessionName)
+  }
 
   messages.value.push({
     type: 'user',
@@ -201,14 +208,19 @@ const sendMessage = async (): Promise<void> => {
         console.log('对话完成')
         assistantMessage.loading = false
 
-        // 如果是第一条消息，触发父组件重新加载会话列表（以获取更新的会话名称）
-        if (isFirstMessage) {
-          // 重新加载会话
-          nextTick(() => {
-            sessionStore.listSessions()
-            scrollToBottom()
+        // 如果是第一条消息，从后端获取最终的会话名称（可能经过后端清理）
+        if (isFirstMessage && currentSessionId.value) {
+          // 异步获取最新的会话信息，但不阻塞UI
+          sessionStore.getSession(currentSessionId.value).then(session => {
+            if (session.name && session.name !== sessions.value.find(s => s.id === currentSessionId.value)?.name) {
+              sessionStore.updateSessionName(currentSessionId.value, session.name as string)
+            }
+          }).catch(error => {
+            console.error('获取会话信息失败:', error)
           })
         }
+        
+        nextTick(() => scrollToBottom())
       },
       (error) => {
         // 错误处理
@@ -265,7 +277,7 @@ onMounted(async () => {
           <el-icon class="session-icon">
             <ChatDotRound />
           </el-icon>
-          <span class="session-name">会话 {{ session.id.slice(0, 8) }}</span>
+          <span class="session-name">{{ session.name }}</span>
           <div class="session-actions">
             <el-button type="text" :icon="Edit" size="small" class="action-btn" />
             <el-button type="text" :icon="Delete" size="small" class="action-btn" />
@@ -279,7 +291,7 @@ onMounted(async () => {
       <div class="chat-panel-header">
         <el-button v-if="!isSidebarOpen" @click="isSidebarOpen = true" :icon="DArrowRight" text class="toggle-btn" />
         <span class="session-title" v-if="currentSessionId">
-          会话: {{ currentSessionId.slice(0, 8) }}...
+          {{ sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...` }}
         </span>
       </div>
 
