@@ -5,7 +5,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
-import { Plus, ChatDotRound, Delete, Edit, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound, Delete, Edit, DArrowLeft, DArrowRight, DocumentCopy, WarningFilled, DataAnalysis, PieChart, Search, Document } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router';
 
 type ChatMessageWithSuggestions = ChatMessage & { suggestions?: string[] }
@@ -45,6 +45,8 @@ const createNewSession = async (sourceId: string) => {
     const session = await sessionStore.createSession(sourceId)
     sessionStore.setCurrentSession(session)
     messages.value = [] // Clear messages for new session
+    selectDatasetDialogVisible.value = false // Close the dialog
+    ElMessage.success('新对话创建成功')
   } catch (error) {
     console.error('创建新会话失败:', error)
     ElMessage.error('创建新会话失败')
@@ -240,6 +242,7 @@ const sendMessage = async (): Promise<void> => {
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await loadSessions()
+  await dataSourceStore.listDataSources() // 加载数据源
   // if (!currentSessionId.value && appStore.sessions.length > 0) {
   //   appStore.setCurrentSession(appStore.sessions[0].id)
   // } else if (appStore.sessions.length === 0) {
@@ -281,11 +284,11 @@ onMounted(async () => {
         <span class="session-title" v-if="currentSessionId">
           会话: {{ currentSessionId.slice(0, 8) }}...
         </span>
-      </div>
-
-      <div class="chat-messages" ref="messagesContainer">
+      </div>      <div class="chat-messages" ref="messagesContainer">
         <div v-if="!messages.length" class="empty-state">
-          <el-empty description="开始您的数据分析对话吧！" />
+          <div class="empty-message">
+            <p>选择一个数据集，开始您的数据分析对话</p>
+          </div>
         </div>
         <div v-for="(message, index) in messages" :key="index">
           <AssistantMessage v-if="message.type === 'assistant'" :message="message" />
@@ -312,39 +315,68 @@ onMounted(async () => {
             class="send-button">
             发送
           </el-button>
-        </div>
-        <div class="quick-actions">
+        </div>        <div class="quick-actions">
           <div class="dataset-indicator">
             <template v-if="currentDataset">
-              当前数据集: <strong>{{ currentDataset.id.slice(0, 12) }}...</strong> ( <el-link type="primary"
-                @click="goToAddData" :underline="false">更换</el-link> )
+              <el-icon><DocumentCopy /></el-icon>
+              当前数据集: <strong>{{ currentDataset.name || currentDataset.id.slice(0, 12) + '...' }}</strong>
+              <el-link type="primary" @click="goToAddData" :underline="false">
+                <el-icon><Edit /></el-icon>
+                更换
+              </el-link>
             </template>
             <template v-else>
-              <el-link type="warning" @click="goToAddData" :underline="false">请先选择一个数据集进行分析</el-link>
+              <el-icon><WarningFilled /></el-icon>
+              <el-link type="warning" @click="goToAddData" :underline="false">
+                请先选择一个数据集进行分析
+              </el-link>
             </template>
           </div>
-          <el-tag class="action-tag" @click="addSampleQuestion('分析数据的基本统计信息')">基本统计</el-tag>
-          <el-tag class="action-tag" @click="addSampleQuestion('绘制各列的相关性热力图')">相关性热力图</el-tag>
-          <el-tag class="action-tag" @click="addSampleQuestion('检测并可视化异常值')">异常值检测</el-tag>
+          <el-divider direction="vertical" style="margin: 0 8px;" />
+          <div class="quick-prompt-tags">
+            <el-tag class="action-tag" @click="addSampleQuestion('分析数据的基本统计信息')">
+              <el-icon><DataAnalysis /></el-icon>
+              基本统计
+            </el-tag>
+            <el-tag class="action-tag" @click="addSampleQuestion('绘制各列的相关性热力图')">
+              <el-icon><PieChart /></el-icon>
+              相关性分析
+            </el-tag>
+            <el-tag class="action-tag" @click="addSampleQuestion('检测并可视化异常值')">
+              <el-icon><Search /></el-icon>
+              异常检测
+            </el-tag>
+            <el-tag class="action-tag" @click="addSampleQuestion('生成数据质量报告')">
+              <el-icon><Document /></el-icon>
+              质量报告
+            </el-tag>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Select Dataset Dialog -->
-    <el-dialog :v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
-      <el-empty v-if="!dataSourceStore.dataSources.length">
-        <template #description>暂无数据集，请先上传或选择一个数据集。
-          <el-button type="primary" @click="goToAddData">前往添加数据集</el-button>
-        </template>
+    </div>    <!-- Select Dataset Dialog -->
+    <el-dialog v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
+      <el-empty v-if="!Object.keys(dataSourceStore.dataSources).length" description="暂无数据集，请先上传或选择一个数据集。">
+        <el-button type="primary" @click="goToAddData">前往添加数据集</el-button>
       </el-empty>
-      <el-list v-else>
-        <el-list-item v-for="[sourceId, metadata] in Object.entries(dataSourceStore.dataSources)" :key="sourceId"
-          @click="sessionStore.createSession(sourceId)">
-          {{ metadata.name }}
-        </el-list-item>
-      </el-list>
+      <div v-else class="dataset-list">
+        <div 
+          v-for="[sourceId, metadata] in Object.entries(dataSourceStore.dataSources)" 
+          :key="sourceId"
+          class="dataset-item"
+          @click="createNewSession(sourceId)"
+        >
+          <div class="dataset-info">
+            <el-icon><DocumentCopy /></el-icon>
+            <div class="dataset-details">
+              <div class="dataset-name">{{ metadata.name }}</div>
+              <div class="dataset-description">{{ metadata.description || '暂无描述' }}</div>
+            </div>
+          </div>
+          <el-button type="primary" size="small">选择</el-button>
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="selectDatasetDialogVisible = false">关闭</el-button>
+        <el-button @click="selectDatasetDialogVisible = false">取消</el-button>
       </template>
     </el-dialog>
 
@@ -355,19 +387,20 @@ onMounted(async () => {
 .chat-analysis-container {
   display: flex;
   height: calc(100vh - 80px);
-  background-color: #f7f7f8;
+  background-color: #ffffff;
 }
 
 // --- Sidebar Styles ---
 .session-sidebar {
   width: 260px;
   flex-shrink: 0;
-  background-color: #202123;
-  color: white;
+  background-color: #ffffff;
+  color: #374151;
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease;
   overflow: hidden;
+  border-right: 1px solid #e5e7eb;
 
   &.is-closed {
     width: 0;
@@ -378,29 +411,43 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px;
+  padding: 12px 16px;
   flex-shrink: 0;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .new-chat-btn {
   flex-grow: 1;
   margin-right: 8px;
   background-color: transparent;
-  border: 1px solid #4a4a4f;
-  color: white;
+  border: 1px solid #d1d5db;
+  color: #374151;
   justify-content: flex-start;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 8px 12px;
+  transition: all 0.2s ease;
 
   &:hover {
-    background-color: #2a2b2e;
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  &:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
   }
 }
 
 .toggle-btn {
-  color: #a9a9a9;
+  color: #6b7280;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 
   &:hover {
-    color: white;
-    background-color: #2a2b2e;
+    color: #374151;
+    background-color: #f3f4f6;
   }
 }
 
@@ -408,15 +455,24 @@ onMounted(async () => {
 .session-list {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 0 8px;
+  padding: 8px 12px;
 
   &::-webkit-scrollbar {
     width: 6px;
   }
 
-  &::-webkit-scrollbar-thumb {
-    background: #43464a;
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
     border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+    
+    &:hover {
+      background: #a8a8a8;
+    }
   }
 }
 
@@ -427,36 +483,48 @@ onMounted(async () => {
   margin-bottom: 4px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
-
+  color: #374151;
+  font-weight: 500;
 
   .session-icon {
     margin-right: 12px;
+    color: #6b7280;
+    font-size: 16px;
   }
 
   .session-name {
     flex-grow: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 14px;
   }
 
   .session-actions {
     display: none;
     align-items: center;
+    gap: 4px;
 
     .action-btn {
-      color: #b0b0b5;
+      color: #9ca3af;
       padding: 4px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
 
       &:hover {
-        color: white;
+        color: #374151;
+        background-color: #f3f4f6;
       }
     }
   }
 
   &:hover {
-    background-color: #2a2b2e;
+    background-color: #f9fafb;
+    
+    .session-icon {
+      color: #374151;
+    }
 
     .session-actions {
       display: flex;
@@ -464,7 +532,16 @@ onMounted(async () => {
   }
 
   &.active {
-    background-color: #343541;
+    background-color: #f3f4f6;
+    color: #10b981;
+    
+    .session-icon {
+      color: #10b981;
+    }
+    
+    &:hover {
+      background-color: #f3f4f6;
+    }
   }
 }
 
@@ -475,23 +552,37 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* Important for flex-grow to work correctly */
   height: 100%;
   position: relative;
-  background: white;
+  background: #ffffff;
 }
 
 .chat-panel-header {
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  height: 49px; // Match sidebar header height
+  padding: 0 16px;
+  height: 60px;
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
+  background: #ffffff;
+
+  .toggle-btn {
+    color: #6b7280;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: #374151;
+      background-color: #f3f4f6;
+    }
+  }
 
   .session-title {
-    font-weight: 500;
-    margin-left: 8px;
+    font-weight: 600;
+    margin-left: 12px;
+    color: #1f2937;
+    font-size: 16px;
   }
 }
 
@@ -502,32 +593,69 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  background: #ffffff;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+    
+    &:hover {
+      background: #a8a8a8;
+    }
+  }
 }
 
 .user-message-container {
   display: flex;
   justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .user-message {
-  background: #3b82f6;
-  color: white;
-  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #1f2937;
+  padding: 12px 16px;
   border-radius: 18px 18px 6px 18px;
-  max-width: 75%;
+  max-width: 70%;
   word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
 }
-
 
 .empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
+  color: #6b7280;
+  
+  .empty-message {
+    text-align: center;
+    max-width: 400px;
+    padding: 40px 20px;
+    
+    p {
+      font-size: 16px;
+      color: #6b7280;
+      margin: 0;
+      line-height: 1.6;
+    }
+  }
 }
 
 .chat-input-area {
-  padding: 16px 24px;
+  padding: 16px 24px 24px;
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
 }
@@ -535,68 +663,247 @@ onMounted(async () => {
 .chat-input-wrapper {
   display: flex;
   gap: 12px;
-  align-items: center;
-  background-color: #f4f4f5;
+  align-items: flex-end;
+  background-color: #ffffff;
   border-radius: 12px;
-  padding: 8px;
-  border: 1px solid #e5e7eb;
-  transition: box-shadow 0.2s;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
   &:focus-within {
-    border-color: #c0c4cc;
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
   }
 }
 
 .el-textarea {
-  :deep(textarea) {
+  flex: 1;
+  
+  :deep(.el-textarea__inner) {
     box-shadow: none !important;
     background: transparent;
     border: none;
-    padding-right: 10px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+    
+    &:focus {
+      outline: none;
+    }
+    
+    &::placeholder {
+      color: #9ca3af;
+    }
   }
 }
 
 .send-button {
   flex-shrink: 0;
+  background: #10b981;
+  border-color: #10b981;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #059669;
+    border-color: #059669;
+    transform: translateY(-1px);
+  }
+  
+  &:disabled {
+    background: #d1d5db;
+    border-color: #d1d5db;
+    transform: none;
+  }
 }
 
 .quick-actions {
   display: flex;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 16px;
+  margin-top: 16px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
 }
 
 .dataset-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
-  color: #606266;
-  margin-right: 8px;
+  color: #6b7280;
+  padding: 4px 8px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  
+  .el-icon {
+    font-size: 14px;
+  }
+  
+  strong {
+    color: #374151;
+  }
+  
+  .el-link {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    font-size: 12px;
+    
+    .el-icon {
+      font-size: 12px;
+    }
+  }
+}
+
+.quick-prompt-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .action-tag {
   cursor: pointer;
-  transition: all 0.2s;
-  background-color: #f0f2f5;
-  color: #606266;
-  border-color: #e5e7eb;
+  transition: all 0.2s ease;
+  background-color: #ffffff;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .el-icon {
+    font-size: 12px;
+  }
 
   &:hover {
-    background-color: #e4e7ed;
-    color: #303133;
-    border-color: #dcdfe6;
+    background-color: #f3f4f6;
+    color: #374151;
+    border-color: #d1d5db;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.suggestion-buttons {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  
+  .el-button {
+    border-radius: 20px;
+    font-size: 12px;
+    padding: 4px 12px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #6b7280;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      background: #e5e7eb;
+      color: #374151;
+      border-color: #d1d5db;
+      transform: translateY(-1px);
+    }
+  }
+}
+
+/* 数据集选择对话框样式 */
+.dataset-list {
+  max-height: 400px;
+  overflow-y: auto;
+  
+  .dataset-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      background-color: #f9fafb;
+      border-color: #10b981;
+    }
+    
+    .dataset-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      
+      .el-icon {
+        color: #6b7280;
+        font-size: 18px;
+      }
+      
+      .dataset-details {
+        .dataset-name {
+          font-weight: 500;
+          color: #1f2937;
+          margin-bottom: 4px;
+        }
+        
+        .dataset-description {
+          font-size: 12px;
+          color: #6b7280;
+        }
+      }
+    }
   }
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .message-content {
+  .chat-analysis-container {
+    flex-direction: column;
+  }
+  
+  .session-sidebar {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    
+    &.is-closed {
+      max-height: 0;
+      overflow: hidden;
+    }
+  }
+  
+  .user-message {
     max-width: 85%;
   }
 
-  .chat-input {
-    padding: 16px;
+  .chat-input-area {
+    padding: 12px 16px 16px;
+  }
+  
+  .quick-actions {
+    justify-content: flex-start;
+  }
+  
+  .dataset-indicator {
+    margin-right: 8px;
+    margin-bottom: 8px;
   }
 }
 
@@ -611,13 +918,6 @@ onMounted(async () => {
 .image-caption {
   margin-top: 5px;
   font-style: italic;
-  color: #666;
-}
-
-.suggestion-buttons {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  color: #6b7280;
 }
 </style>
