@@ -2,7 +2,7 @@
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
-import type { AssistantChatMessage, ChatMessage } from '@/types';
+import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
 import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
@@ -44,7 +44,7 @@ const createNewSession = async (sourceId: string) => {
   try {
     const session = await sessionStore.createSession(sourceId)
     sessionStore.setCurrentSession(session)
-    messages.value = [] // Clear messages for new session
+    await refreshChatHistory()
     selectDatasetDialogVisible.value = false // Close the dialog
     ElMessage.success('新对话创建成功')
   } catch (error) {
@@ -53,10 +53,33 @@ const createNewSession = async (sourceId: string) => {
   }
 }
 
+const mergeTextPart = (parts: AssistantChatMessageContent[]): AssistantChatMessageContent[] => {
+  const merged: AssistantChatMessageContent[] = [];
+  for (const part of parts) {
+    if (part.type !== 'text' || !merged.length || merged[merged.length - 1].type !== 'text') {
+      merged.push(part);
+    } else {
+      const lastText = merged[merged.length - 1] as AssistantChatMessageText;
+      lastText.content += part.content;
+    }
+  }
+  return merged;
+}
+
+const refreshChatHistory = async () => {
+  if (!currentSessionId.value) return
+  const session = await sessionStore.getSession(currentSessionId.value)
+  messages.value = session.chat_history.map((entry) => [entry.user_message, {
+    ...entry.assistant_response,
+    content: mergeTextPart(entry.assistant_response.content),
+  }]).flat() || []
+  scrollToBottom()
+}
+
 const switchSession = async (sessionId: string) => {
   await sessionStore.setCurrentSessionById(sessionId)
-  messages.value = []
   const session = sessions.value.find(s => s.id === sessionId)
+  await refreshChatHistory()
   ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`)
 }
 
