@@ -91,6 +91,16 @@ def create_df_source(
     return InMemoryDataSource(df, metadata)
 
 
+def deserialize_data_source(type: str, data: dict[str, Any]) -> DataSource:  # noqa: A002
+    match type:
+        case "csv":
+            return CSVDataSource.deserialize(data)
+        case "dremio":
+            return DremioDataSource.deserialize(data)
+        case _:
+            raise ValueError(f"Unsupported data source type: {type}")
+
+
 __all__ = [
     "DataSource",
     "DataSourceMetadata",

@@ -55,16 +55,6 @@ class DataSource(abc.ABC):
         """
         raise NotImplementedError("子类必须实现_load方法")
 
-    def get_metadata(self) -> DataSourceMetadata:
-        """获取数据源元数据"""
-        return self.metadata
-
-    def update_metadata(self, **kwargs: Any) -> None:
-        """更新数据源元数据"""
-        for key, value in kwargs.items():
-            if hasattr(self.metadata, key):
-                setattr(self.metadata, key, value)
-
     def get_preview(self, n_rows: int = 5, force_reload: bool = False) -> pd.DataFrame:
         """
         获取数据源的预览数据
@@ -156,3 +146,38 @@ class DataSource(abc.ABC):
     @abc.abstractmethod
     def copy[S](self: S) -> S:
         raise NotImplementedError("子类必须实现copy方法")
+
+    @property
+    @abc.abstractmethod
+    def unique_id(self) -> str:
+        """
+        获取数据源的唯一标识符
+
+        Returns:
+            str: 数据源的唯一ID
+        """
+        raise NotImplementedError("子类必须实现unique_id方法")
+
+    @abc.abstractmethod
+    def serialize(self) -> tuple[str, dict[str, Any]]:
+        """
+        序列化数据源为字典
+
+        Returns:
+            tuple[str, dict[str, Any]]: 序列化后的数据源信息
+        """
+        raise NotImplementedError("子类必须实现serialize方法")
+
+    @classmethod
+    @abc.abstractmethod
+    def deserialize[S](cls: type[S], data: dict[str, Any]) -> S:
+        """
+        从字典反序列化数据源
+
+        Args:
+            data: 数据源的字典表示
+
+        Returns:
+            DataSource: 反序列化后的数据源对象
+        """
+        raise NotImplementedError("子类必须实现deserialize方法")

@@ -1,4 +1,4 @@
-from typing import override
+from typing import Any, override
 
 import pandas as pd
 
@@ -28,16 +28,30 @@ class InMemoryDataSource(DataSource):
             )
 
         super().__init__(metadata)
-        self._full_data: pd.DataFrame = df  # pyright: ignore[reportIncompatibleVariableOverride]
+        self._data = df
 
     @override
     def _load(self, n_rows: int | None = None) -> pd.DataFrame:
         """从内存加载数据"""
         if n_rows is None:
-            return self._full_data
-        return self._full_data.head(n_rows)
+            return self._data
+        return self._data.head(n_rows)
 
     @override
     def copy(self) -> "InMemoryDataSource":
         """创建内存数据源的副本"""
-        return InMemoryDataSource(df=self._full_data.copy(), metadata=self.metadata.copy())
+        return InMemoryDataSource(df=self._data.copy(), metadata=self.metadata.copy())
+
+    @property
+    @override
+    def unique_id(self) -> str:
+        return f"memory:{id(self._full_data)}"
+
+    @override
+    def serialize(self) -> tuple[str, dict[str, Any]]:
+        raise NotImplementedError("InMemoryDataSource does not support serialization")
+
+    @classmethod
+    @override
+    def deserialize(cls, data: dict[str, Any]) -> "InMemoryDataSource":
+        raise NotImplementedError("InMemoryDataSource does not support deserialization")

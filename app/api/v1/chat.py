@@ -7,17 +7,17 @@ import re
 from collections.abc import AsyncIterator
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
-from app.api.v1.datasources import datasources
-from app.api.v1.sessions import sessions
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
+from app.services.datasource import datasource_service
+from app.services.session import session_service
 
 router = APIRouter()
 
@@ -57,7 +57,7 @@ class ChatRequest(BaseModel):
     @classmethod
     def validate_session_id(cls, v: str) -> str:
         """验证会话ID是否存在"""
-        if not v or v not in sessions:
+        if not v or not session_service.session_exists(v):
             raise ValueError("Session not found")
         return v
 
@@ -73,16 +73,16 @@ class ChatRequest(BaseModel):
 async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     """生成聊天流响应"""
     try:
-        session_id = request.session_id
-        dataset_id = request.dataset_id
+        session = session_service.get_session(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-        # 获取当前数据集
-        if not dataset_id:
-            dataset_id = sessions[session_id].dataset_id
+        session_id = session.id
 
         # 获取或创建 Agent
-        if session_id not in agents:
-            agents[session_id] = DataAnalyzerAgent(datasources[dataset_id].copy(), get_llm(), get_chat_model())
+        if session.id not in agents:
+            data_source = datasource_service.get_source(session.dataset_id).copy()
+            agents[session_id] = DataAnalyzerAgent(data_source, get_llm(), get_chat_model())
             agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
 
         agent = agents[session_id]
@@ -105,13 +105,14 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         agent.save_state(STATE_DIR / f"{session_id}.json")
 
         # 如果这是第一条消息，设置会话名称
-        if len(sessions[session_id].chat_history) == 0:
+        if len(session.chat_history) == 0:
             session_name = clean_message_for_session_name(request.message)
-            sessions[session_id].name = session_name
+            session.name = session_name
             logger.info(f"设置会话 {session_id} 名称为: {session_name}")
 
         # 记录对话历史
-        sessions[session_id].chat_history.append(chat_entry)
+        session.chat_history.append(chat_entry)
+        session_service.save_session(session)
 
         # 发送完成信号
         yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()})

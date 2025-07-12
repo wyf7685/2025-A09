@@ -50,7 +50,7 @@ class DremioClient:
             external_dir: 外部数据源本地目录路径
             external_name: 外部数据源名称
         """
-        self.base_url: str = base_url or str(settings.DREMIO_BASE_URL)
+        self.base_url: str = base_url or str(settings.DREMIO_BASE_URL).rstrip("/")
         self.username: str = username or settings.DREMIO_USERNAME
         self.password: str = password or settings.DREMIO_PASSWORD.get_secret_value()
         self.external_dir = external_dir or settings.DREMIO_EXTERNAL_DIR
@@ -343,7 +343,7 @@ class DremioClient:
             if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
                 sources.append(DremioSource(id=child["id"], path=path, type=ds_type))
             elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
-                sources.extend(self.query_source_children("/".join(path)))
+                sources.extend(self.query_source_children(path))
 
         return sources
 

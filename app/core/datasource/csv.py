@@ -2,8 +2,15 @@ from pathlib import Path
 from typing import Any, override
 
 import pandas as pd
+from pydantic import BaseModel
 
 from .source import DataSource, DataSourceMetadata
+
+
+class CSVDataSourceModel(BaseModel):
+    file_path: str
+    metadata: DataSourceMetadata
+    pandas_kwargs: dict[str, Any] = {}
 
 
 class CSVDataSource(DataSource):
@@ -42,3 +49,24 @@ class CSVDataSource(DataSource):
     @override
     def copy(self) -> "CSVDataSource":
         return CSVDataSource(file_path=self.file_path, metadata=self.metadata.copy(), **self.pandas_kwargs)
+
+    @property
+    @override
+    def unique_id(self) -> str:
+        return f"csv:{self.file_path.stem}"
+
+    @override
+    def serialize(self) -> tuple[str, dict[str, Any]]:
+        """序列化 CSV 数据源"""
+        return "csv", CSVDataSourceModel(
+            file_path=str(self.file_path),
+            metadata=self.metadata,
+            pandas_kwargs=self.pandas_kwargs,
+        ).model_dump(mode="json")
+
+    @classmethod
+    @override
+    def deserialize(cls, data: dict[str, Any]) -> "CSVDataSource":
+        """反序列化 CSV 数据源"""
+        model = CSVDataSourceModel.model_validate(data)
+        return cls(file_path=Path(model.file_path), metadata=model.metadata, **model.pandas_kwargs)

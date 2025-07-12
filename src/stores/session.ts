@@ -76,7 +76,6 @@ export const useSessionStore = defineStore('session', () => {
         body: JSON.stringify({
           message: message,
           session_id: currentSession.value!.id,
-          dataset_id: currentSession.value!.dataset_id,
         }),
       });
 

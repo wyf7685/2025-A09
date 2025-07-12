@@ -4,40 +4,25 @@
 
 import asyncio
 import contextlib
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
-from app.core.datasource import DataSource, create_dremio_source
-from app.core.datasource.dremio import DremioDataSource
+from app.core.datasource import create_dremio_source
 from app.core.datasource.source import DataSourceMetadata
 from app.core.dremio import DremioSource, get_dremio_client
 from app.log import logger
+from app.services.datasource import datasource_service
+from app.services.session import session_service
 from app.utils import run_sync
 
 # 创建路由
 router = APIRouter(prefix="/datasources")
 
 # 数据源存储
-datasources: dict[str, DataSource] = {}
-
-
-def register_datasource(source: DataSource) -> str:
-    """
-    注册数据源
-
-    Args:
-        source: 数据源对象
-
-    Returns:
-        str: 数据源ID
-    """
-    source_id = str(uuid.uuid4())
-    datasources[source_id] = source
-    return source_id
+# datasources: dict[str, DataSource] = {}
 
 
 class RegisterDataSourceRequest(BaseModel):
@@ -47,25 +32,6 @@ class RegisterDataSourceRequest(BaseModel):
 class RegisterDataSourceResponse(BaseModel):
     source_id: str
     metadata: DataSourceMetadata
-
-
-@router.post("/register", response_model=RegisterDataSourceResponse)
-async def register_dremio_source(data: RegisterDataSourceRequest) -> dict[str, Any]:
-    """
-    注册数据源API
-
-    接收数据源信息，创建DataSource实例并注册
-    """
-    try:
-        # 创建数据源
-        source = create_dremio_source(data.source)
-        source_id = register_datasource(source)
-        return {"source_id": source_id, "metadata": source.metadata}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("注册数据源失败")
-        raise HTTPException(status_code=500, detail=f"Failed to register datasource: {e}") from e
 
 
 @router.post("/upload", response_model=RegisterDataSourceResponse)
@@ -91,7 +57,7 @@ async def upload_file(
         call = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
         dremio_source = await run_sync(call)(file_path)
         source = create_dremio_source(dremio_source, source_name)
-        source_id = register_datasource(source)
+        source_id = datasource_service.register(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
         raise
@@ -113,10 +79,10 @@ async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> Da
     支持修改数据源的名称和描述
     """
     try:
-        if source_id not in datasources:
+        if not datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
 
-        source = datasources[source_id]
+        source = datasource_service.get_source(source_id)
 
         # 更新元数据
         if data.name is not None:
@@ -125,6 +91,7 @@ async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> Da
         if data.description is not None:
             source.metadata.description = data.description
 
+        datasource_service.save_source(source_id, source)
         return source.metadata
     except HTTPException:
         raise
@@ -144,15 +111,8 @@ async def list_datasources() -> list[str]:
     try:
         with contextlib.suppress(Exception):
             async with list_ds_sem:
-                dss = await run_sync(get_dremio_client().list_sources)()
-            for ds in dss:
-                if not any(
-                    source.source.path == ds.path
-                    for source in datasources.values()
-                    if isinstance(source, DremioDataSource)
-                ):
-                    register_datasource(create_dremio_source(ds))
-        return list(datasources)
+                await run_sync(datasource_service.sync_from_dremio)()
+        return list(datasource_service.sources)
     except HTTPException:
         raise
     except Exception as e:
@@ -166,9 +126,9 @@ async def get_datasource(source_id: str) -> DataSourceMetadata:
     获取数据源详情
     """
     try:
-        if source_id not in datasources:
+        if not datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
-        return datasources[source_id].metadata
+        return datasource_service.get_source(source_id).metadata
 
     except HTTPException:
         raise
@@ -196,10 +156,10 @@ async def get_datasource_data(
     支持分页获取数据
     """
     try:
-        if source_id not in datasources:
+        if not datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
 
-        source = datasources[source_id]
+        source = datasource_service.get_source(source_id)
 
         # 获取数据
         data = source.get_data(limit + skip)
@@ -232,11 +192,11 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
     """
     删除数据源
     """
-    if source_id not in datasources:
+    if not datasource_service.source_exists(source_id):
         raise HTTPException(status_code=404, detail="Datasource not found")
 
     try:
-        source = datasources[source_id]
+        source = datasource_service.get_source(source_id)
 
         # 如果是Dremio数据源，尝试从Dremio中删除
         if source.metadata.source_type.startswith("dremio"):
@@ -258,14 +218,12 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
                 logger.warning(f"从Dremio中删除数据源失败: {e}")
 
         # 从数据源字典中删除
-        datasources.pop(source_id)
+        datasource_service.delete_source(source_id)
 
         # 删除关联的会话
-        from .sessions import sessions
-
-        for session_id, session in list(sessions.items()):
+        for session in list(session_service.sessions.values()):
             if session.dataset_id == source_id:
-                del sessions[session_id]
+                session_service.delete_session(session.id)
 
         return {"success": True, "message": f"Datasource {source_id} deleted"}
 
