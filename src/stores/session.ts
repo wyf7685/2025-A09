@@ -21,6 +21,21 @@ export const useSessionStore = defineStore('session', () => {
 
   const setCurrentSessionById = async (sessionId: string) => {
     setCurrentSession(await getSession(sessionId));
+    await listSessions();
+  };
+
+  // 更新会话名称
+  const updateSessionName = async (sessionId: string, name: string | null) => {
+    // 更新本地会话列表中的会话名称
+    const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
+    if (sessionIndex !== -1) {
+      sessions.value[sessionIndex].name = name;
+    }
+
+    // 如果当前会话是目标会话，也更新当前会话
+    if (currentSession.value?.id === sessionId) {
+      currentSession.value.name = name;
+    }
   };
 
   const listSessions = async () => {
@@ -39,6 +54,7 @@ export const useSessionStore = defineStore('session', () => {
     if (currentSession.value?.id === sessionId) {
       currentSession.value = null;
     }
+    await listSessions();
   };
 
   // 流式对话分析
@@ -133,5 +149,6 @@ export const useSessionStore = defineStore('session', () => {
     getSession,
     deleteSession,
     sendStreamChatMessage,
+    updateSessionName,
   };
 });
