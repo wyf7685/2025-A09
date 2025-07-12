@@ -3,6 +3,7 @@ import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
 import { ElMessage } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
+import ProcessFlow, { type FlowStep } from '@/components/ProcessFlow.vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
 import { Plus, ChatDotRound, Delete, Edit, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
@@ -22,6 +23,10 @@ const messages = ref<ChatMessageWithSuggestions[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
 const isProcessingChat = ref<boolean>(false)
 const selectDatasetDialogVisible = ref<boolean>(false)
+const isFlowPanelOpen = ref<boolean>(true) // 控制流程图面板的显示/隐藏
+
+// 流程图相关状态
+const flowSteps = ref<FlowStep[]>([])
 
 const sessions = computed(() => sessionStore.sessions)
 const currentSessionId = computed(() => sessionStore.currentSession?.id)
@@ -45,6 +50,8 @@ const createNewSession = async (sourceId: string) => {
     const session = await sessionStore.createSession(sourceId)
     sessionStore.setCurrentSession(session)
     messages.value = [] // Clear messages for new session
+    selectDatasetDialogVisible.value = false // Close dialog
+    ElMessage.success('新会话创建成功')
   } catch (error) {
     console.error('创建新会话失败:', error)
     ElMessage.error('创建新会话失败')
@@ -66,6 +73,28 @@ const addSampleQuestion = (question: string) => {
 // --- Method to navigate to data management ---
 const goToAddData = () => {
   router.push('/data-management')
+}
+
+// 流程图管理方法
+const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
+  const newStep: FlowStep = {
+    ...step,
+    id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date()
+  }
+  flowSteps.value.push(newStep)
+  return newStep.id
+}
+
+const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
+  const stepIndex = flowSteps.value.findIndex(step => step.id === stepId)
+  if (stepIndex !== -1) {
+    flowSteps.value[stepIndex] = { ...flowSteps.value[stepIndex], ...updates }
+  }
+}
+
+const clearFlowSteps = () => {
+  flowSteps.value = []
 }
 
 // --- Existing Chat Logic Methods ---
@@ -126,6 +155,20 @@ const sendMessage = async (): Promise<void> => {
     sessionStore.updateSessionName(currentSessionId.value, sessionName)
   }
 
+  // 添加用户输入步骤到流程图
+  const userStepId = addFlowStep({
+    title: '用户输入',
+    description: userMessage,
+    status: 'completed'
+  })
+
+  // 添加AI处理步骤到流程图
+  const aiStepId = addFlowStep({
+    title: 'AI分析处理',
+    description: '正在分析用户请求...',
+    status: 'running'
+  })
+
   messages.value.push({
     type: 'user',
     content: userMessage,
@@ -178,6 +221,18 @@ const sendMessage = async (): Promise<void> => {
           status: 'running'
         }
         assistantMessage.content.push({ type: 'tool_call', id })
+        
+        // 添加工具执行步骤到流程图
+        const toolStepId = addFlowStep({
+          title: `执行工具: ${name}`,
+          description: `正在执行 ${name} 工具...`,
+          status: 'running',
+          details: [JSON.stringify(args, null, 2)]
+        })
+        
+        // 将工具步骤ID存储到工具调用中，以便后续更新
+        assistantMessage.tool_calls[id].flowStepId = toolStepId
+        
         nextTick(() => scrollToBottom())
       },
       (id, result, artifact) => {
@@ -188,6 +243,15 @@ const sendMessage = async (): Promise<void> => {
           toolCall.status = 'success'
           toolCall.result = result
           toolCall.artifact = artifact || null
+          
+          // 更新流程图中的工具执行步骤
+          if (toolCall.flowStepId) {
+            updateFlowStep(toolCall.flowStepId, {
+              status: 'completed',
+              description: `工具执行完成`,
+              details: [JSON.stringify(result, null, 2)]
+            })
+          }
         }
 
         nextTick(() => scrollToBottom())
@@ -199,6 +263,15 @@ const sendMessage = async (): Promise<void> => {
         if (toolCall) {
           toolCall.status = 'error'
           toolCall.error = error
+          
+          // 更新流程图中的工具执行步骤
+          if (toolCall.flowStepId) {
+            updateFlowStep(toolCall.flowStepId, {
+              status: 'error',
+              description: `工具执行失败`,
+              error: error
+            })
+          }
         }
 
         nextTick(() => scrollToBottom())
@@ -207,6 +280,14 @@ const sendMessage = async (): Promise<void> => {
         // 完成处理
         console.log('对话完成')
         assistantMessage.loading = false
+
+        // 更新AI处理步骤为完成状态
+        if (aiStepId) {
+          updateFlowStep(aiStepId, {
+            status: 'completed',
+            description: 'AI分析处理完成'
+          })
+        }
 
         // 如果是第一条消息，从后端获取最终的会话名称（可能经过后端清理）
         if (isFirstMessage && currentSessionId.value) {
@@ -252,6 +333,12 @@ const sendMessage = async (): Promise<void> => {
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await loadSessions()
+  // 加载数据源
+  try {
+    await dataSourceStore.listDataSources()
+  } catch (error) {
+    console.error('加载数据源失败:', error)
+  }
   // if (!currentSessionId.value && appStore.sessions.length > 0) {
   //   appStore.setCurrentSession(appStore.sessions[0].id)
   // } else if (appStore.sessions.length === 0) {
@@ -293,6 +380,17 @@ onMounted(async () => {
         <span class="session-title" v-if="currentSessionId">
           {{ sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...` }}
         </span>
+        <div class="header-actions">
+          <el-button 
+            @click="isFlowPanelOpen = !isFlowPanelOpen" 
+            :icon="isFlowPanelOpen ? DArrowRight : DArrowLeft" 
+            text 
+            size="small"
+            class="flow-toggle-btn"
+          >
+            {{ isFlowPanelOpen ? '隐藏流程' : '显示流程' }}
+          </el-button>
+        </div>
       </div>
 
       <div class="chat-messages" ref="messagesContainer">
@@ -344,14 +442,14 @@ onMounted(async () => {
 
     <!-- Select Dataset Dialog -->
     <el-dialog :v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
-      <el-empty v-if="!dataSourceStore.dataSources.length">
+      <el-empty v-if="Object.keys(dataSourceStore.dataSources).length === 0">
         <template #description>暂无数据集，请先上传或选择一个数据集。
           <el-button type="primary" @click="goToAddData">前往添加数据集</el-button>
         </template>
       </el-empty>
       <el-list v-else>
         <el-list-item v-for="[sourceId, metadata] in Object.entries(dataSourceStore.dataSources)" :key="sourceId"
-          @click="sessionStore.createSession(sourceId)">
+          @click="createNewSession(sourceId)">
           {{ metadata.name }}
         </el-list-item>
       </el-list>
@@ -359,6 +457,14 @@ onMounted(async () => {
         <el-button @click="selectDatasetDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- Process Flow Panel -->
+    <div v-if="isFlowPanelOpen" class="flow-panel">
+      <ProcessFlow 
+        :steps="flowSteps" 
+        @clear="clearFlowSteps"
+      />
+    </div>
 
   </div>
 </template>
@@ -496,6 +602,7 @@ onMounted(async () => {
 .chat-panel-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 8px;
   height: 49px; // Match sidebar header height
   border-bottom: 1px solid #e5e7eb;
@@ -504,6 +611,21 @@ onMounted(async () => {
   .session-title {
     font-weight: 500;
     margin-left: 8px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flow-toggle-btn {
+    color: #6b7280;
+    
+    &:hover {
+      color: #374151;
+      background-color: #f3f4f6;
+    }
   }
 }
 
@@ -542,6 +664,16 @@ onMounted(async () => {
   padding: 16px 24px;
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
+}
+
+// --- Flow Panel Styles ---
+.flow-panel {
+  width: 320px;
+  flex-shrink: 0;
+  background: white;
+  border-left: 1px solid #e5e7eb;
+  transition: width 0.3s ease;
+  overflow: hidden;
 }
 
 .chat-input-wrapper {
