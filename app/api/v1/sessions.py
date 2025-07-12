@@ -3,70 +3,90 @@
 """
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from app.api.v1.datasources import datasources
+from app.core.schema.session import Session, SessionListItem
+from app.log import logger
 
 # 模拟数据存储，在实际项目中应替换为数据库
-sessions: dict[str, dict[str, Any]] = {}
+sessions: dict[str, Session] = {}
 
 router = APIRouter()
 
 
-def get_or_create_session(session_id: str | None = None) -> str:
-    """获取或创建会话"""
-    if session_id is None:
-        session_id = str(uuid.uuid4())
-
-    if session_id not in sessions:
-        sessions[session_id] = {
-            "id": session_id,
-            "created_at": datetime.now().isoformat(),
-            "current_dataset": None,
-            "chat_history": [],
-            "analysis_results": [],
-        }
-
-    return session_id
+class CreateSessionRequest(BaseModel):
+    dataset_id: str
 
 
 @router.post("/sessions")
-async def create_session() -> dict[str, Any]:
-    """创建新会话"""
-    session_id = get_or_create_session()
-    return {"session_id": session_id, "session": sessions[session_id]}
+async def create_session(request: CreateSessionRequest) -> Session:
+    """
+    创建新会话
+
+    必须指定一个数据集用于分析
+    """
+    try:
+        # 检查数据集是否存在
+
+        if request.dataset_id not in datasources:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+
+        # 创建新会话
+        session_id = str(uuid.uuid4())
+
+        # 设置会话的数据集
+        sessions[session_id] = Session(id=session_id, dataset_id=request.dataset_id)
+
+        return sessions[session_id]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("创建会话失败")
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {e}") from e
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str) -> dict[str, Any]:
+async def get_session(session_id: str) -> Session:
     """获取会话信息"""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    return {"session": sessions[session_id]}
+    return sessions[session_id]
 
 
 @router.get("/sessions")
-async def get_sessions() -> list[dict[str, Any]]:
+async def get_sessions() -> list[SessionListItem]:
     """获取所有会话列表"""
     try:
-        session_list = []
-        for session_id, session_data in sessions.items():
-            session_list.append(
-                {
-                    "id": session_id,
-                    "name": session_data.get("name") or f"会话 {session_id[:8]}",
-                    "created_at": session_data["created_at"],
-                    "dataset_loaded": session_data["current_dataset"] is not None,
-                    "chat_count": len(session_data["chat_history"]),
-                    "analysis_count": len(session_data["analysis_results"]),
-                }
+        session_list = [
+            SessionListItem(
+                id=session.id,
+                name=session.name or f"会话 {session.id[:8]}",
+                created_at=session.created_at,
+                chat_count=len(session.chat_history),
             )
+            for session in sessions.values()
+        ]
 
         # 按创建时间倒序排列
-        session_list.sort(key=lambda x: x["created_at"], reverse=True)
+        session_list.sort(key=lambda x: x.created_at, reverse=True)
 
         return session_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {e}") from e
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str) -> dict[str, Any]:
+    """删除会话"""
+    if session_id not in sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # 删除会话
+    del sessions[session_id]
+    return {"success": True, "message": f"Session {session_id} deleted"}

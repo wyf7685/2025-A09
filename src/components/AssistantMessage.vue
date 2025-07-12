@@ -1,29 +1,13 @@
 <script setup lang="ts">
 import type { AssistantChatMessage } from '@/types';
-import { formatMessage } from '@/utils/tools';
-import { reactive, ref, watch } from 'vue';
 import AssistantMessageText from '@/components/AssistantMessageText.vue'
+import { ref } from 'vue';
 
-const props = defineProps<{
+defineProps<{
   message: AssistantChatMessage & { loading?: boolean };
 }>();
 
-// // 为每个文本部分创建一个格式化后的内容
-// const formattedContents = ref<Record<number, string>>({});
-
-// // 监听消息内容变化，异步格式化每个文本部分
-// watch(() => props.message.content, async (newContent) => {
-//   if (!newContent) return;
-
-//   for (let i = 0; i < newContent.length; i++) {
-//     const part = newContent[i];
-//     if (part.type === 'text') {
-//       formattedContents.value[i] = await formatMessage(part.content);
-//     }
-//   }
-// }, { immediate: true });
-
-const parseJsonString = (value: any) => {
+const parsePossibleJsonString = (value: any) => {
   try {
     const obj = JSON.parse(value);
     return JSON.stringify(obj, null, 2);
@@ -31,6 +15,44 @@ const parseJsonString = (value: any) => {
     return value;
   }
 }
+
+// 用于管理工具调用的折叠状态
+interface ExpandState {
+  args: boolean;
+  result: boolean;
+  artifact: boolean;
+  error: boolean;
+}
+const expandedTools = ref<Record<string, boolean>>({});
+const expandedSections = ref<Record<string, ExpandState>>({});
+
+// 切换工具调用的展开/折叠状态
+const toggleToolExpand = (id: string) => {
+  expandedTools.value[id] = !expandedTools.value[id];
+};
+
+// 切换工具调用内部各部分的展开/折叠状态
+const toggleSectionExpand = (toolId: string, section: keyof ExpandState) => {
+  if (!expandedSections.value[toolId]) {
+    expandedSections.value[toolId] = {
+      args: false,
+      result: false,
+      artifact: false,
+      error: false,
+    };
+  }
+  expandedSections.value[toolId][section] = !expandedSections.value[toolId][section];
+};
+
+// 检查工具调用是否展开
+const isToolExpanded = (id: string) => {
+  return !!expandedTools.value[id];
+};
+
+// 检查工具调用内部部分是否展开
+const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
+  return expandedSections.value[toolId]?.[section] || false;
+};
 </script>
 
 <template>
@@ -41,7 +63,7 @@ const parseJsonString = (value: any) => {
     <div v-else-if="part.type === 'tool_call'">
       <div v-if="message.tool_calls && part.id in message.tool_calls"
         :class="['tool-call', message.tool_calls[part.id].status]">
-        <div class="tool-header">
+        <div class="tool-header" @click="toggleToolExpand(part.id)">
           <el-icon v-if="message.tool_calls[part.id].status === 'running'">
             <Loading class="rotating" />
           </el-icon>
@@ -51,35 +73,74 @@ const parseJsonString = (value: any) => {
           <el-icon v-else-if="message.tool_calls[part.id].status === 'error'" style="color: #F56C6C">
             <WarningFilled />
           </el-icon>
-          <strong>{{ message.tool_calls[part.id].name }}</strong>
-        </div>
-
-        <div class="tool-args">
-          <pre>{{ parseJsonString(message.tool_calls[part.id].args) }}</pre>
-        </div>
-
-        <div v-if="message.tool_calls[part.id].result" class="tool-result">
-          <div class="result-label">结果:</div>
-          <pre>{{ parseJsonString(message.tool_calls[part.id].result) }}</pre>
-        </div>
-
-        <div v-if="message.tool_calls[part.id].artifact" class="tool-artifact">
-          <div v-if="message.tool_calls[part.id].artifact?.type === 'image'" class="image-artifact">
-            <img :src="`data:image/png;base64,${message.tool_calls[part.id].artifact?.base64_data}`"
-              alt="Generated chart" style="max-width: 100%;" />
-            <div v-if="message.tool_calls[part.id].artifact?.caption" class="image-caption">
-              {{ message.tool_calls[part.id].artifact?.caption }}
-            </div>
+          {{ message.tool_calls[part.id].name }}
+          <div class="expand-icon">
+            <el-icon>
+              <ArrowDown v-if="isToolExpanded(part.id)" />
+              <ArrowRight v-else />
+            </el-icon>
           </div>
         </div>
 
-        <div v-if="message.tool_calls[part.id].error" class="tool-error">
-          <div class="error-label">错误:</div>
-          <pre>{{ message.tool_calls[part.id].error }}</pre>
+        <div v-if="isToolExpanded(part.id)" class="tool-content">
+          <div class="tool-section-header" @click="toggleSectionExpand(part.id, 'args')">
+            <span>参数</span>
+            <el-icon>
+              <ArrowDown v-if="isSectionExpanded(part.id, 'args')" />
+              <ArrowRight v-else />
+            </el-icon>
+          </div>
+          <div v-if="isSectionExpanded(part.id, 'args')" class="tool-args">
+            <pre>{{ parsePossibleJsonString(message.tool_calls[part.id].args) }}</pre>
+          </div>
+
+          <div v-if="message.tool_calls[part.id].result">
+            <div class="tool-section-header" @click="toggleSectionExpand(part.id, 'result')">
+              <span>结果</span>
+              <el-icon>
+                <ArrowDown v-if="isSectionExpanded(part.id, 'result')" />
+                <ArrowRight v-else />
+              </el-icon>
+            </div>
+            <div v-if="isSectionExpanded(part.id, 'result')" class="tool-result">
+              <pre>{{ parsePossibleJsonString(message.tool_calls[part.id].result) }}</pre>
+            </div>
+          </div>
+
+          <div v-if="message.tool_calls[part.id].artifact" class="tool-artifact">
+            <div class="tool-section-header" @click="toggleSectionExpand(part.id, 'artifact')">
+              <span>生成内容</span>
+              <el-icon>
+                <ArrowDown v-if="isSectionExpanded(part.id, 'artifact')" />
+                <ArrowRight v-else />
+              </el-icon>
+            </div>
+            <div v-if="isSectionExpanded(part.id, 'artifact')">
+              <div v-if="message.tool_calls[part.id].artifact?.type === 'image'" class="image-artifact">
+                <img :src="`data:image/png;base64,${message.tool_calls[part.id].artifact?.base64_data}`"
+                  alt="Generated chart" style="max-width: 100%;" />
+                <div v-if="message.tool_calls[part.id].artifact?.caption" class="image-caption">
+                  {{ message.tool_calls[part.id].artifact?.caption }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="message.tool_calls[part.id].error">
+            <div class="tool-section-header" @click="toggleSectionExpand(part.id, 'error')">
+              <span>错误</span>
+              <el-icon>
+                <ArrowDown v-if="isSectionExpanded(part.id, 'error')" />
+                <ArrowRight v-else />
+              </el-icon>
+            </div>
+            <div v-if="isSectionExpanded(part.id, 'error')" class="tool-error">
+              <pre>{{ message.tool_calls[part.id].error }}</pre>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
   </div>
   <div v-if="message.loading">
     <el-icon>
@@ -96,8 +157,7 @@ const parseJsonString = (value: any) => {
 }
 
 .assistant-text {
-  line-height: 1.6;
-  white-space: pre-wrap;
+  line-height: 1.3;
 }
 
 /* 覆盖一些 GitHub 样式以更好地适应聊天界面 */
@@ -151,10 +211,34 @@ const parseJsonString = (value: any) => {
   align-items: center;
   font-weight: bold;
   margin-bottom: 5px;
+  cursor: pointer;
+  user-select: none;
 
   .el-icon {
     margin-right: 5px;
   }
+}
+
+.expand-icon {
+  margin-left: auto;
+}
+
+.tool-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  margin: 5px 0;
+  cursor: pointer;
+  user-select: none;
+  font-weight: bold;
+}
+
+.tool-content {
+  margin-top: 8px;
+  margin-left: 8px;
 }
 
 .tool-args {
@@ -175,12 +259,6 @@ const parseJsonString = (value: any) => {
   padding: 8px;
   border-radius: 4px;
 
-  .result-label {
-    font-weight: bold;
-    color: #67C23A;
-    margin-bottom: 5px;
-  }
-
   pre {
     margin: 0;
     white-space: pre-wrap;
@@ -192,12 +270,6 @@ const parseJsonString = (value: any) => {
   background: #fef0f0;
   padding: 8px;
   border-radius: 4px;
-
-  .error-label {
-    font-weight: bold;
-    color: #F56C6C;
-    margin-bottom: 5px;
-  }
 
   pre {
     margin: 0;
@@ -222,7 +294,7 @@ const parseJsonString = (value: any) => {
 }
 
 .tool-artifact {
-  margin-top: 10px;
+  margin-top: 5px;
 }
 
 .image-artifact {

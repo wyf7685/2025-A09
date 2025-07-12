@@ -4,63 +4,59 @@ Dremio 数据源接口
 
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
-from app.api.v1.sessions import get_or_create_session, sessions
-from app.api.v1.uploads import datasets
-from app.core.dremio import DremioClient
+from app.api.v1.datasources import register_datasource
+from app.core.datasource import create_dremio_source
+from app.core.dremio import DremioClient, DremioSource
 from app.log import logger
 
 router = APIRouter(prefix="/dremio")
 
 
 @router.get("/sources")
-async def get_dremio_sources() -> dict[str, list[dict[str, str]]]:
+async def get_dremio_sources() -> list[DremioSource]:
     """获取 Dremio 数据源列表"""
     try:
-        # client = DremioClient()
-        # 模拟数据源列表，实际可能需要查询 catalog
-        sources = [
-            {"name": "sample_data", "type": "csv", "description": "示例数据"},
-            {"name": "postgres_db", "type": "database", "description": "PostgreSQL数据库"},
-        ]
-        return {"sources": sources}
+        return DremioClient().list_sources()
     except Exception as e:
         logger.exception("获取 Dremio 数据源失败")
         raise HTTPException(status_code=500, detail=f"Failed to get Dremio sources: {e}") from e
 
 
+class LoadDremioDataRequest(BaseModel):
+    source: DremioSource
+    fetch_all: bool = False
+
+
 @router.post("/load")
-async def load_dremio_data(request_data: dict[str, Any] = Body()) -> dict[str, Any]:
+async def load_dremio_data(request: LoadDremioDataRequest) -> dict[str, Any]:
     """从 Dremio 加载数据"""
     try:
-        source_name = request_data.get("source_name")
-        session_id = request_data.get("session_id")
-        fetch_all = request_data.get("fetch_all", False)
+        # 创建DataSource对象
+        source = create_dremio_source(request.source)
 
-        if not source_name:
-            raise HTTPException(status_code=400, detail="Source name is required")
+        # 注册数据源
+        source_id = register_datasource(source)
 
-        session_id = get_or_create_session(session_id)
-
-        client = DremioClient()
-        df = client.read_source(source_name, fetch_all=fetch_all)
-
-        # 存储数据集
-        dataset_id = f"{session_id}_dremio_{source_name}"
-        datasets[dataset_id] = df
-        sessions[session_id]["current_dataset"] = dataset_id
+        # 获取预览数据
+        preview = source.get_preview(5)
 
         # 数据概览
         overview = {
-            "shape": df.shape,
-            "columns": df.columns.tolist(),
-            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
-            "preview": df.head().to_dict(orient="records"),
-            "source": source_name,
+            "shape": [source.metadata.row_count or 0, source.metadata.column_count or 0],
+            "columns": source.metadata.columns or [],
+            "dtypes": source.metadata.dtypes or {},
+            "preview": preview.to_dict(orient="records"),
+            "source": request.source,
         }
 
-        return {"success": True, "session_id": session_id, "dataset_id": dataset_id, "overview": overview}
+        return {
+            "success": True,
+            "dataset_id": source_id,
+            "overview": overview,
+        }
 
     except HTTPException:
         raise

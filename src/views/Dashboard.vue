@@ -1,59 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useAppStore } from '@/stores/app'
-import type { Dataset, ChatEntry, AnalysisResult, Session } from '@/types';
+import { computed, onMounted } from 'vue'
+import { useSessionStore } from '@/stores/session';
+import { useDataSourceStore } from '@/stores/datasource';
 
-const appStore = useAppStore()
-
-// 响应式数据
-const currentDataset = ref<Dataset | null>(null)
-const datasets = ref<Dataset[]>([])
-const chatHistory = ref<ChatEntry[]>([])
-const analysisResults = ref<AnalysisResult[]>([])
-const recentActivity = ref<ChatEntry[]>([])
-const sessions = ref<Session[]>([])
+const sessionStore = useSessionStore();
+const dataSourceStore = useDataSourceStore();
 
 // 计算属性
-const currentSessionId = computed(() => appStore.currentSessionId)
+const currentSessionId = computed(() => sessionStore.currentSession?.id)
 const currentSessionName = computed(() => {
-  const session = sessions.value.find(s => s.id === currentSessionId.value)
+  if (!currentSessionId.value) return '无'
+  const session = sessionStore.sessions.find(s => s.id === currentSessionId.value)
   const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无')
   return name.length > 11 ? name.slice(0, 11) + '...' : name
 })
-
-// 方法
-const formatDate = (timestamp: string | undefined): string => {
-  if (!timestamp) return '未知'
-  const date = new Date(timestamp)
-  return date.toLocaleString()
-}
-
-const loadData = async (): Promise<void> => {
-  try {
-    const session = appStore.currentSession
-    if (session) {
-      chatHistory.value = session.chat_history || []
-      analysisResults.value = session.analysis_results || []
-      recentActivity.value = session.chat_history || []
-
-      if (session.current_dataset) {
-        // 获取数据集信息
-        const datasetsResponse = await appStore.getDatasets()
-        datasets.value = datasetsResponse || []
-        currentDataset.value = datasets.value.find(d => d.id === session.current_dataset) || null
-      }
-    }
-    // 新增：加载所有会话
-    const sessionsResponse = await appStore.getSessions()
-    sessions.value = sessionsResponse || []
-  } catch (error) {
-    console.error('加载数据失败:', error)
-  }
-}
+const dataSourceCount = computed(() => Object.keys(dataSourceStore.dataSources).length)
+const chatHistoryLength = computed(() => sessionStore.currentSession?.chat_history.length || 0)
 
 // 生命周期
 onMounted(() => {
-  loadData()
+  sessionStore.listSessions().catch(error => {
+    console.error('加载会话列表失败:', error)
+  })
 })
 </script>
 
@@ -78,17 +46,12 @@ onMounted(() => {
         </el-col>
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="已上传数据集" :value="datasets.length" />
+            <el-statistic title="已上传数据集" :value="dataSourceCount" />
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-item">
-            <el-statistic title="分析会话" :value="chatHistory.length" />
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="stat-item">
-            <el-statistic title="生成报告" :value="analysisResults.length" />
+            <el-statistic title="分析会话" :value="chatHistoryLength" />
           </div>
         </el-col>
       </el-row>
@@ -98,24 +61,13 @@ onMounted(() => {
     <div class="analysis-card quick-actions-card">
       <h3>快速开始</h3>
       <p class="subtitle">选择一个操作开始您的数据分析之旅</p>
-      <el-row :gutter="20" class="actions-row">
-        <el-col :span="6">
-          <div class="quick-action-card upload-card" @click="$router.push('/data-upload')">
-            <div class="action-icon upload-icon">
-              <el-icon>
-                <Upload />
-              </el-icon>
-            </div>
-            <h4>上传数据</h4>
-            <p>支持 CSV、Excel 文件</p>
-          </div>
-        </el-col>
+      <el-row :gutter="21" class="actions-row">
 
-        <el-col :span="6">
+        <el-col :span="7">
           <div class="quick-action-card sources-card" @click="$router.push('/data-sources')">
             <div class="action-icon sources-icon">
               <el-icon>
-                <Database />
+                <DataBoard />
               </el-icon>
             </div>
             <h4>连接数据源</h4>
@@ -123,7 +75,7 @@ onMounted(() => {
           </div>
         </el-col>
 
-        <el-col :span="6">
+        <el-col :span="7">
           <div class="quick-action-card chat-card" @click="$router.push('/chat-analysis')">
             <div class="action-icon chat-icon">
               <el-icon>
@@ -135,57 +87,19 @@ onMounted(() => {
           </div>
         </el-col>
 
-        <el-col :span="6">
-          <div class="quick-action-card analysis-card-action" @click="$router.push('/auto-analysis')">
-            <div class="action-icon analysis-icon">
+        <el-col :span="7">
+          <div class="quick-action-card upload-card" @click="$router.push('/models')">
+            <div class="action-icon upload-icon">
               <el-icon>
-                <DataAnalysis />
+                <ChatDotRound />
               </el-icon>
             </div>
-            <h4>自动分析</h4>
-            <p>生成完整分析报告</p>
+            <h4>模型管理</h4>
+            <p>管理您训练的机器学习模型</p>
           </div>
         </el-col>
+
       </el-row>
-    </div>
-
-    <!-- 当前数据集概览 -->
-    <div class="analysis-card dataset-card" v-if="currentDataset">
-      <h3>当前数据集</h3>
-      <div class="dataset-overview">
-        <el-descriptions :column="3" border>
-          <el-descriptions-item label="数据集名称">
-            {{ currentDataset.name || '未命名' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="数据行数">
-            {{ currentDataset.overview?.shape ? currentDataset.overview?.shape[0] : 0 }}
-          </el-descriptions-item>
-          <el-descriptions-item label="数据列数">
-            {{ currentDataset.overview?.shape ? currentDataset.overview?.shape[1] : 0 }}
-          </el-descriptions-item>
-          <el-descriptions-item label="上传时间">
-            {{ formatDate(currentDataset?.created_at) }}
-          </el-descriptions-item>
-        </el-descriptions>
-      </div>
-    </div>
-
-    <!-- 最近活动 -->
-    <div class="analysis-card recent-activity-card" v-if="recentActivity.length > 0">
-      <h3>最近活动</h3>
-      <div class="activity-list">
-        <div v-for="activity in recentActivity.slice(0, 5)" :key="activity.timestamp" class="activity-item">
-          <div class="activity-icon">
-            <el-icon>
-              <ChatDotRound />
-            </el-icon>
-          </div>
-          <div class="activity-content">
-            <p class="activity-title">{{ activity.user_message }}</p>
-            <span class="activity-time">{{ formatDate(activity.timestamp) }}</span>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>

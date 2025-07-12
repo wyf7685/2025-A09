@@ -15,17 +15,6 @@ from app.log import logger
 router = APIRouter()
 
 
-class CreateModelRequest(BaseModel):
-    name: str
-    type: str
-    description: str | None = ""
-    config: dict[str, Any] = {}
-
-
-class UpdateModelRequest(BaseModel):
-    status: str
-
-
 @router.get("/models")
 async def get_trained_models(session_id: str) -> dict[str, dict[str, Any]]:
     """获取已训练的模型列表"""
@@ -40,6 +29,13 @@ async def get_trained_models(session_id: str) -> dict[str, dict[str, Any]]:
     except Exception as e:
         logger.exception("获取模型列表失败")
         raise HTTPException(status_code=500, detail=f"Failed to get models: {e}") from e
+
+
+class CreateModelRequest(BaseModel):
+    name: str
+    type: str
+    description: str | None = ""
+    config: dict[str, Any] = {}
 
 
 @router.post("/models")
@@ -73,6 +69,10 @@ async def create_model(request: CreateModelRequest) -> dict[str, Any]:
     except Exception as e:
         logger.exception("创建模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to create model: {e}") from e
+
+
+class UpdateModelRequest(BaseModel):
+    status: str
 
 
 @router.put("/models/{model_id}")

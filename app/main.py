@@ -29,7 +29,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # Vue 开发服务器默认端口
         "http://localhost:8000",
-        "http://localhost:5000",
     ],
     allow_credentials=True,
     allow_methods=["*"],

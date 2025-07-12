@@ -9,14 +9,14 @@ from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
+from app.api.v1.datasources import datasources
 from app.api.v1.sessions import sessions
-from app.api.v1.uploads import datasets
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
-from app.core.datasource import PandasDataSource
+from app.core.schema.chat import ChatEntry, UserChatMessage
 from app.log import logger
 
 router = APIRouter()
@@ -53,82 +53,65 @@ class ChatRequest(BaseModel):
     message: str
     dataset_id: str | None = None
 
+    @field_validator("session_id", mode="after")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        """验证会话ID是否存在"""
+        if not v or v not in sessions:
+            raise ValueError("Session not found")
+        return v
+
+    @field_validator("message", mode="after")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        """验证消息内容是否为空"""
+        if not v or not v.strip():
+            raise ValueError("Message is required")
+        return v.strip()
+
 
 async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     """生成聊天流响应"""
     try:
         session_id = request.session_id
-        user_message = request.message.strip()
         dataset_id = request.dataset_id
-
-        # 基本参数检查
-        if not session_id or session_id not in sessions:
-            yield json.dumps({"error": "Session not found"})
-            return
-
-        if not user_message:
-            yield json.dumps({"error": "Message is required"})
-            return
 
         # 获取当前数据集
         if not dataset_id:
-            dataset_id = sessions[session_id]["current_dataset"]
-
-        if not dataset_id or dataset_id not in datasets:
-            yield json.dumps({"error": "No dataset available"})
-            return
-
-        df = datasets[dataset_id]
+            dataset_id = sessions[session_id].dataset_id
 
         # 获取或创建 Agent
         if session_id not in agents:
-            agents[session_id] = DataAnalyzerAgent(PandasDataSource(df), get_llm(), get_chat_model())
+            agents[session_id] = DataAnalyzerAgent(datasources[dataset_id].copy(), get_llm(), get_chat_model())
             agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
 
         agent = agents[session_id]
 
-        # 在获取 agent 后，检查消息历史
-        if not agent.get_first_user_message():
-            # 自动补充一条系统欢迎消息或数据集概览
-            agent.stream("请对当前数据集进行基本描述")  # 或自定义一句欢迎/引导语
-
-        # 开始时间
-        start_time = datetime.now().isoformat()
-
         # 初始化响应变量
-        full_response = ""
+        chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
         # 流式输出
-        async for event in agent.astream(user_message):
-            match event.type:
-                case "llm_token":
-                    full_response += event.content
-                    yield json.dumps({"type": "message", "content": event.content}) + "\n"
-                case "tool_call" | "tool_result" | "tool_error":
-                    try:
-                        msg = event.model_dump_json() + "\n"
-                    except Exception:
-                        logger.exception("转换事件为 JSON 失败")
-                    else:
-                        yield msg
+        async for event in agent.astream(request.message):
+            try:
+                msg = event.model_dump_json() + "\n"
+            except Exception:
+                logger.exception("转换事件为 JSON 失败")
+            else:
+                yield msg
+
+            chat_entry.push_stream_event(event)
 
         # 保存状态
         agent.save_state(STATE_DIR / f"{session_id}.json")
 
         # 如果这是第一条消息，设置会话名称
-        if len(sessions[session_id]["chat_history"]) == 0:
-            session_name = clean_message_for_session_name(user_message)
-            sessions[session_id]["name"] = session_name
+        if len(sessions[session_id].chat_history) == 0:
+            session_name = clean_message_for_session_name(request.message)
+            sessions[session_id].name = session_name
             logger.info(f"设置会话 {session_id} 名称为: {session_name}")
 
         # 记录对话历史
-        chat_entry = {
-            "timestamp": start_time,
-            "user_message": user_message,
-            "ai_response": full_response,
-        }
-
-        sessions[session_id]["chat_history"].append(chat_entry)
+        sessions[session_id].chat_history.append(chat_entry)
 
         # 发送完成信号
         yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()})

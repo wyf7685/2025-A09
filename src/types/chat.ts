@@ -2,7 +2,6 @@
  * 聊天条目
  */
 export interface ChatEntry {
-  id: string;
   timestamp: string;
   user_message: UserChatMessage;
   assistant_response: AssistantChatMessage;

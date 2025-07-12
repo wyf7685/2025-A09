@@ -4,8 +4,10 @@ import os
 import shutil
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Any
 
 import pandas as pd
 import requests
@@ -13,54 +15,17 @@ import requests
 from app.log import logger
 
 
-class TemporaryDataSource:
-    """
-    临时数据源，用于在 Dremio 中创建和删除临时数据源
-    """
+@dataclass
+class DremioSource:
+    id: str
+    path: list[str]
+    type: str
 
-    def __init__(
-        self,
-        client: "DremioClient",
-        type_: Literal["csv", "database"],
-        source_name: list[str],
-    ) -> None:
-        self.client = client
-        self.type_ = type_
-        self.source_name = source_name
 
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
-        if self.type_ == "csv":
-            (self.client.external_dir / self.source_name[1]).unlink(missing_ok=True)
-            return
-
-        url = f"{self.client.base_url}/api/v3/catalog/{self.source_name[0]}"
-        response = requests.delete(url, headers=self.client.get_auth_header())
-        response.raise_for_status()
-
-    def read(self, limit: int | None = None, *, fetch_all: bool = False) -> pd.DataFrame:
-        """
-        读取临时数据源的数据
-
-        Args:
-            limit: 返回的行数限制
-            fetch_all: 是否获取全部数据
-
-        Returns:
-            pandas.DataFrame: 数据源数据
-        """
-        return self.client.read_source(self.source_name, limit, fetch_all=fetch_all)
-
-    def shape(self) -> tuple[int, int]:
-        """
-        获取临时数据源的形状（行数和列数）
-
-        Returns:
-            tuple[int, int]: (行数, 列数)
-        """
-        return self.client.shape(self.source_name)
+@dataclass
+class DremioContainer:
+    id: str
+    path: list[str]
 
 
 class DremioClient:
@@ -84,7 +49,6 @@ class DremioClient:
             external_dir: 外部数据源本地目录路径
             external_name: 外部数据源名称
         """
-        # fmt: off
         self.base_url = base_url or os.environ.get("DREMIO_BASE_URL", "http://localhost:9047")
         self.username = username or os.environ.get("DREMIO_USERNAME")
         self.password = password or os.environ.get("DREMIO_PASSWORD")
@@ -209,10 +173,10 @@ class DremioClient:
             dict[str, Any]: 查询结果
         """
         job_id = self.create_query_job(sql_query)
-        logger.info(f"查询提交成功，Job ID: {job_id}")
+        logger.opt(colors=True).info(f"查询提交成功，Job ID: <c>{job_id}</>")
 
         self.wait_for_job_completion(job_id)
-        logger.success("查询完成")
+        logger.opt(colors=True).success(f"查询完成: <c>{job_id}</>")
 
         return self.get_job_result(job_id)
 
@@ -235,7 +199,7 @@ class DremioClient:
             return ".".join(f'"{part}"' for part in source_name)
         return f'"{source_name}"'
 
-    def add_data_source_csv(self, file: Path) -> list[str]:
+    def add_data_source_csv(self, file: Path) -> DremioSource:
         """
         添加 CSV 数据源到 Dremio 外部目录
 
@@ -276,7 +240,24 @@ class DremioClient:
         )
         response.raise_for_status()
 
-        return [self.external_name, source_name]
+        return DremioSource(
+            id=f"{self.external_name}.{source_name}",
+            path=[self.external_name, source_name],
+            type="FILE",
+        )
+
+    def add_data_source_excel(self, file: Path) -> DremioSource:
+        if self.external_dir is None:
+            raise ValueError("外部数据源目录未设置")
+
+        source_name = f"{uuid.uuid4()}{file.suffix}"
+        shutil.copyfile(file, self.external_dir / source_name)
+
+        return DremioSource(
+            id=f"{self.external_name}.{source_name}",
+            path=[self.external_name, source_name],
+            type="FILE",
+        )
 
     # TODO: 改写为通用数据库连接
     def add_data_source_postgres(
@@ -332,31 +313,32 @@ class DremioClient:
         response.raise_for_status()
         return source_name
 
-    def query_source_tables(self, source_name: str) -> list[list[str]]:
+    def query_source_children(self, source_name: str | list[str]) -> list[DremioSource]:
         """
-        查询指定数据源的所有表
+        查询指定数据源(数据库)的所有子项
 
         Args:
             source_name: 数据源名称
 
         Returns:
-            list[list[str]]: 表路径列表
+            list[DremioSource]: 数据源子项列表
         """
-        url = f"{self.base_url}/api/v3/catalog/by-path/{source_name}"
         logger.info(f"查询数据源 {source_name} 的子项...")
+        if isinstance(source_name, list):
+            source_name = "/".join(source_name)
+        url = f"{self.base_url}/api/v3/catalog/by-path/{source_name}"
         response = requests.get(url, headers=self.get_auth_header())
         response.raise_for_status()
 
-        tables: list[list[str]] = []
+        sources: list[DremioSource] = []
         for child in response.json()["children"]:
             path: list[str] = child["path"]
-            if child["type"] == "DATASET":
-                tables.append(path)
+            if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
+                sources.append(DremioSource(id=child["id"], path=path, type=ds_type))
             elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
-                sub_tables = self.query_source_tables("/".join(path))
-                tables.extend(sub_tables)
+                sources.extend(self.query_source_children("/".join(path)))
 
-        return tables
+        return sources
 
     def read_source(
         self,
@@ -364,6 +346,7 @@ class DremioClient:
         limit: int | None = None,
         *,
         fetch_all: bool = False,
+        max_workers: int = 5,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -372,49 +355,49 @@ class DremioClient:
             source_name: 数据源名称
             limit: 返回的行数限制
             fetch_all: 是否获取全部数据（会忽略limit参数）
+            max_workers: 分批查询时的最大线程数
 
         Returns:
             pandas.DataFrame: 数据源数据
         """
         source_name = self._format_source_name_table(source_name)
 
-        if not fetch_all:
-            if limit is not None:
-                sql_query = f"SELECT * FROM {source_name} FETCH FIRST {limit} ROWS ONLY"
-            else:
-                sql_query = f"SELECT * FROM {source_name}"
+        if limit is None:
+            fetch_all = True
+
+        if not fetch_all and limit is not None and limit <= 100:
+            sql_query = f"SELECT * FROM {source_name} FETCH FIRST {limit} ROWS ONLY"
             return self.execute_sql_to_dataframe(sql_query)
 
         try:
             # 首先获取计数
             count_query = f"SELECT COUNT(*) as row_count FROM {source_name}"
             count_df = self.execute_sql_to_dataframe(count_query)
-            total_rows = count_df.iloc[0]["row_count"]
-            logger.info(f"表中共有 {total_rows} 条数据")
+            total_rows = int(count_df.iloc[0]["row_count"])
+            logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
             batch_size = 100  # Dremio REST api 单次查询最大数据量
-            all_data = []
+            total_rows = total_rows if fetch_all or limit is None else min(total_rows, limit)
+            batch_ranges = (
+                (offset, min(batch_size, total_rows - offset)) for offset in range(0, total_rows, batch_size)
+            )
+            all_data: dict[int, pd.DataFrame] = {}
 
-            for offset in range(0, total_rows, batch_size):
-                logger.info(f"正在获取第 {offset + 1}-{min(offset + batch_size, total_rows)} 条数据...")
-                batch_query = f"SELECT * FROM {source_name} OFFSET {offset} ROWS FETCH NEXT {batch_size} ROWS ONLY"
-                batch_result = self.execute_sql_to_dataframe(batch_query)
+            def fetch(idx: int, offset: int, size: int) -> None:
+                logger.info(f"正在获取第 {offset + 1}-{offset + size} 条数据...")
+                batch_query = f"SELECT * FROM {source_name} OFFSET {offset} ROWS FETCH NEXT {size} ROWS ONLY"
+                data = self.execute_sql_to_dataframe(batch_query)
+                all_data[idx] = data
 
-                if batch_result.empty:
-                    logger.info("返回了空结果，可能已经获取完所有数据")
-                    break
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for idx, (offset, size) in enumerate(batch_ranges):
+                    executor.submit(fetch, idx, offset, size)
 
-                all_data.append(batch_result)
-
-                # 如果返回的数据量小于请求量，说明已经获取完毕
-                if len(batch_result) < batch_size:
-                    logger.info(f"获取了 {len(batch_result)} 条数据，小于批次大小 {batch_size}，数据获取完毕")
-                    break
-
-            if all_data:
-                result = pd.concat(all_data, ignore_index=True)
+            if dfs := [all_data[idx] for idx in sorted(all_data.keys())]:
+                result = pd.concat(dfs, ignore_index=True)
                 logger.info(f"通过分批查询共获取 {len(result)} 条数据")
                 return result
+
             return pd.DataFrame()
 
         except Exception:
@@ -443,32 +426,21 @@ class DremioClient:
 
         return row_count, col_count
 
-    def data_source_csv(self, file: Path) -> TemporaryDataSource:
-        source_name = self.add_data_source_csv(file)
-        return TemporaryDataSource(self, "csv", source_name)
+    def list_containers(self) -> list[DremioContainer]:
+        logger.info("查询 Dremio 中的所有容器...")
+        url = f"{self.base_url}/api/v3/catalog"
+        response = requests.get(url, headers=self.get_auth_header())
+        response.raise_for_status()
 
-    def data_source_postgres(
-        self,
-        host: str,
-        port: int,
-        database: str,
-        user: str,
-        password: str,
-        table: str | None = None,
-    ) -> TemporaryDataSource:
-        source_name = self.add_data_source_postgres(host, port, database, user, password)
-        tables = self.query_source_tables(source_name)
-        if not tables:
-            raise ValueError(f"数据源 {source_name} 中没有可用的表")
+        return [
+            DremioContainer(id=item["id"], path=item["path"])
+            for item in response.json()["data"]
+            if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
+        ]
 
-        if table is None:
-            source_name = tables[0]
-        else:
-            for table_path in tables:
-                if table_path[-1] == table:
-                    source_name = table_path
-                    break
-            else:
-                raise ValueError(f"数据源 {source_name} 中没有找到表 {table}")
-
-        return TemporaryDataSource(self, "database", source_name)
+    def list_sources(self) -> list[DremioSource]:
+        logger.info("查询 Dremio 中的所有数据源...")
+        sources: list[DremioSource] = []
+        for container in self.list_containers():
+            sources.extend(self.query_source_children(container.path))
+        return sources
