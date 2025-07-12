@@ -1,6 +1,5 @@
 # ruff: noqa: S608, S113
 import json
-import os
 import shutil
 import time
 import uuid
@@ -12,6 +11,7 @@ from typing import Any
 import pandas as pd
 import requests
 
+from app.core.config import settings
 from app.log import logger
 from app.utils import escape_tag
 
@@ -50,14 +50,13 @@ class DremioClient:
             external_dir: 外部数据源本地目录路径
             external_name: 外部数据源名称
         """
-        self.base_url = base_url or os.environ.get("DREMIO_BASE_URL", "http://localhost:9047")
-        self.username = username or os.environ.get("DREMIO_USERNAME")
-        self.password = password or os.environ.get("DREMIO_PASSWORD")
-        self.external_dir = external_dir or Path(os.environ.get("DREMIO_EXTERNAL_DIR", "external"))
-        self.external_name = external_name or os.environ.get("DREMIO_EXTERNAL_NAME", "external")
-        assert self.base_url, "Dremio base URL is required"
-        assert self.username, "Dremio username is required"
-        assert self.password, "Dremio password is required"
+        self.base_url: str = base_url or str(settings.DREMIO_BASE_URL)
+        self.username: str = username or settings.DREMIO_USERNAME
+        self.password: str = password or settings.DREMIO_PASSWORD.get_secret_value()
+        self.external_dir = external_dir or settings.DREMIO_EXTERNAL_DIR
+        self.external_name = external_name or settings.DREMIO_EXTERNAL_NAME
+
+        self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
         self._expire_source_cache()
 

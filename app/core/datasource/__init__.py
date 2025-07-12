@@ -91,7 +91,7 @@ def create_df_source(
     return InMemoryDataSource(df, metadata)
 
 
-__all__  = [
+__all__ = [
     "DataSource",
     "DataSourceMetadata",
     "create_csv_source",

@@ -1,15 +1,11 @@
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
 from app.core.chain import get_chat_model, get_llm, rate_limiter
 from app.core.datasource import create_csv_source
 from app.log import logger
 from app.utils import escape_tag
-
-load_dotenv()
 
 
 def log_event(event: StreamEvent) -> None:

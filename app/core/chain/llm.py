@@ -1,5 +1,4 @@
 import datetime
-import os
 import threading
 from typing import Any
 
@@ -8,6 +7,7 @@ from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableWithMessageHistory
 
+from app.core.config import settings
 from app.log import logger
 
 type LLM = Runnable[LanguageModelInput, str]
@@ -39,16 +39,15 @@ def rate_limiter(max_call_per_minute: int) -> RunnableLambda[Any, Any]:
 
 def get_llm() -> LLM:
     """获取配置的LLM实例"""
-    model_name = os.environ.get("TEST_MODEL_NAME")
-    assert model_name, "TEST_MODEL_NAME 环境变量未设置"
+    model_name = settings.TEST_MODEL_NAME
 
-    if "GOOGLE_API_KEY" in os.environ:
+    if settings.GOOGLE_API_KEY:
         from langchain_google_genai import GoogleGenerativeAI
 
         logger.info("使用 Google Generative AI 模型")
         return GoogleGenerativeAI(model=model_name, transport="rest")
 
-    if "OPENAI_API_KEY" in os.environ:
+    if settings.OPENAI_API_KEY:
         from langchain_openai import ChatOpenAI
 
         logger.info("使用 OpenAI 模型")
@@ -70,16 +69,15 @@ def get_llm() -> LLM:
 
 
 def get_chat_model() -> BaseChatModel:
-    model_name = os.environ.get("TEST_MODEL_NAME")
-    assert model_name, "TEST_MODEL_NAME 环境变量未设置"
+    model_name = settings.TEST_MODEL_NAME
 
-    if "GOOGLE_API_KEY" in os.environ:
+    if settings.GOOGLE_API_KEY:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         logger.info("使用 Google Generative AI 模型")
         return ChatGoogleGenerativeAI(model=model_name, transport="rest")
 
-    if "OPENAI_API_KEY" in os.environ:
+    if settings.OPENAI_API_KEY:
         from langchain_openai import ChatOpenAI
 
         logger.info("使用 OpenAI 模型")
