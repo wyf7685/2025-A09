@@ -9,8 +9,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.api.v1.datasources import datasources
-from app.core.schema.session import Session, SessionListItem
 from app.log import logger
+from app.schemas.session import Session, SessionListItem
 
 # 模拟数据存储，在实际项目中应替换为数据库
 sessions: dict[str, Session] = {}

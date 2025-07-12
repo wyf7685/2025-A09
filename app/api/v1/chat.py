@@ -16,8 +16,8 @@ from app.api.v1.sessions import sessions
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain.llm import get_chat_model, get_llm
-from app.core.schema.chat import ChatEntry, UserChatMessage
 from app.log import logger
+from app.schemas.chat import ChatEntry, UserChatMessage
 
 router = APIRouter()
 
