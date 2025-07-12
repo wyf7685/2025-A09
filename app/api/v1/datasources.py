@@ -2,6 +2,7 @@
 数据源管理接口
 """
 
+import asyncio
 import contextlib
 import uuid
 from typing import Any
@@ -11,9 +12,9 @@ from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
 from app.core.datasource import DataSource, create_dremio_source
+from app.core.datasource.dremio import DremioDataSource
 from app.core.datasource.source import DataSourceMetadata
-from app.core.dremio import DremioSource
-from app.core.dremio.rest import DremioClient
+from app.core.dremio import DremioSource, get_dremio_client
 from app.log import logger
 from app.utils import run_sync
 
@@ -86,9 +87,10 @@ async def upload_file(
         file_path = UPLOAD_DIR / file.filename
         file_path.write_bytes(await file.read())
 
-        client = DremioClient()
-        meth = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
-        source = create_dremio_source(await run_sync(meth)(file_path), source_name)
+        client = get_dremio_client()
+        call = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
+        dremio_source = await run_sync(call)(file_path)
+        source = create_dremio_source(dremio_source, source_name)
         source_id = register_datasource(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
@@ -98,6 +100,9 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
 
 
+list_ds_sem = asyncio.Semaphore(1)
+
+
 @router.get("")
 async def list_datasources() -> list[str]:
     """
@@ -105,12 +110,13 @@ async def list_datasources() -> list[str]:
     """
     try:
         with contextlib.suppress(Exception):
-            for ds in await run_sync(DremioClient().list_sources)():
-                source_name = ".".join(ds.path)
+            async with list_ds_sem:
+                dss = await run_sync(get_dremio_client().list_sources)()
+            for ds in dss:
                 if not any(
-                    source.metadata.name == source_name
+                    source.source.path == ds.path
                     for source in datasources.values()
-                    if source.metadata.source_type.startswith("dremio")
+                    if isinstance(source, DremioDataSource)
                 ):
                     register_datasource(create_dremio_source(ds))
         return list(datasources)

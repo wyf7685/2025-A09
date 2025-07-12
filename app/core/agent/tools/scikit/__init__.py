@@ -1,3 +1,4 @@
+import ast
 import base64
 import contextlib
 import json
@@ -125,15 +126,17 @@ def scikit_tools(
         """
         # 处理字符串形式的超参数
         parsed_hyperparams = None
-        hyperparams_parse_error = None
 
         if isinstance(hyperparams, str):
-            try:
+            with contextlib.suppress(Exception):
                 parsed_hyperparams = json.loads(hyperparams)
-            except Exception as e:
-                hyperparams_parse_error = f"超参数解析错误: {e}，将使用默认参数"
-                logger.opt(colors=True).warning(f"<y>超参数解析错误</y>: {escape_tag(str(e))}，将使用默认参数")
-
+            if parsed_hyperparams is None:
+                with contextlib.suppress(Exception):
+                    parsed_hyperparams = ast.literal_eval(hyperparams)
+            if parsed_hyperparams is None:
+                logger.opt(colors=True).warning(
+                    f"<y>超参数解析错误</y>: {escape_tag(repr(hyperparams))}，将使用默认参数"
+                )
         else:
             parsed_hyperparams = hyperparams
 
@@ -149,9 +152,8 @@ def scikit_tools(
             formatted = f"成功创建模型！\n模型ID: {model_id}\n模型类型: {model_type}"
             if parsed_hyperparams:
                 formatted += f"\n应用超参数: {parsed_hyperparams}"
-
-            if hyperparams_parse_error:
-                formatted += f"\n\n{hyperparams_parse_error}"
+            elif parsed_hyperparams is None:
+                formatted += "\n\n超参数解析错误，将使用默认参数"
 
             return formatted
         except Exception as e:
@@ -324,7 +326,6 @@ def scikit_tools(
             raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
         logger.opt(colors=True).info(f"<g>保存模型</>: 训练结果 ID = <c>{escape_tag(model_id)}</>")
-
 
         file_path = MODEL_DIR / model_id / "model"
         with contextlib.suppress(Exception):

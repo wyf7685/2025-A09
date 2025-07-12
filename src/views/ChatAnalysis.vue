@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import type { AssistantChatMessage, ChatEntry, ChatMessage } from '@/types';
-import { ElMessage } from 'element-plus';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AssistantMessage from '@/components/AssistantMessage.vue';
-import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
-import { Plus, ChatDotRound, Delete, Edit, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
+import { useSessionStore } from '@/stores/session';
+import type { AssistantChatMessage, ChatMessage } from '@/types';
+import { ChatDotRound, DArrowLeft, DArrowRight, Delete, Edit, Plus } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-type ChatMessageWithSuggestions = ChatMessage & { suggestions?: string[] }
+type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[] }
 
 const router = useRouter()
 const sessionStore = useSessionStore();
@@ -79,7 +79,7 @@ const scrollToBottom = (): void => {
 // 只提取“下一步建议”或“下一步行动建议”区域的建议
 const extractSuggestions = (content: string): string[] => {
   // 兼容“**下一步建议**”或“**下一步行动建议**”后有冒号、空行，提取后续所有内容直到下一个空行或结尾
-  const match = content.match(/\*\*(下一步建议|下一步行动建议)\*\*[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/)
+  const match = content.match(/\*?\*?(下一步建议|下一步行动建议)\*?\*?[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/)
   if (!match) return []
   // 只提取第一个有序列表（1. ...）开始的所有有序条目
   const lines = match[2].split('\n')
@@ -294,6 +294,12 @@ onMounted(async () => {
               {{ message.content }}
             </div>
           </div>
+          <div v-if="message.type === 'assistant' && message.loading">
+            <el-icon>
+              <Loading class="rotating" />
+            </el-icon>
+            正在处理...
+          </div>
           <!-- 建议按钮渲染 -->
           <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
             <el-button v-for="(suggestion, idx) in message.suggestions" :key="idx" size="small"
@@ -316,8 +322,7 @@ onMounted(async () => {
         <div class="quick-actions">
           <div class="dataset-indicator">
             <template v-if="currentDataset">
-              当前数据集: <strong>{{ currentDataset.id.slice(0, 12) }}...</strong> ( <el-link type="primary"
-                @click="goToAddData" :underline="false">更换</el-link> )
+              当前数据集: <strong>{{ currentDataset.id.slice(0, 12) }}...</strong>
             </template>
             <template v-else>
               <el-link type="warning" @click="goToAddData" :underline="false">请先选择一个数据集进行分析</el-link>
@@ -331,7 +336,7 @@ onMounted(async () => {
     </div>
 
     <!-- Select Dataset Dialog -->
-    <el-dialog :v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
+    <el-dialog v-model="selectDatasetDialogVisible" title="选择数据集以创建会话" width="600px">
       <el-empty v-if="!dataSourceStore.dataSources.length">
         <template #description>暂无数据集，请先上传或选择一个数据集。
           <el-button type="primary" @click="goToAddData">前往添加数据集</el-button>
@@ -339,7 +344,7 @@ onMounted(async () => {
       </el-empty>
       <el-list v-else>
         <el-list-item v-for="[sourceId, metadata] in Object.entries(dataSourceStore.dataSources)" :key="sourceId"
-          @click="sessionStore.createSession(sourceId)">
+          @click="createNewSession(sourceId)">
           {{ metadata.name }}
         </el-list-item>
       </el-list>
@@ -619,5 +624,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.rotating {
+  animation: rotating 2s linear infinite;
 }
 </style>

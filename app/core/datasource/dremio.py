@@ -2,6 +2,7 @@ from typing import override
 
 import pandas as pd
 
+from app.core.dremio import get_dremio_client
 from app.core.dremio.rest import DremioClient, DremioSource
 
 from .source import DataSource, DataSourceMetadata
@@ -36,7 +37,7 @@ class DremioDataSource(DataSource):
     def client(self) -> DremioClient:
         """获取 Dremio 客户端"""
         if self._client is None:
-            self._client = DremioClient()
+            self._client = get_dremio_client()
         return self._client
 
     @override

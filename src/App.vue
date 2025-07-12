@@ -32,7 +32,7 @@ onMounted(async () => {
 <template>
   <div class="layout-container">
     <!-- 顶部导航栏 -->
-    <el-header class="layout-header" height="60px">
+    <el-header class="layout-header" height="50px">
       <div style="display: flex; align-items: center; justify-content: space-between; height: 100%;">
         <div style="display: flex; align-items: center;">
           <el-button @click="toggleSidebar" type="text" style="color: white; margin-right: 16px;">

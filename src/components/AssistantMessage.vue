@@ -3,7 +3,7 @@ import type { AssistantChatMessage } from '@/types';
 import AssistantMessageText from '@/components/AssistantMessageText.vue'
 import { ref } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   message: AssistantChatMessage & { loading?: boolean };
 }>();
 
@@ -45,8 +45,8 @@ const toggleSectionExpand = (toolId: string, section: keyof ExpandState) => {
 };
 
 // 检查工具调用是否展开
-const isToolExpanded = (id: string) => {
-  return !!expandedTools.value[id];
+const isToolExpanded = (toolId: string) => {
+  return !!expandedTools.value[toolId];
 };
 
 // 检查工具调用内部部分是否展开
@@ -141,12 +141,6 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
         </div>
       </div>
     </div>
-  </div>
-  <div v-if="message.loading">
-    <el-icon>
-      <Loading class="rotating" />
-    </el-icon>
-    正在处理...
   </div>
 </template>
 

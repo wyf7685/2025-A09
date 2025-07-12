@@ -116,6 +116,8 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
+  listDataSources();
+
   return {
     dataSources,
     getDataSource,

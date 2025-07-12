@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.api.v1.datasources import register_datasource
 from app.core.datasource import create_dremio_source
-from app.core.dremio import DremioClient, DremioSource
+from app.core.dremio import DremioSource, get_dremio_client
 from app.log import logger
 
 router = APIRouter(prefix="/dremio")
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/dremio")
 async def get_dremio_sources() -> list[DremioSource]:
     """获取 Dremio 数据源列表"""
     try:
-        return DremioClient().list_sources()
+        return get_dremio_client().list_sources()
     except Exception as e:
         logger.exception("获取 Dremio 数据源失败")
         raise HTTPException(status_code=500, detail=f"Failed to get Dremio sources: {e}") from e

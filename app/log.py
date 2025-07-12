@@ -40,8 +40,8 @@ logger.remove()
 logger_id_console = logger.add(
     sys.stdout,
     level="DEBUG",
-    # diagnose=False,
-    diagnose=True,  # 生产环境应设置为 False
+    diagnose=False,
+    # diagnose=True,  # 生产环境应设置为 False
     enqueue=True,
     filter=default_filter,
     format=log_format,

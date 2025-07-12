@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { formatMessage } from '@/utils/tools';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   md: string;
@@ -13,16 +13,21 @@ onMounted(async () => {
     formatted.value = await formatMessage(props.md);
   }
 });
+
+watch(() => props.md, async (newVal) => {
+  if (newVal) {
+    formatted.value = await formatMessage(newVal);
+  } else {
+    formatted.value = '';
+  }
+}, {
+  immediate: true,
+  deep: true
+});
 </script>
 
 <template>
   <div v-if="formatted" class="markdown-body" v-html="formatted"></div>
-  <div v-else>
-    <el-icon>
-      <Loading class="rotating"></Loading>
-    </el-icon>
-    正在处理...
-  </div>
 </template>
 
 <style scoped>
