@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -49,7 +49,7 @@ def fix_message_content(content: str | list[Any]) -> str:
     return str(content) if content else ""
 
 
-def process_stream_event(event: Any) -> Generator[StreamEvent]:
+def process_stream_event(event: Any) -> Iterable[StreamEvent]:
     """处理从 stream/astream 方法返回的事件，将其转换为 StreamEvent 对象"""
     if not isinstance(event, tuple) or len(event) != 2:
         return
@@ -68,21 +68,18 @@ def process_stream_event(event: Any) -> Generator[StreamEvent]:
         case ToolMessage() if message.status == "error":
             yield ToolErrorEvent(id=message.tool_call_id, error=str(message.content))
 
-    return None
-
 
 class BufferedStreamEventReader:
     def __init__(self) -> None:
         self.tokens: list[LlmTokenEvent] = []
 
-    def push(self, event: Any) -> Generator[StreamEvent]:
-        for evt in process_stream_event(event):
-            if isinstance(evt, LlmTokenEvent):
-                self.tokens.append(evt)
-            else:
-                if msg := self.flush():
-                    yield msg
-                yield evt
+    def push(self, event: Any) -> Iterable[StreamEvent]:
+        if isinstance(event, LlmTokenEvent):
+            self.tokens.append(event)
+        else:
+            if msg := self.flush():
+                yield msg
+            yield event
 
     def flush(self) -> LlmTokenEvent | None:
         if not self.tokens:

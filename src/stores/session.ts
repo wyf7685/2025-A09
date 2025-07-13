@@ -137,6 +137,13 @@ export const useSessionStore = defineStore('session', () => {
     }
   };
 
+  const summaryChat = async (sessionId: string): Promise<string> => {
+    const response = await api.post<{ summary: string }>('/chat/summary', {
+      session_id: sessionId,
+    });
+    return response.data.summary;
+  };
+
   return {
     currentSession: computed(() => currentSession.value),
     sessions,
@@ -144,10 +151,11 @@ export const useSessionStore = defineStore('session', () => {
     createSession,
     setCurrentSession,
     setCurrentSessionById,
+    updateSessionName,
     listSessions,
     getSession,
     deleteSession,
     sendStreamChatMessage,
-    updateSessionName,
+    summaryChat,
   };
 });

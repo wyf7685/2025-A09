@@ -58,6 +58,11 @@ def test_agent() -> None:
     for model_id, model_path in agent.saved_models.items():
         logger.info(f"模型 {model_id} 已保存到: {model_path}")
 
+    if input("是否生成总结报告? [y/N]: ").strip().lower() == "y":
+        summary, figures = agent.summary()
+        logger.info(f"\n{summary}\n")
+        logger.info(f"包含图表: {len(figures)}")
+
 
 if __name__ == "__main__":
     test_agent()
