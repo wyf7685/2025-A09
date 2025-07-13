@@ -437,7 +437,8 @@ const sendMessage = async (): Promise<void> => {
         }
 
         nextTick(() => scrollToBottom())
-      }
+      },
+      flowPanelRef.value?.selectedModel // 传递选择的模型ID
     )
 
     assistantMessage.loading = false

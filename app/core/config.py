@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     TEST_MODEL_NAME: str
     GOOGLE_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
+    OPENAI_API_BASE: str | None = None
     OLLAMA_API_URL: str | None = None
 
     # Dremio REST API config

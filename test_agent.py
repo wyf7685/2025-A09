@@ -28,7 +28,13 @@ def test_agent() -> None:
     llm = limiter | get_llm()
 
     data_source = create_csv_source(Path("test.csv"))
-    agent = DataAnalyzerAgent(data_source, llm, get_chat_model(), pre_model_hook=limiter)
+    agent = DataAnalyzerAgent(
+        data_source=data_source,
+        llm=llm,
+        chat_model=get_chat_model(),
+        session_id="TEST",
+        pre_model_hook=limiter,
+    )
 
     state_file = Path("state.json")
     agent.load_state(state_file)

@@ -11,6 +11,7 @@ import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
 from app.const import MODEL_DIR
+from app.core.model_registry import model_registry
 from app.log import logger
 from app.utils import escape_tag
 
@@ -80,6 +81,7 @@ type ModelID = str
 
 def scikit_tools(
     df_ref: Callable[[], pd.DataFrame],
+    session_id: str,
 ) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
     train_model_cache: dict[ModelID, TrainModelResult] = {}
@@ -327,12 +329,40 @@ def scikit_tools(
 
         logger.opt(colors=True).info(f"<g>保存模型</>: 训练结果 ID = <c>{escape_tag(model_id)}</>")
 
+        # 保存模型文件
         file_path = MODEL_DIR / model_id / "model"
         with contextlib.suppress(Exception):
             file_path = file_path.relative_to(Path.cwd())
         file_path.parent.mkdir(parents=True, exist_ok=True)
         result = save_model(train_model_cache[model_id], file_path)
         saved_models[model_id] = file_path
+
+        # 注册模型到模型管理系统
+        if session_id:
+            train_result = train_model_cache[model_id]
+            # 计算模型性能指标
+            evaluation = evaluate_model(train_result)
+            metrics = evaluation.get("metrics", {})
+
+            # 生成模型名称
+            model_name = f"{train_result['model_type']}_{model_id[:8]}"
+
+            # 注册模型
+            registry_id = model_registry.register_model(
+                name=model_name,
+                model_type=train_result["model_type"],
+                session_id=session_id,
+                dataset_id="TODO",
+                description=f"模型ID: {model_id}",
+                features=train_result["feature_columns"],
+                target_column=train_result["target_column"],
+                metrics=metrics,
+                model_path=file_path.with_suffix(".joblib"),
+                metadata_path=file_path.with_suffix(".metadata.json"),
+            )
+
+            logger.opt(colors=True).info(f"<g>模型已注册到管理系统</>: <c>{registry_id}</>")
+
         logger.opt(colors=True).info(f"<g>模型已保存到</>: <c>{escape_tag(str(file_path.with_suffix('.joblib')))}</>")
         return result
 

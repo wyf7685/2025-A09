@@ -11,22 +11,18 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.const import STATE_DIR
-from app.core.agent import DataAnalyzerAgent
-from app.core.chain.llm import get_chat_model, get_llm
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
-from app.services.datasource import datasource_service
+from app.services.agent import daa_service
 from app.services.session import session_service
 
 router = APIRouter(prefix="/chat")
-
-# Agent 实例缓存
-agents: dict[str, DataAnalyzerAgent] = {}
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    model_id: str = "gemini-2.0-flash"  # 默认模型
 
     @field_validator("message", mode="after")
     @classmethod
@@ -45,14 +41,11 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
             raise HTTPException(status_code=404, detail="Session not found")
 
         session_id = session.id
-
-        # 获取或创建 Agent
-        if session.id not in agents:
-            data_source = datasource_service.get_source(session.dataset_id).copy()
-            agents[session_id] = DataAnalyzerAgent(data_source, get_llm(), get_chat_model())
-            agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
-
-        agent = agents[session_id]
+        agent = await daa_service.get_or_create_agent(
+            source_id=session.dataset_id,
+            session_id=session.id,
+            model_id=request.model_id,
+        )
 
         # 初始化响应变量
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
@@ -99,6 +92,7 @@ async def chat_analysis_stream(request: ChatRequest) -> StreamingResponse:
 
 class SummaryRequest(BaseModel):
     session_id: str
+    model_id: str | None = None
 
 
 class SummaryResponse(BaseModel):
@@ -115,8 +109,8 @@ async def chat_summary(request: SummaryRequest) -> SummaryResponse:
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if session.id not in agents:
+    if (agent := daa_service.get_agent(session.id, request.model_id)) is None:
         raise HTTPException(status_code=404, detail="Agent not found for this session")
 
-    summary, figures = await agents[session.id].summary_async()
+    summary, figures = await agent.summary_async()
     return SummaryResponse(session_id=session.id, summary=summary, figures=figures)

@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import type { FlowStep } from '@/types';
-import { DArrowRight, Edit, Monitor, Setting, Loading, CircleCheck, Clock } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
+import { useModelStore } from '@/stores/model';
+import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
+import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled, Monitor, Setting, Loading, CircleCheck, Clock } from '@element-plus/icons-vue';
+
+const modelStore = useModelStore();
 
 // 控制流程图面板的显示/隐藏
 const isFlowPanelOpen = defineModel<boolean>("isFlowPanelOpen", { required: true });
@@ -37,16 +41,16 @@ const route2Steps = ref([
 const flowSteps = ref<FlowStep[]>([])
 
 // 模型配置相关状态
-const availableModels = ref([
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
-  { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
-  { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-  { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'Anthropic' }
-])
-const selectedModel = ref('gemini-2.0-flash') // 默认模型
-
+const availableModels = computed(() => modelStore.availableModels)
+const selectedModel = computed({
+  get: () => modelStore.selectedModel?.id || 'gemini-2.0-flash',
+  set: (value: string) => {
+    const model = availableModels.value.find(m => m.id === value)
+    if (model) {
+      modelStore.setSelectedModel(model)
+    }
+  }
+})
 
 // 流程图管理方法
 const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
@@ -86,9 +90,8 @@ const changeModel = (modelId: string) => {
 }
 
 const getCurrentModelInfo = computed(() => {
-  return availableModels.value.find(m => m.id === selectedModel.value) || availableModels.value[0]
+  return modelStore.selectedModel || availableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' }
 })
-
 
 // 路线切换处理
 const handleRouteChange = (route: string) => {
@@ -329,6 +332,8 @@ defineExpose({
 
 // --- Lifecycle Hooks ---
 onMounted(async () => {
+  await modelStore.fetchAvailableModels() // 获取可用模型
+
   // 运行路线选择测试
   testRouteSelection()
 
@@ -376,7 +381,8 @@ onMounted(async () => {
       </div>
       <div class="model-selector">
         <el-select v-model="selectedModel" @change="changeModel" placeholder="选择模型" size="small" class="model-select">
-          <el-option-group v-for="provider in ['Google', 'OpenAI', 'Anthropic']" :key="provider" :label="provider">
+          <el-option-group v-for="provider in ['Google', 'OpenAI', 'DeepSeek', 'Anthropic']" :key="provider"
+            :label="provider">
             <el-option v-for="model in availableModels.filter(m => m.provider === provider)" :key="model.id"
               :label="model.name" :value="model.id">
               <div class="model-option">

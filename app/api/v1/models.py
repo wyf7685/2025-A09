@@ -3,32 +3,48 @@
 """
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api.v1.chat import agents
+from app.core.model_registry import model_registry
 from app.log import logger
+from app.schemas.ml_model import MLModelInfoOut
 
 router = APIRouter()
 
 
+class GetModelsResponse(BaseModel):
+    models: list[MLModelInfoOut]
+
+
 @router.get("/models")
-async def get_trained_models(session_id: str) -> dict[str, dict[str, Any]]:
+async def get_trained_models(session_id: str) -> dict[str, Sequence[MLModelInfoOut]]:
     """获取已训练的模型列表"""
     try:
-        if not session_id or session_id not in agents:
-            raise HTTPException(status_code=404, detail="Session agent not found")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="Session ID is required")
 
-        return {"models": agents[session_id].trained_models}
+        return {"models": model_registry.list_models(session_id)}
 
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("获取模型列表失败")
         raise HTTPException(status_code=500, detail=f"Failed to get models: {e}") from e
+
+
+@router.get("/models/all")
+async def get_all_models() -> dict[str, Sequence[MLModelInfoOut]]:
+    """获取所有模型列表"""
+    try:
+        return {"models": model_registry.list_models()}
+    except Exception as e:
+        logger.exception("获取所有模型失败")
+        raise HTTPException(status_code=500, detail=f"Failed to get all models: {e}") from e
 
 
 class CreateModelRequest(BaseModel):
@@ -94,10 +110,16 @@ async def update_model(model_id: str, request: UpdateModelRequest) -> dict[str, 
 async def delete_model(model_id: str) -> dict[str, Any]:
     """删除模型"""
     try:
-        # 这里应该实际删除模型
-        # 目前只是返回成功响应
+        # 从模型注册表删除模型
+        success = model_registry.delete_model(model_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Model not found")
+
         return {"success": True, "model_id": model_id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("删除模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {e}") from e
