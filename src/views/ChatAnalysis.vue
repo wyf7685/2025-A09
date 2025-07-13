@@ -4,7 +4,7 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
 import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -30,6 +30,70 @@ const currentDataset = computed(() =>
     ? dataSourceStore.dataSources[sessionStore.currentSession.dataset_id]
     : null
 );
+
+// 会话编辑相关
+const editSessionDialogVisible = ref(false)
+const editingSessionId = ref('')
+const editingSessionName = ref('')
+
+const openEditSessionDialog = (sessionId: string, sessionName: string) => {
+  editingSessionId.value = sessionId
+  editingSessionName.value = sessionName
+  editSessionDialogVisible.value = true
+}
+
+const saveSessionEdit = async () => {
+  if (!editingSessionId.value || !editingSessionName.value.trim()) {
+    ElMessage.warning('会话名称不能为空')
+    return
+  }
+
+  try {
+    await sessionStore.updateSessionName(editingSessionId.value, editingSessionName.value.trim())
+    ElMessage.success('会话名称更新成功')
+    editSessionDialogVisible.value = false
+  } catch (error) {
+    console.error('更新会话名称失败:', error)
+    ElMessage.error('更新会话名称失败')
+  }
+}
+
+// 修改confirmDeleteSession函数
+const confirmDeleteSession = async (sessionId: string, sessionName: string) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除会话 "${sessionName}" 吗？此操作不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    try {
+      await sessionStore.deleteSession(sessionId)
+      ElMessage.success('会话删除成功')
+      
+      // 如果删除的是当前会话，清空消息列表
+      if (sessionId === currentSessionId.value) {
+        messages.value = []
+      }
+      
+      // 如果还有其他会话，自动切换到第一个
+      if (sessions.value.length > 0) {
+        await switchSession(sessions.value[0].id)
+      }
+    } catch (error) {
+      console.error('删除会话失败:', error)
+      ElMessage.error('删除会话失败，请稍后重试')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除会话对话框错误:', error)
+    }
+  }
+}
 
 // --- Methods for new UI ---
 const loadSessions = async () => {
@@ -303,10 +367,18 @@ onMounted(async () => {
           <el-icon class="session-icon">
             <ChatDotRound />
           </el-icon>
-          <span class="session-name">{{ session.name }}</span>
+          <span class="session-name">{{ session.name || `会话 ${session.id.slice(0, 8)}` }}</span>
           <div class="session-actions">
-            <el-button type="text" :icon="Edit" size="small" class="action-btn" />
-            <el-button type="text" :icon="Delete" size="small" class="action-btn" />
+            <el-button type="text" :icon="Edit" size="small" class="action-btn" @click.stop="openEditSessionDialog(session.id, session.name || `会话 ${session.id.slice(0, 8)}`)" />
+            <el-button 
+              type="text" 
+              :icon="Delete" 
+              size="small" 
+              class="action-btn" 
+              @click.stop="confirmDeleteSession(session.id, session.name || `会话 ${session.id.slice(0, 8)}`)"
+              :loading="sessionStore.isDeleting[session.id]"
+              :disabled="sessionStore.isDeleting[session.id]"
+            />
           </div>
         </div>
       </div>
@@ -434,6 +506,30 @@ onMounted(async () => {
       </div>
       <template #footer>
         <el-button @click="selectDatasetDialogVisible = false">取消</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 会话编辑对话框 -->
+    <el-dialog v-model="editSessionDialogVisible" title="编辑会话名称" width="400px" destroy-on-close>
+      <div class="edit-session-dialog">
+        <el-form :model="{ name: editingSessionName }" label-position="top">
+          <el-form-item label="会话名称">
+            <el-input 
+              v-model="editingSessionName" 
+              placeholder="请输入会话名称" 
+              maxlength="50"
+              show-word-limit
+              clearable
+              autofocus
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="editSessionDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveSessionEdit" :disabled="!editingSessionName.trim()">保存</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -980,5 +1076,55 @@ onMounted(async () => {
 
 .rotating {
   animation: rotating 2s linear infinite;
+}
+
+.edit-session-dialog {
+  padding: 10px;
+  
+  .el-form-item__label {
+    font-weight: 500;
+    color: #374151;
+  }
+  
+  .el-input {
+    .el-input__wrapper {
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+      
+      &:hover, &:focus {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 1px #10b981;
+      }
+    }
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  
+  .el-button {
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    
+    &--primary {
+      background-color: #10b981;
+      border-color: #10b981;
+      
+      &:hover {
+        background-color: #059669;
+        border-color: #059669;
+        transform: translateY(-1px);
+      }
+      
+      &:disabled {
+        background-color: #d1fae5;
+        border-color: #d1fae5;
+      }
+    }
+  }
 }
 </style>
