@@ -387,7 +387,6 @@ onMounted(async () => {
               :label="model.name" :value="model.id">
               <div class="model-option">
                 <span class="model-name">{{ model.name }}</span>
-                <span class="model-provider">{{ model.provider }}</span>
               </div>
             </el-option>
           </el-option-group>
