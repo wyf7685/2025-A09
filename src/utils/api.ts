@@ -79,3 +79,108 @@ export const checkHealth = async (): Promise<{ status: string }> => {
   const response = await api.get('/health');
   return response.data;
 };
+
+// 数据清洗相关 API
+export interface DataQualityReport {
+  is_valid: boolean;
+  quality_score: number;
+  issues: Array<{
+    type: string;
+    column?: string;
+    count?: number;
+    description: string;
+  }>;
+  data_info: {
+    rows: number;
+    columns: number;
+    column_names: string[];
+    data_types: {
+      [column: string]: string;
+    };
+    missing_values_total: number;
+    file_size: number;
+  };
+}
+
+export interface CleaningSuggestion {
+  title: string;
+  description: string;
+  options: Array<{
+    method: string;
+    description: string;
+  }>;
+  severity: string;
+  column: string;
+  type: string;
+}
+
+export interface CleaningAction {
+  type: string;
+  column?: string;
+  parameters?: any;
+}
+
+export interface ApiResponse {
+  file_info: {
+    file_id: string;
+    original_filename: string;
+    user_filename: string;
+    description: string;
+    upload_time: string;
+    file_size: number;
+  };
+  quality_check: DataQualityReport;
+  cleaning_suggestions: CleaningSuggestion[];
+  status: string;
+}
+
+export const cleaningAPI = {
+  // 检查文件数据质量
+  checkDataQuality: async (file: File): Promise<ApiResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/clean/check', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 获取清洗建议
+  getCleaningSuggestions: async (file: File): Promise<CleaningSuggestion[]> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/clean/suggestions', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 应用清洗动作
+  applyCleaningActions: async (file: File, actions: CleaningAction[]): Promise<{ success: boolean; message: string; cleaned_file_path?: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('actions', JSON.stringify(actions));
+    const response = await api.post('/clean/apply-cleaning', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 获取详细的质量报告
+  getQualityReport: async (file: File): Promise<DataQualityReport> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/clean/quality-report', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+};
