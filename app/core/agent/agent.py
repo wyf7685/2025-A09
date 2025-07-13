@@ -381,6 +381,7 @@ SUMMARY_PROMPT = """\
 请根据以上对话记录生成分析总结报告：
 """
 
+
 class AgentValues(TypedDict):
     messages: list[AnyMessage]
 
@@ -471,14 +472,16 @@ class DataAnalyzerAgent:
         data_source: DataSource,
         llm: LLM,
         chat_model: BaseChatModel,
+        session_id: str = "",
         *,
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
         self.data_source = data_source
         self.llm = llm
+        self.session_id = session_id
         analyzer = analyzer_tool(data_source, llm)
         df_tools = dataframe_tools(data_source.get_full)
-        sk_tools, models, saved_models = scikit_tools(data_source.get_full)
+        sk_tools, models, saved_models = scikit_tools(data_source.get_full, session_id)
 
         self.agent = create_react_agent(
             model=chat_model,

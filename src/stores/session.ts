@@ -66,6 +66,7 @@ export const useSessionStore = defineStore('session', () => {
     onToolError: (id: string, error: string) => void,
     onDone: () => void,
     onError: (error: string) => void,
+    modelId?: string,
   ): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/chat/stream`, {
@@ -76,6 +77,7 @@ export const useSessionStore = defineStore('session', () => {
         body: JSON.stringify({
           message: message,
           session_id: currentSession.value!.id,
+          model_id: modelId || 'gemini-2.0-flash',
         }),
       });
 

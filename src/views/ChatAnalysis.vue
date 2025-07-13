@@ -2,6 +2,7 @@
 import AssistantMessage from '@/components/AssistantMessage.vue';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
+import { useModelStore } from '@/stores/model';
 import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
 import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled, Monitor, Setting, Loading, CircleCheck, Clock } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -24,6 +25,7 @@ type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions
 const router = useRouter()
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
+const modelStore = useModelStore();
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true)
@@ -60,15 +62,16 @@ const route2Steps = ref([
 const flowSteps = ref<FlowStep[]>([])
 
 // 模型配置相关状态
-const availableModels = ref([
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' },
-  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
-  { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
-  { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-  { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'Anthropic' }
-])
-const selectedModel = ref('gemini-2.0-flash') // 默认模型
+const availableModels = computed(() => modelStore.availableModels)
+const selectedModel = computed({
+  get: () => modelStore.selectedModel?.id || 'gemini-2.0-flash',
+  set: (value: string) => {
+    const model = availableModels.value.find(m => m.id === value)
+    if (model) {
+      modelStore.setSelectedModel(model)
+    }
+  }
+})
 
 const sessions = computed(() => sessionStore.sessions)
 const currentSessionId = computed(() => sessionStore.currentSession?.id)
@@ -233,7 +236,7 @@ const changeModel = (modelId: string) => {
 }
 
 const getCurrentModelInfo = computed(() => {
-  return availableModels.value.find(m => m.id === selectedModel.value) || availableModels.value[0]
+  return modelStore.selectedModel || availableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' }
 })
 
 // --- Existing Chat Logic Methods ---
@@ -514,7 +517,8 @@ const sendMessage = async (): Promise<void> => {
         }
 
         nextTick(() => scrollToBottom())
-      }
+      },
+      selectedModel.value // 传递选择的模型ID
     )
 
     assistantMessage.loading = false
@@ -768,6 +772,7 @@ const forceCompleteFlow = () => {
 onMounted(async () => {
   await loadSessions()
   await dataSourceStore.listDataSources() // 加载数据源
+  await modelStore.fetchAvailableModels() // 获取可用模型
 
   // 运行路线选择测试
   testRouteSelection()
@@ -983,7 +988,7 @@ onMounted(async () => {
             class="model-select"
           >
             <el-option-group
-              v-for="provider in ['Google', 'OpenAI', 'Anthropic']"
+              v-for="provider in ['Google', 'OpenAI', 'DeepSeek', 'Anthropic']"
               :key="provider"
               :label="provider"
             >

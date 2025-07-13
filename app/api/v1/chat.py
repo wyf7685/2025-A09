@@ -27,6 +27,7 @@ agents: dict[str, DataAnalyzerAgent] = {}
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    model_id: str = "gemini-2.0-flash"  # 默认模型
 
     @field_validator("message", mode="after")
     @classmethod
@@ -47,12 +48,15 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         session_id = session.id
 
         # 获取或创建 Agent
-        if session.id not in agents:
+        agent_key = f"{session_id}_{request.model_id}"
+        if agent_key not in agents:
             data_source = datasource_service.get_source(session.dataset_id).copy()
-            agents[session_id] = DataAnalyzerAgent(data_source, get_llm(), get_chat_model())
-            agents[session_id].load_state(STATE_DIR / f"{session_id}.json")
+            chat_model = get_chat_model(request.model_id)
+            agents[agent_key] = DataAnalyzerAgent(data_source, get_llm(), chat_model, session_id)
+            agents[agent_key].load_state(STATE_DIR / f"{session_id}.json")
+            logger.info(f"为会话 {session_id} 创建新Agent，使用模型: {request.model_id}")
 
-        agent = agents[session_id]
+        agent = agents[agent_key]
 
         # 初始化响应变量
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))

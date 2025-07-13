@@ -9,26 +9,89 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api.v1.chat import agents
+from app.core.model_registry import model_registry
 from app.log import logger
 
 router = APIRouter()
 
 
 @router.get("/models")
-async def get_trained_models(session_id: str) -> dict[str, dict[str, Any]]:
+async def get_trained_models(session_id: str) -> dict[str, list[dict[str, Any]]]:
     """获取已训练的模型列表"""
     try:
-        if not session_id or session_id not in agents:
-            raise HTTPException(status_code=404, detail="Session agent not found")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="Session ID is required")
 
-        return {"models": agents[session_id].trained_models}
+        # 从模型注册表获取会话的所有模型
+        models = model_registry.list_models(session_id)
+
+        # 转换为前端需要的格式
+        model_list = []
+        for model in models:
+            model_dict = {
+                "id": model.id,
+                "name": model.name,
+                "type": model.type,
+                "description": model.description,
+                "created_at": model.created_at,
+                "last_used": model.last_used,
+                "accuracy": model.accuracy,
+                "score": model.score,
+                "features": model.features,
+                "target_column": model.target_column,
+                "feature_count": model.feature_count,
+                "status": model.status,
+                "version": model.version,
+                "metrics": model.metrics,
+                "dataset_id": model.dataset_id,
+                "session_id": model.session_id,
+            }
+            model_list.append(model_dict)
+
+        return {"models": model_list}
 
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("获取模型列表失败")
         raise HTTPException(status_code=500, detail=f"Failed to get models: {e}") from e
+
+
+@router.get("/models/all")
+async def get_all_models() -> dict[str, list[dict[str, Any]]]:
+    """获取所有模型列表"""
+    try:
+        # 从模型注册表获取所有模型
+        models = model_registry.list_models()
+
+        # 转换为前端需要的格式
+        model_list = []
+        for model in models:
+            model_dict = {
+                "id": model.id,
+                "name": model.name,
+                "type": model.type,
+                "description": model.description,
+                "created_at": model.created_at,
+                "last_used": model.last_used,
+                "accuracy": model.accuracy,
+                "score": model.score,
+                "features": model.features,
+                "target_column": model.target_column,
+                "feature_count": model.feature_count,
+                "status": model.status,
+                "version": model.version,
+                "metrics": model.metrics,
+                "dataset_id": model.dataset_id,
+                "session_id": model.session_id,
+            }
+            model_list.append(model_dict)
+
+        return {"models": model_list}
+
+    except Exception as e:
+        logger.exception("获取所有模型失败")
+        raise HTTPException(status_code=500, detail=f"Failed to get all models: {e}") from e
 
 
 class CreateModelRequest(BaseModel):
@@ -94,10 +157,16 @@ async def update_model(model_id: str, request: UpdateModelRequest) -> dict[str, 
 async def delete_model(model_id: str) -> dict[str, Any]:
     """删除模型"""
     try:
-        # 这里应该实际删除模型
-        # 目前只是返回成功响应
+        # 从模型注册表删除模型
+        success = model_registry.delete_model(model_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Model not found")
+
         return {"success": True, "model_id": model_id}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("删除模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {e}") from e
