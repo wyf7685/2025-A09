@@ -24,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Vue 开发服务器默认端口
-        "http://localhost:8000",
+        "http://localhost:8081",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -39,6 +39,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",  # noqa: S104
-        port=8000,
+        port=8081,
         reload=True,
     )
