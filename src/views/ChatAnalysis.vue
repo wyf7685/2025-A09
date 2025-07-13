@@ -1,12 +1,24 @@
 <script setup lang="ts">
 import AssistantMessage from '@/components/AssistantMessage.vue';
+import ProcessFlow from '@/components/ProcessFlow.vue';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
-import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled, Monitor, Setting } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
+
+// 流程图步骤类型定义
+interface FlowStep {
+  id: string
+  title: string
+  description?: string
+  status: 'pending' | 'running' | 'completed' | 'error'
+  timestamp: Date
+  details?: string[]
+  error?: string
+}
 
 type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[] }
 
@@ -23,9 +35,21 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const isProcessingChat = ref<boolean>(false)
 const selectDatasetDialogVisible = ref<boolean>(false)
 const isFlowPanelOpen = ref<boolean>(true) // 控制流程图面板的显示/隐藏
+const isDeletingSession = ref<boolean>(false) // 防止重复删除操作
 
 // 流程图相关状态
 const flowSteps = ref<FlowStep[]>([])
+
+// 模型配置相关状态
+const availableModels = ref([
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
+  { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
+  { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
+  { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'Anthropic' }
+])
+const selectedModel = ref('gemini-2.0-flash') // 默认模型
 
 const sessions = computed(() => sessionStore.sessions)
 const currentSessionId = computed(() => sessionStore.currentSession?.id)
@@ -87,6 +111,61 @@ const switchSession = async (sessionId: string) => {
   ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`)
 }
 
+// 删除会话
+const deleteSession = async (sessionId: string, event: Event) => {
+  // 阻止事件冒泡，避免触发会话切换
+  event.stopPropagation()
+
+  // 防止重复操作
+  if (isDeletingSession.value) return
+
+  const session = sessions.value.find(s => s.id === sessionId)
+  const sessionName = session?.name || sessionId.slice(0, 8) + '...'
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除会话 "${sessionName}" 吗？删除后无法恢复。`,
+      '删除会话',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    isDeletingSession.value = true
+
+    await sessionStore.deleteSession(sessionId)
+
+    // 如果删除的是当前会话
+    if (sessionId === currentSessionId.value) {
+      messages.value = []
+      clearFlowSteps()
+
+      // 如果还有其他会话，切换到第一个会话
+      if (sessions.value.length > 0) {
+        await switchSession(sessions.value[0].id)
+      }
+    }
+
+    ElMessage.success(`会话 "${sessionName}" 已删除`)
+
+    // 如果没有会话了，提示用户创建新会话
+    if (sessions.value.length === 0) {
+      ElMessage.info('所有会话已删除，请创建新会话开始分析')
+    }
+
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除会话失败:', error)
+      ElMessage.error('删除会话失败')
+    }
+  } finally {
+    isDeletingSession.value = false
+  }
+}
+
 // --- Method to add quick prompts ---
 const addSampleQuestion = (question: string) => {
   userInput.value = question
@@ -118,6 +197,25 @@ const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
 const clearFlowSteps = () => {
   flowSteps.value = []
 }
+
+// 模型配置方法
+const changeModel = (modelId: string) => {
+  selectedModel.value = modelId
+  const model = availableModels.value.find(m => m.id === modelId)
+
+  // 添加模型切换步骤到流程图
+  addFlowStep({
+    title: '模型切换',
+    description: `切换到模型: ${model?.name || modelId}`,
+    status: 'completed'
+  })
+
+  ElMessage.success(`已切换到模型: ${model?.name || modelId}`)
+}
+
+const getCurrentModelInfo = computed(() => {
+  return availableModels.value.find(m => m.id === selectedModel.value) || availableModels.value[0]
+})
 
 // --- Existing Chat Logic Methods ---
 const scrollToBottom = (): void => {
@@ -187,8 +285,13 @@ const sendMessage = async (): Promise<void> => {
   // 添加AI处理步骤到流程图
   const aiStepId = addFlowStep({
     title: 'AI分析处理',
-    description: '正在分析用户请求...',
-    status: 'running'
+    description: `使用模型 ${getCurrentModelInfo.value.name} 正在分析用户请求...`,
+    status: 'running',
+    details: [
+      `模型: ${getCurrentModelInfo.value.name}`,
+      `提供商: ${getCurrentModelInfo.value.provider}`,
+      `模型ID: ${selectedModel.value}`
+    ]
   })
 
   messages.value.push({
@@ -277,7 +380,13 @@ const sendMessage = async (): Promise<void> => {
         if (aiStepId) {
           updateFlowStep(aiStepId, {
             status: 'completed',
-            description: 'AI分析处理完成'
+            description: `使用模型 ${getCurrentModelInfo.value.name} 分析处理完成`,
+            details: [
+              `模型: ${getCurrentModelInfo.value.name}`,
+              `提供商: ${getCurrentModelInfo.value.provider}`,
+              `模型ID: ${selectedModel.value}`,
+              `处理完成时间: ${new Date().toLocaleTimeString()}`
+            ]
           })
         }
 
@@ -326,6 +435,19 @@ const sendMessage = async (): Promise<void> => {
 onMounted(async () => {
   await loadSessions()
   await dataSourceStore.listDataSources() // 加载数据源
+
+  // 初始化模型配置
+  addFlowStep({
+    title: '系统初始化',
+    description: `默认模型已设置为 ${getCurrentModelInfo.value.name}`,
+    status: 'completed',
+    details: [
+      `模型: ${getCurrentModelInfo.value.name}`,
+      `提供商: ${getCurrentModelInfo.value.provider}`,
+      `模型ID: ${selectedModel.value}`
+    ]
+  })
+
   // if (!currentSessionId.value && appStore.sessions.length > 0) {
   //   appStore.setCurrentSession(appStore.sessions[0].id)
   // } else if (appStore.sessions.length === 0) {
@@ -354,7 +476,15 @@ onMounted(async () => {
           <span class="session-name">{{ session.name }}</span>
           <div class="session-actions">
             <el-button type="text" :icon="Edit" size="small" class="action-btn" />
-            <el-button type="text" :icon="Delete" size="small" class="action-btn" />
+            <el-button
+              type="text"
+              :icon="Delete"
+              size="small"
+              class="action-btn delete-btn"
+              @click="deleteSession(session.id, $event)"
+              :disabled="isDeletingSession"
+              title="删除会话"
+            />
           </div>
         </div>
       </div>
@@ -363,10 +493,22 @@ onMounted(async () => {
     <!-- Chat Panel -->
     <div class="chat-panel">
       <div class="chat-panel-header">
-        <el-button v-if="!isSidebarOpen" @click="isSidebarOpen = true" :icon="DArrowRight" text class="toggle-btn" />
-        <span class="session-title" v-if="currentSessionId">
-          {{sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...`}}
-        </span>
+        <div class="header-left">
+          <el-button v-if="!isSidebarOpen" @click="isSidebarOpen = true" :icon="DArrowRight" text class="toggle-btn" />
+          <span class="session-title" v-if="currentSessionId">
+            {{sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...`}}
+          </span>
+        </div>
+        <div class="header-right">
+          <el-button
+            @click="isFlowPanelOpen = !isFlowPanelOpen"
+            :icon="Monitor"
+            text
+            class="toggle-btn"
+          >
+            流程图
+          </el-button>
+        </div>
       </div>
       <div class="chat-messages" ref="messagesContainer">
         <div v-if="!messages.length" class="empty-state">
@@ -457,6 +599,72 @@ onMounted(async () => {
             </el-tag>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Flow Panel -->
+    <div :class="['flow-panel', { 'is-closed': !isFlowPanelOpen }]">
+      <div class="flow-panel-header">
+        <span class="panel-title">
+          <el-icon><Monitor /></el-icon>
+          处理流程
+        </span>
+        <el-button
+          @click="isFlowPanelOpen = false"
+          :icon="DArrowRight"
+          text
+          size="small"
+          class="toggle-btn"
+        />
+      </div>
+
+      <!-- 模型配置区域 -->
+      <div class="model-config-section">
+        <div class="config-header">
+          <span class="config-title">
+            <el-icon><Setting /></el-icon>
+            模型配置
+          </span>
+        </div>
+        <div class="model-selector">
+          <el-select
+            v-model="selectedModel"
+            @change="changeModel"
+            placeholder="选择模型"
+            size="small"
+            class="model-select"
+          >
+            <el-option-group
+              v-for="provider in ['Google', 'OpenAI', 'Anthropic']"
+              :key="provider"
+              :label="provider"
+            >
+              <el-option
+                v-for="model in availableModels.filter(m => m.provider === provider)"
+                :key="model.id"
+                :label="model.name"
+                :value="model.id"
+              >
+                <div class="model-option">
+                  <span class="model-name">{{ model.name }}</span>
+                  <span class="model-provider">{{ model.provider }}</span>
+                </div>
+              </el-option>
+            </el-option-group>
+          </el-select>
+        </div>
+        <div class="current-model-info">
+          <span class="current-model">
+            当前: {{ getCurrentModelInfo.name }}
+          </span>
+        </div>
+      </div>
+
+      <div class="flow-panel-content">
+        <ProcessFlow
+          :steps="flowSteps"
+          @clear="clearFlowSteps"
+        />
       </div>
     </div>
 
@@ -621,6 +829,11 @@ onMounted(async () => {
         color: #374151;
         background-color: #f3f4f6;
       }
+
+      &.delete-btn:hover {
+        color: #ef4444;
+        background-color: #fef2f2;
+      }
     }
   }
 
@@ -665,11 +878,23 @@ onMounted(async () => {
 .chat-panel-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 16px;
   height: 60px;
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
   background: #ffffff;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
   .toggle-btn {
     color: #6b7280;
@@ -765,74 +990,176 @@ onMounted(async () => {
   border-top: 1px solid #e5e7eb;
 }
 
-// --- Flow Panel Styles ---
-.flow-panel {
-  width: 320px;
-  flex-shrink: 0;
-  background: white;
-  border-left: 1px solid #e5e7eb;
-  transition: width 0.3s ease;
-  overflow: hidden;
-}
-
 .chat-input-wrapper {
   display: flex;
   gap: 12px;
   align-items: flex-end;
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  margin-bottom: 12px;
 
-  &:focus-within {
-    border-color: #10b981;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  .el-textarea {
+    flex: 1;
+  }
+
+  .send-button {
+    flex-shrink: 0;
+    height: 32px;
+    padding: 0 16px;
   }
 }
 
-.el-textarea {
-  flex: 1;
-
-  :deep(.el-textarea__inner) {
-    box-shadow: none !important;
-    background: transparent;
-    border: none;
-    padding: 0;
-    font-size: 14px;
-    line-height: 1.5;
-    resize: none;
-
-    &:focus {
-      outline: none;
-    }
-
-    &::placeholder {
-      color: #9ca3af;
-    }
-  }
-}
-
-.send-button {
+// --- Flow Panel Styles ---
+.flow-panel {
+  width: 320px;
   flex-shrink: 0;
-  background: #10b981;
-  border-color: #10b981;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  background: #ffffff;
+  border-left: 1px solid #e5e7eb;
+  transition: width 0.3s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 
-  &:hover {
-    background: #059669;
-    border-color: #059669;
-    transform: translateY(-1px);
+  &.is-closed {
+    width: 0;
+  }
+}
+
+.flow-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  flex-shrink: 0;
+
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: #374151;
+    font-size: 12px;
   }
 
-  &:disabled {
-    background: #d1d5db;
-    border-color: #d1d5db;
-    transform: none;
+  .toggle-btn {
+    color: #6b7280;
+    padding: 2px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: #374151;
+      background-color: #e5e7eb;
+    }
+  }
+}
+
+.flow-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+
+    &:hover {
+      background: #a8a8a8;
+    }
+  }
+}
+
+// --- Model Config Styles ---
+.model-config-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+
+  .config-header {
+    margin-bottom: 8px;
+
+    .config-title {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+    }
+  }
+
+  .model-selector {
+    margin-bottom: 6px;
+
+    .model-select {
+      width: 100%;
+
+      :deep(.el-input) {
+        height: 28px;
+
+        .el-input__inner {
+          font-size: 11px;
+          height: 28px;
+          line-height: 28px;
+          padding: 0 8px;
+        }
+      }
+
+      :deep(.el-select__popper) {
+        .el-option-group__title {
+          font-size: 10px;
+          padding: 4px 8px;
+          color: #6b7280;
+          font-weight: 600;
+        }
+      }
+    }
+  }
+
+  .model-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+
+    .model-name {
+      font-size: 11px;
+      color: #374151;
+      flex: 1;
+    }
+
+    .model-provider {
+      font-size: 9px;
+      color: #9ca3af;
+      background: #f3f4f6;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 8px;
+    }
+  }
+
+  .current-model-info {
+    .current-model {
+      font-size: 10px;
+      color: #10b981;
+      font-weight: 500;
+      background: #f0fdf4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid #bbf7d0;
+      display: inline-block;
+      width: 100%;
+      text-align: center;
+    }
   }
 }
 

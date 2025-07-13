@@ -64,7 +64,7 @@ onMounted(() => {
       <el-row :gutter="21" class="actions-row">
 
         <el-col :span="7">
-          <div class="quick-action-card sources-card" @click="$router.push('/data-sources')">
+          <div class="quick-action-card sources-card" @click="$router.push('/data-management')">
             <div class="action-icon sources-icon">
               <el-icon>
                 <DataBoard />
