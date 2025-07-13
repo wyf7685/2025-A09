@@ -1,6 +1,5 @@
 # ruff: noqa: PD011
 
-import contextlib
 import functools
 import threading
 from collections.abc import AsyncIterator, Iterator
@@ -8,9 +7,10 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 import pandas as pd
+from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
-from langchain_core.runnables import RunnableLambda, ensure_config
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import Runnable, RunnableLambda, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel
@@ -274,6 +274,112 @@ ensemble_eval = evaluate_model_tool(ensemble_id)
 请记住，通常需要多个连续的工具调用和结果解释才能得到全面而深入的分析。
 """
 
+CREATE_TITLE_PROMPT = """\
+你是一位专业的数据分析对话总结专家。请根据以下用户与AI数据分析师之间的对话内容，生成一个简洁、准确且信息丰富的会话标题。
+
+## 指导原则：
+1. 标题应体现用户的主要分析需求或问题
+2. 标题应包含数据分析的核心主题或目标
+3. 标题长度应控制在5-10个字之间，最多不超过15个字
+4. 使用专业且精确的术语
+5. 不要使用"分析""研究"等过于笼统的词语开头
+6. 直接给出标题，不要有多余的解释或引导语
+
+## 格式要求：
+- 仅输出标题文本，不需要引号或其他标点符号
+- 不要包含"标题："、"会话标题："等前缀
+
+## 对话记录：
+{conversation}
+
+请基于以上对话记录生成一个适合的标题：
+"""
+
+SUMMARY_PROMPT = """\
+你是一位专业的数据分析总结专家。请根据以下用户与AI数据分析师之间的对话内容，生成一份结构清晰的分析总结报告。
+
+## 报告要求：
+1. 报告应包含以下主要部分：
+   - 分析目标：用户希望解决的核心问题或达成的分析目标
+   - 数据概述：简要描述分析中使用的数据特点
+   - 分析过程：按时间顺序概括主要分析步骤和使用的方法
+   - 关键发现：列出分析中发现的最重要见解
+   - 结论与建议：总结分析结果并提出后续行动建议
+
+2. 报告风格要求：
+   - 专业、简洁、客观
+   - 重点突出关键分析步骤和结果
+   - 使用专业术语，但避免过于技术性的细节描述
+   - 保持结构清晰，使用小标题和要点列表增强可读性
+   - 避免直接提及工具ID，而是描述执行的操作（如"进行了相关性分析"而非"使用correlation_analysis_tool"）
+
+## 数据分析工具说明：
+- **数据探索与可视化**：
+  - analyze_data：进行灵活的探索性分析和可视化
+  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
+- **数据处理与特征工程**：
+  - create_column_tool：创建新列或转换现有列
+  - create_interaction_term_tool：创建特征交互项
+  - create_aggregated_feature_tool：创建基于分组聚合的特征
+- **数据分析**：
+  - correlation_analysis_tool：分析变量间相关性
+  - lag_analysis_tool：分析时间序列数据中的时滞关系
+  - detect_outliers_tool：检测异常值
+- **特征选择**：
+  - select_features_tool：自动选择最重要的特征子集
+  - analyze_feature_importance_tool：分析特征重要性
+- **模型训练与优化**：
+  - create_model_tool：创建机器学习模型实例（不训练）
+  - fit_model_tool：训练已创建的模型
+  - create_composite_model_tool：创建集成模型，组合多个已训练模型
+  - optimize_hyperparameters_tool：优化模型超参数
+  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
+  - evaluate_model_tool：评估模型性能
+  - save_model_tool：保存训练好的模型
+  - load_model_tool：加载已保存的模型
+
+## 数据分析过程概括指南：
+1. 识别并总结用户进行的主要数据探索步骤
+2. 提取使用的关键分析方法（如相关性分析、特征工程、模型训练等）
+3. 总结每个主要分析阶段的结果和见解
+4. 忽略技术实现细节，保留业务洞察和数据见解
+
+## 关键发现提取指南：
+1. 识别对话中提到的显著模式、关联或趋势
+2. 提取统计上显著的结果
+3. 包括可能影响业务决策的重要发现
+4. 关注预测模型（如有）的性能和关键影响因素
+
+## 结论与建议部分指南：
+1. 综合分析结果回答用户的初始问题
+2. 提出3-5条基于数据支持的具体建议
+3. 指出分析的局限性和可能的改进方向
+4. 建议可能的后续分析方向
+
+## 图表引用指南：
+1. 在对话中出现的图表将使用ID标识 (例如：[包含图片输出, ID=0])
+2. 在报告中需要引用图表时，使用以下格式：![图表描述]({{figure-0}})
+3. 图表ID从0开始编号，按照在对话中出现的顺序递增
+4. 图表描述应简明扼要地说明图表内容和目的
+5. 在引用图表的同时，务必在正文中对图表内容进行解释和分析
+
+## 图表引用示例：
+- "从相关性分析结果可以看出，特征A和目标变量呈强正相关，如下图所示：![特征A与目标变量的相关性热图]({{figure-0}})"
+- "下图展示了各特征的重要性排序，其中特征B最为重要：![特征重要性排序]({{figure-2}})"
+
+## 输出格式要求：
+- 使用Markdown格式输出报告
+- 正确引用并解释相关图表
+- 使用标题和小标题组织报告结构
+- 使用列表条目增强关键发现和建议的可读性
+- 描述数据分析步骤时使用专业术语（如"进行特征选择"、"执行异常值检测"），而非提及具体工具名称
+- 尽量用业务语言而非技术语言描述结果，使非技术人员也能理解
+
+## 对话记录：
+{conversation}
+
+请根据以上对话记录生成分析总结报告：
+"""
 
 class AgentValues(TypedDict):
     messages: list[AnyMessage]
@@ -292,7 +398,6 @@ TOOLS_TO_RESUME = {
 
 
 def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFrame:
-    original = df.copy()
     for call in functools.reduce(
         (lambda a, b: a + b),
         (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
@@ -307,14 +412,57 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
                 logger.opt(colors=True, exception=True).warning(
                     f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(str(err))}"
                 )
-                return original
+                continue
             if not result["success"]:
                 logger.opt(colors=True).warning(
                     f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(result['message'])}"
                 )
-                return original
-
     return df
+
+
+def format_conversation(messages: list[AnyMessage], *, include_figures: bool) -> tuple[str, list[str]]:
+    """格式化对话记录为字符串"""
+    formatted: list[str] = []
+    figures: list[str] = []
+    for message in messages:
+        match message:
+            case HumanMessage(content=content):
+                formatted.append(f"用户:\n<user-content>\n{content}\n</user-content>")
+            case AIMessage(content=content, tool_calls=tool_calls):
+                content = fix_message_content(content)
+                formatted.append(f"AI:\n<ai-content>\n{content}\n</ai-content>")
+                for tool_call in tool_calls:
+                    if tool_call["id"] is None:
+                        continue
+                    formatted.append(
+                        f"工具调用请求({tool_call['id']}): {tool_call['name']}\n"
+                        f"<tool-call-args>\n{tool_call['args']!r}\n</tool-call-args>"
+                    )
+            case ToolMessage(tool_call_id=id, status=status, content=content, artifact=artifact):
+                artifact_info = ""
+                if (
+                    include_figures
+                    and isinstance(artifact, dict)
+                    and artifact.get("type") == "image"
+                    and (base64_data := artifact.get("base64_data")) is not None
+                ):
+                    artifact_info = f"[包含图片输出, ID={len(figures)}]\n"
+                    figures.append(base64_data)
+                formatted.append(f"工具调用结果({id}): {status}\n<tool-call>\n{content!r}\n{artifact_info}</tool-call>")
+
+    return f"<conversation>\n{'\n'.join(formatted) if formatted else '无对话记录'}\n</conversation>", figures
+
+
+def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, str]:
+    input = {"conversation": format_conversation(messages, include_figures=False)[0]}
+    prompt = PromptTemplate(template=CREATE_TITLE_PROMPT, input_variables=["conversation"])
+    return (lambda _: input) | prompt | llm
+
+
+def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, tuple[str, list[str]]]:
+    conversation, figures = format_conversation(messages, include_figures=True)
+    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation"])
+    return (lambda _: {"conversation": conversation}) | prompt | llm | (lambda s: (s, figures))
 
 
 class DataAnalyzerAgent:
@@ -327,6 +475,7 @@ class DataAnalyzerAgent:
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
         self.data_source = data_source
+        self.llm = llm
         analyzer = analyzer_tool(data_source, llm)
         df_tools = dataframe_tools(data_source.get_full)
         sk_tools, models, saved_models = scikit_tools(data_source.get_full)
@@ -346,27 +495,22 @@ class DataAnalyzerAgent:
         )
         self.trained_models = models
         self.saved_models = saved_models
-        self._first_user_message = None  # 存储用户第一次提问的内容
 
-    def get_first_user_message(self) -> str | None:
-        """获取用户第一次提问的内容"""
-        if self._first_user_message is not None:
-            return self._first_user_message
+    def get_messages(self) -> list[AnyMessage]:
+        """获取当前 agent 的对话记录"""
+        return self.agent.get_state(self.config).values["messages"]
 
-        # 从agent状态中获取消息历史
-        with contextlib.suppress(Exception):
-            for message in self.agent.get_state(self.config).values.get("messages", []):
-                match message:
-                    case HumanMessage(content=content):
-                        self._first_user_message = fix_message_content(content)
-                        return self._first_user_message
+    def create_title(self) -> str:
+        return _create_title_chain(self.llm, self.get_messages()).invoke(...)
 
-        return None
+    async def create_title_async(self) -> str:
+        return await _create_title_chain(self.llm, self.get_messages()).ainvoke(...)
 
-    def set_first_user_message(self, message: str) -> None:
-        """设置用户第一次提问的内容"""
-        if self._first_user_message is None:
-            self._first_user_message = message
+    def summary(self) -> tuple[str, list[str]]:
+        return _summary_chain(self.llm, self.get_messages()).invoke(...)
+
+    async def summary_async(self) -> tuple[str, list[str]]:
+        return await _summary_chain(self.llm, self.get_messages()).ainvoke(...)
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
@@ -395,9 +539,6 @@ class DataAnalyzerAgent:
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
-        # 如果是第一次调用，设置用户消息
-        self.set_first_user_message(user_input)
-
         for event in self.agent.stream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,
@@ -407,9 +548,6 @@ class DataAnalyzerAgent:
 
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
-        # 如果是第一次调用，设置用户消息
-        self.set_first_user_message(user_input)
-
         async for event in self.agent.astream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,

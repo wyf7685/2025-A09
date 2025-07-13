@@ -2,10 +2,9 @@ import datetime
 import threading
 from typing import Any
 
-from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
-from langchain_core.runnables import Runnable, RunnableLambda, RunnableWithMessageHistory
+from langchain_core.runnables import Runnable, RunnableLambda
 
 from app.core.config import settings
 from app.log import logger
@@ -88,8 +87,3 @@ def get_chat_model() -> BaseChatModel:
 
     logger.info("未检测到模型配置，尝试使用本地部署 Ollama 模型")
     return ChatOllama(model=model_name)
-
-
-def wrap_with_memory(llm: LLM) -> LLM:
-    history = InMemoryChatMessageHistory()
-    return RunnableWithMessageHistory(llm, lambda: history)

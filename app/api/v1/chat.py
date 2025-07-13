@@ -3,13 +3,12 @@
 """
 
 import json
-import re
 from collections.abc import AsyncIterator
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
@@ -19,47 +18,15 @@ from app.schemas.chat import ChatEntry, UserChatMessage
 from app.services.datasource import datasource_service
 from app.services.session import session_service
 
-router = APIRouter()
+router = APIRouter(prefix="/chat")
 
 # Agent 实例缓存
 agents: dict[str, DataAnalyzerAgent] = {}
 
 
-def clean_message_for_session_name(message: str, max_length: int = 30) -> str:
-    """清理并截断消息内容作为会话名称"""
-    # 移除多余的空白字符
-    cleaned = re.sub(r"\s+", " ", message).strip()
-
-    # 移除特殊字符，保留中英文、数字、常用标点
-    cleaned = re.sub(r"[^\u4e00-\u9fa5\w\s\.\?\!\,\:\;\(\)\[\]\-\+\=]", "", cleaned)
-
-    # 如果消息过长，智能截断
-    if len(cleaned) > max_length:
-        # 尝试在标点符号处截断
-        truncate_pos = max_length - 3
-        for punct in ["。", "？", "！", ".", "?", "!", "，", ","]:
-            punct_pos = cleaned.rfind(punct, 0, truncate_pos)
-            if punct_pos > max_length // 2:
-                return cleaned[: punct_pos + 1]
-
-        # 如果没有合适的标点，直接截断
-        cleaned = cleaned[: max_length - 3] + "..."
-
-    return cleaned if cleaned else "未命名对话"
-
-
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    dataset_id: str | None = None
-
-    @field_validator("session_id", mode="after")
-    @classmethod
-    def validate_session_id(cls, v: str) -> str:
-        """验证会话ID是否存在"""
-        if not v or not session_service.session_exists(v):
-            raise ValueError("Session not found")
-        return v
 
     @field_validator("message", mode="after")
     @classmethod
@@ -99,14 +66,16 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
             else:
                 yield msg
 
-            chat_entry.push_stream_event(event)
+            chat_entry.add_stream_event(event)
+
+        chat_entry.merge_text()
 
         # 保存状态
         agent.save_state(STATE_DIR / f"{session_id}.json")
 
         # 如果这是第一条消息，设置会话名称
         if len(session.chat_history) == 0:
-            session_name = clean_message_for_session_name(request.message)
+            session_name = await agent.create_title_async()
             session.name = session_name
             logger.info(f"设置会话 {session_id} 名称为: {session_name}")
 
@@ -122,7 +91,32 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         yield json.dumps({"error": str(e)})
 
 
-@router.post("/chat/stream")
+@router.post("/stream")
 async def chat_analysis_stream(request: ChatRequest) -> StreamingResponse:
     """对话式数据分析（流式输出）"""
     return StreamingResponse(generate_chat_stream(request), media_type="text/event-stream")
+
+
+class SummaryRequest(BaseModel):
+    session_id: str
+
+
+class SummaryResponse(BaseModel):
+    session_id: str
+    summary: str
+    figures: list[str]
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+@router.post("/summary")
+async def chat_summary(request: SummaryRequest) -> SummaryResponse:
+    """获取对话摘要"""
+    session = session_service.get_session(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found for this session")
+
+    summary, figures = await agents[session.id].summary_async()
+    return SummaryResponse(session_id=session.id, summary=summary, figures=figures)

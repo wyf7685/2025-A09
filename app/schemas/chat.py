@@ -53,7 +53,7 @@ class ChatEntry(BaseModel):
     user_message: UserChatMessage
     assistant_response: AssistantChatMessage = Field(default_factory=AssistantChatMessage)
 
-    def push_stream_event(self, event: StreamEvent) -> None:
+    def add_stream_event(self, event: StreamEvent) -> None:
         resp = self.assistant_response
         match event.type:
             case "llm_token":
@@ -77,3 +77,22 @@ class ChatEntry(BaseModel):
             case "tool_error" if call := (resp.tool_calls.get(event.id)):
                 call.status = "error"
                 call.error = event.error
+
+    def merge_text(self) -> None:
+        """合并连续文本消息"""
+        if not self.assistant_response.content:
+            return
+
+        merged_content = []
+        current_text = ""
+        for item in self.assistant_response.content:
+            match item:
+                case AssistantChatMessageText(content=content):
+                    current_text += content
+                case AssistantChatMessageToolCall():
+                    if current_text:
+                        merged_content.append(AssistantChatMessageText(content=current_text))
+                        current_text = ""
+                    merged_content.append(item)
+
+        self.assistant_response.content = merged_content
