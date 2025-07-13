@@ -20,7 +20,7 @@ from app.core.datasource import DataSource
 from app.log import logger
 from app.utils import escape_tag, format_overview
 
-from .events import BufferedStreamEventReader, StreamEvent, fix_message_content
+from .events import StreamEvent, fix_message_content, process_stream_event
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
 from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 
@@ -255,13 +255,14 @@ ensemble_eval = evaluate_model_tool(ensemble_id)
    - 提出3-5个明确的后续步骤建议
    - 指出哪些问题仍未解答以及如何进一步探索
 
-无论用户是否明确要求，在每次分析结束时，主动提供一个"下一步建议"部分，包含3-5个具体、可操作的建议，帮助用户进一步提升分析质量或模型性能。
-格式如下：
-**下一步建议**（只输出如下格式，便于前端提取）：
-1.建议1内容
-2.建议2内容
-3.建议3内容
-4.建议4内容
+无论用户是否明确要求，在每次分析结束时，主动提供一个"下一步建议"部分
+包含3-5个具体、可操作的建议，帮助用户进一步提升分析质量或模型性能
+格式如下（只输出如下格式，便于前端提取）：
+**下一步建议**：
+1. 建议1内容
+2. 建议2内容
+3. 建议3内容
+4. 建议4内容
 
 ## 输出格式要求
 - 分析报告应该结构清晰，包含标题、小节和结论
@@ -397,30 +398,22 @@ class DataAnalyzerAgent:
         # 如果是第一次调用，设置用户消息
         self.set_first_user_message(user_input)
 
-        reader = BufferedStreamEventReader()
-
         for event in self.agent.stream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,
             stream_mode="messages",
         ):
-            yield from reader.push(event)
-        if evt := reader.flush():
-            yield evt
+            yield from process_stream_event(event)
 
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
         # 如果是第一次调用，设置用户消息
         self.set_first_user_message(user_input)
 
-        reader = BufferedStreamEventReader()
-
         async for event in self.agent.astream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,
             stream_mode="messages",
         ):
-            for evt in reader.push(event):
+            for evt in process_stream_event(event):
                 yield evt
-        if evt := reader.flush():
-            yield evt

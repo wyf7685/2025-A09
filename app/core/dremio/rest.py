@@ -1,6 +1,5 @@
 # ruff: noqa: S608, S113
 import json
-import os
 import shutil
 import time
 import uuid
@@ -12,7 +11,9 @@ from typing import Any
 import pandas as pd
 import requests
 
+from app.core.config import settings
 from app.log import logger
+from app.utils import escape_tag
 
 
 @dataclass
@@ -49,15 +50,19 @@ class DremioClient:
             external_dir: 外部数据源本地目录路径
             external_name: 外部数据源名称
         """
-        self.base_url = base_url or os.environ.get("DREMIO_BASE_URL", "http://localhost:9047")
-        self.username = username or os.environ.get("DREMIO_USERNAME")
-        self.password = password or os.environ.get("DREMIO_PASSWORD")
-        self.external_dir = external_dir or Path(os.environ.get("DREMIO_EXTERNAL_DIR", "external"))
-        self.external_name = external_name or os.environ.get("DREMIO_EXTERNAL_NAME", "external")
-        assert self.base_url, "Dremio base URL is required"
-        assert self.username, "Dremio username is required"
-        assert self.password, "Dremio password is required"
+        self.base_url: str = base_url or str(settings.DREMIO_BASE_URL).rstrip("/")
+        self.username: str = username or settings.DREMIO_USERNAME
+        self.password: str = password or settings.DREMIO_PASSWORD.get_secret_value()
+        self.external_dir = external_dir or settings.DREMIO_EXTERNAL_DIR
+        self.external_name = external_name or settings.DREMIO_EXTERNAL_NAME
+
+        self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
+        self._expire_source_cache()
+
+    def _expire_source_cache(self) -> None:
+        self._container_cache = None
+        self._source_cache = None
 
     def get_token(self) -> str:
         """
@@ -173,7 +178,7 @@ class DremioClient:
             dict[str, Any]: 查询结果
         """
         job_id = self.create_query_job(sql_query)
-        logger.opt(colors=True).info(f"查询提交成功，Job ID: <c>{job_id}</>")
+        logger.opt(colors=True).info(f"查询提交成功: <c>{job_id}</>\n<y>{escape_tag(sql_query)}</>")
 
         self.wait_for_job_completion(job_id)
         logger.opt(colors=True).success(f"查询完成: <c>{job_id}</>")
@@ -205,7 +210,6 @@ class DremioClient:
 
         Args:
             file: CSV 文件路径
-            token: 可选的认证 token
 
         Returns:
             str: 生成的源文件名
@@ -240,6 +244,7 @@ class DremioClient:
         )
         response.raise_for_status()
 
+        self._expire_source_cache()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -253,6 +258,7 @@ class DremioClient:
         source_name = f"{uuid.uuid4()}{file.suffix}"
         shutil.copyfile(file, self.external_dir / source_name)
 
+        self._expire_source_cache()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -311,6 +317,7 @@ class DremioClient:
             data=json.dumps(payload),
         )
         response.raise_for_status()
+        self._expire_source_cache()
         return source_name
 
     def query_source_children(self, source_name: str | list[str]) -> list[DremioSource]:
@@ -336,7 +343,7 @@ class DremioClient:
             if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
                 sources.append(DremioSource(id=child["id"], path=path, type=ds_type))
             elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
-                sources.extend(self.query_source_children("/".join(path)))
+                sources.extend(self.query_source_children(path))
 
         return sources
 
@@ -346,7 +353,7 @@ class DremioClient:
         limit: int | None = None,
         *,
         fetch_all: bool = False,
-        max_workers: int = 5,
+        max_workers: int = 10,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -428,19 +435,31 @@ class DremioClient:
 
     def list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")
+        if self._container_cache is not None:
+            logger.info("使用缓存的容器列表")
+            return self._container_cache
+
         url = f"{self.base_url}/api/v3/catalog"
         response = requests.get(url, headers=self.get_auth_header())
         response.raise_for_status()
 
-        return [
+        containers = [
             DremioContainer(id=item["id"], path=item["path"])
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
+        self._container_cache = containers
+        return containers
 
     def list_sources(self) -> list[DremioSource]:
         logger.info("查询 Dremio 中的所有数据源...")
+        if self._source_cache is not None:
+            logger.info("使用缓存的数据源列表")
+            return self._source_cache
+
         sources: list[DremioSource] = []
         for container in self.list_containers():
             sources.extend(self.query_source_children(container.path))
+        self._source_cache = sources
+        logger.info(f"共找到 {len(sources)} 个数据源")
         return sources

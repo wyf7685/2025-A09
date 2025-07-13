@@ -29,9 +29,21 @@ export interface UserChatMessage {
   timestamp: string;
 }
 
+export interface AssistantChatMessageText {
+  type: 'text';
+  content: string;
+}
+
+export interface AssistantChatMessageToolCall {
+  type: 'tool_call';
+  id: string; // 工具调用的唯一标识符
+}
+
+export type AssistantChatMessageContent = AssistantChatMessageText | AssistantChatMessageToolCall;
+
 export interface AssistantChatMessage {
   type: 'assistant';
-  content: ({ type: 'text'; content: string } | { type: 'tool_call'; id: string })[];
+  content: AssistantChatMessageContent[];
   timestamp: string;
   tool_calls?: Record<string, ToolCall>;
 }

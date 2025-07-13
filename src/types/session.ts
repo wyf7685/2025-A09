@@ -16,7 +16,7 @@ export interface Session {
  */
 export interface SessionListItem {
   id: string;
-  name: string;
+  name: string | null;
   created_at: string;
   chat_count: number;
 }

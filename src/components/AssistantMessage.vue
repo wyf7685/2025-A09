@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import AssistantMessageText from '@/components/AssistantMessageText.vue';
 import type { AssistantChatMessage } from '@/types';
-import AssistantMessageText from '@/components/AssistantMessageText.vue'
 import { ref } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   message: AssistantChatMessage & { loading?: boolean };
 }>();
 
@@ -45,8 +45,8 @@ const toggleSectionExpand = (toolId: string, section: keyof ExpandState) => {
 };
 
 // 检查工具调用是否展开
-const isToolExpanded = (id: string) => {
-  return !!expandedTools.value[id];
+const isToolExpanded = (toolId: string) => {
+  return !!expandedTools.value[toolId];
 };
 
 // 检查工具调用内部部分是否展开
@@ -142,12 +142,6 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
       </div>
     </div>
   </div>
-  <div v-if="message.loading">
-    <el-icon>
-      <Loading class="rotating" />
-    </el-icon>
-    正在处理...
-  </div>
 </template>
 
 <style scoped>
@@ -157,19 +151,32 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
 }
 
 .assistant-text {
-  line-height: 1.3;
+  line-height: 1.5;
+  color: #374151;
+  font-size: 14px;
 }
 
 /* 覆盖一些 GitHub 样式以更好地适应聊天界面 */
 :deep(.markdown-body) {
-  font-family: inherit;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: transparent;
   font-size: 14px;
+  color: #374151;
 
   /* 调整代码块样式 */
   pre {
     background-color: #f6f8fa;
-    border-radius: 6px;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #e1e5e9;
+    overflow-x: auto;
+  }
+
+  code {
+    background-color: #f6f8fa;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 13px;
   }
 
   /* 调整表格样式 */
@@ -177,105 +184,180 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
     display: table;
     width: 100%;
     overflow-x: auto;
+    border-collapse: collapse;
+    margin: 12px 0;
+  }
+
+  table th,
+  table td {
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    text-align: left;
+  }
+
+  table th {
+    background-color: #f6f8fa;
+    font-weight: 600;
   }
 
   /* 调整图片最大宽度 */
   img {
     max-width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* 调整标题样式 */
+  h1, h2, h3, h4, h5, h6 {
+    color: #1f2937;
+    font-weight: 600;
+  }
+
+  /* 调整链接样式 */
+  a {
+    color: #10b981;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  /* 调整列表样式 */
+  ul, ol {
+    margin: 8px 0;
+    padding-left: 20px;
+  }
+
+  li {
+    margin: 4px 0;
+  }
+
+  /* 调整引用样式 */
+  blockquote {
+    margin: 12px 0;
+    padding: 8px 12px;
+    background-color: #f9fafb;
+    border-left: 4px solid #10b981;
+    border-radius: 4px;
   }
 }
 
 /* 工具调用样式 */
 .tool-call {
-  background: #f9f9f9;
-  border-radius: 6px;
-  padding: 10px;
-  margin-bottom: 10px;
-  border-left: 3px solid #909399;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
   &.running {
-    border-left-color: #E6A23C;
+    border-left: 4px solid #f59e0b;
+    background: #fffbeb;
   }
 
   &.success {
-    border-left-color: #67C23A;
+    border-left: 4px solid #10b981;
+    background: #f0fdf4;
   }
 
   &.error {
-    border-left-color: #F56C6C;
+    border-left: 4px solid #ef4444;
+    background: #fef2f2;
   }
 }
 
 .tool-header {
   display: flex;
   align-items: center;
-  font-weight: bold;
-  margin-bottom: 5px;
+  font-weight: 600;
+  margin-bottom: 12px;
   cursor: pointer;
   user-select: none;
+  color: #374151;
+  font-size: 14px;
 
   .el-icon {
-    margin-right: 5px;
+    margin-right: 8px;
+    color: #6b7280;
   }
 }
 
 .expand-icon {
   margin-left: auto;
+  color: #6b7280;
+  transition: transform 0.2s ease;
 }
 
 .tool-section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px;
-  background-color: #f0f0f0;
-  border-radius: 4px;
-  margin: 5px 0;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+  border-radius: 6px;
+  margin: 8px 0;
   cursor: pointer;
   user-select: none;
-  font-weight: bold;
+  font-weight: 500;
+  color: #4b5563;
+  font-size: 13px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background-color: #e2e8f0;
+  }
 }
 
 .tool-content {
-  margin-top: 8px;
-  margin-left: 8px;
+  margin-top: 12px;
+  margin-left: 0;
 }
 
 .tool-args {
-  background: #f5f5f5;
-  padding: 8px;
-  border-radius: 4px;
-  margin-bottom: 8px;
+  background: #f0f9ff;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  border-left: 3px solid #3b82f6;
 
   pre {
     margin: 0;
     white-space: pre-wrap;
     font-size: 12px;
+    color: #1e40af;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   }
 }
 
 .tool-result {
-  background: #f0f9eb;
-  padding: 8px;
-  border-radius: 4px;
+  background: #f0fdf4;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #10b981;
 
   pre {
     margin: 0;
     white-space: pre-wrap;
     font-size: 12px;
+    color: #166534;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   }
 }
 
 .tool-error {
-  background: #fef0f0;
-  padding: 8px;
-  border-radius: 4px;
+  background: #fef2f2;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #ef4444;
 
   pre {
     margin: 0;
     white-space: pre-wrap;
     font-size: 12px;
-    color: #F56C6C;
+    color: #dc2626;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   }
 }
 
@@ -287,23 +369,34 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
   0% {
     transform: rotate(0deg);
   }
-
   100% {
     transform: rotate(360deg);
   }
 }
 
 .tool-artifact {
-  margin-top: 5px;
+  margin-top: 12px;
 }
 
 .image-artifact {
   text-align: center;
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .image-caption {
-  margin-top: 5px;
+  margin-top: 12px;
   font-style: italic;
-  color: #666;
+  color: #6b7280;
+  font-size: 13px;
 }
 </style>

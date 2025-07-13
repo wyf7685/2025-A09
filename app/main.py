@@ -3,7 +3,6 @@
 """
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,9 +11,6 @@ from app.utils import configure_matplotlib_fonts
 configure_matplotlib_fonts()
 
 from app.api.v1 import router as api_router
-
-# 加载环境变量
-load_dotenv()
 
 # 创建 FastAPI 应用
 app = FastAPI(

@@ -1,10 +1,17 @@
-from typing import override
+from typing import Any, override
 
 import pandas as pd
+from pydantic import BaseModel
 
+from app.core.dremio import get_dremio_client
 from app.core.dremio.rest import DremioClient, DremioSource
 
 from .source import DataSource, DataSourceMetadata
+
+
+class DremioDataSourceModel(BaseModel):
+    source: DremioSource
+    metadata: DataSourceMetadata
 
 
 class DremioDataSource(DataSource):
@@ -36,7 +43,7 @@ class DremioDataSource(DataSource):
     def client(self) -> DremioClient:
         """获取 Dremio 客户端"""
         if self._client is None:
-            self._client = DremioClient()
+            self._client = get_dremio_client()
         return self._client
 
     @override
@@ -52,3 +59,20 @@ class DremioDataSource(DataSource):
     def copy(self) -> "DremioDataSource":
         """创建 Dremio 数据源的副本"""
         return DremioDataSource(source=self.source, metadata=self.metadata.copy())
+
+    @property
+    @override
+    def unique_id(self) -> str:
+        return f"dremio:{'$'.join(self.source.path)}"
+
+    @override
+    def serialize(self) -> tuple[str, dict[str, Any]]:
+        """序列化 Dremio 数据源"""
+        return "dremio", DremioDataSourceModel(source=self.source, metadata=self.metadata).model_dump(mode="json")
+
+    @classmethod
+    @override
+    def deserialize(cls, data: dict[str, Any]) -> "DremioDataSource":
+        """反序列化 Dremio 数据源"""
+        model = DremioDataSourceModel.model_validate(data)
+        return cls(source=model.source, metadata=model.metadata)

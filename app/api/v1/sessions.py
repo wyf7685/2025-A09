@@ -2,18 +2,18 @@
 会话管理接口
 """
 
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api.v1.datasources import datasources
-from app.core.schema.session import Session, SessionListItem
 from app.log import logger
+from app.schemas.session import Session, SessionListItem
+from app.services.datasource import datasource_service
+from app.services.session import session_service
 
 # 模拟数据存储，在实际项目中应替换为数据库
-sessions: dict[str, Session] = {}
+# sessions: dict[str, Session] = {}
 
 router = APIRouter()
 
@@ -32,16 +32,10 @@ async def create_session(request: CreateSessionRequest) -> Session:
     try:
         # 检查数据集是否存在
 
-        if request.dataset_id not in datasources:
+        if not datasource_service.source_exists(request.dataset_id):
             raise HTTPException(status_code=404, detail="Dataset not found")
 
-        # 创建新会话
-        session_id = str(uuid.uuid4())
-
-        # 设置会话的数据集
-        sessions[session_id] = Session(id=session_id, dataset_id=request.dataset_id)
-
-        return sessions[session_id]
+        return session_service.create_session(request.dataset_id)
 
     except HTTPException:
         raise
@@ -53,30 +47,17 @@ async def create_session(request: CreateSessionRequest) -> Session:
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str) -> Session:
     """获取会话信息"""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
+    if session := session_service.get_session(session_id):
+        return session
 
-    return sessions[session_id]
+    raise HTTPException(status_code=404, detail="Session not found")
 
 
 @router.get("/sessions")
 async def get_sessions() -> list[SessionListItem]:
     """获取所有会话列表"""
     try:
-        session_list = [
-            SessionListItem(
-                id=session.id,
-                name=session.name or f"会话 {session.id[:8]}",
-                created_at=session.created_at,
-                chat_count=len(session.chat_history),
-            )
-            for session in sessions.values()
-        ]
-
-        # 按创建时间倒序排列
-        session_list.sort(key=lambda x: x.created_at, reverse=True)
-
-        return session_list
+        return sorted(session_service.list_sessions(), key=lambda x: x.created_at, reverse=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {e}") from e
 
@@ -84,9 +65,8 @@ async def get_sessions() -> list[SessionListItem]:
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str) -> dict[str, Any]:
     """删除会话"""
-    if session_id not in sessions:
+    if not session_service.session_exists(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # 删除会话
-    del sessions[session_id]
+    session_service.delete_session(session_id)
     return {"success": True, "message": f"Session {session_id} deleted"}

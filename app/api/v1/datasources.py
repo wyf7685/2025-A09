@@ -2,41 +2,27 @@
 数据源管理接口
 """
 
+import asyncio
 import contextlib
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
-from app.core.datasource import DataSource, create_dremio_source
+from app.core.datasource import create_dremio_source
 from app.core.datasource.source import DataSourceMetadata
-from app.core.dremio import DremioSource
-from app.core.dremio.rest import DremioClient
+from app.core.dremio import DremioSource, get_dremio_client
 from app.log import logger
+from app.services.datasource import datasource_service
+from app.services.session import session_service
 from app.utils import run_sync
 
 # 创建路由
 router = APIRouter(prefix="/datasources")
 
 # 数据源存储
-datasources: dict[str, DataSource] = {}
-
-
-def register_datasource(source: DataSource) -> str:
-    """
-    注册数据源
-
-    Args:
-        source: 数据源对象
-
-    Returns:
-        str: 数据源ID
-    """
-    source_id = str(uuid.uuid4())
-    datasources[source_id] = source
-    return source_id
+# datasources: dict[str, DataSource] = {}
 
 
 class RegisterDataSourceRequest(BaseModel):
@@ -46,25 +32,6 @@ class RegisterDataSourceRequest(BaseModel):
 class RegisterDataSourceResponse(BaseModel):
     source_id: str
     metadata: DataSourceMetadata
-
-
-@router.post("/register", response_model=RegisterDataSourceResponse)
-async def register_dremio_source(data: RegisterDataSourceRequest) -> dict[str, Any]:
-    """
-    注册数据源API
-
-    接收数据源信息，创建DataSource实例并注册
-    """
-    try:
-        # 创建数据源
-        source = create_dremio_source(data.source)
-        source_id = register_datasource(source)
-        return {"source_id": source_id, "metadata": source.metadata}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("注册数据源失败")
-        raise HTTPException(status_code=500, detail=f"Failed to register datasource: {e}") from e
 
 
 @router.post("/upload", response_model=RegisterDataSourceResponse)
@@ -86,16 +53,54 @@ async def upload_file(
         file_path = UPLOAD_DIR / file.filename
         file_path.write_bytes(await file.read())
 
-        client = DremioClient()
-        meth = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
-        source = create_dremio_source(await run_sync(meth)(file_path), source_name)
-        source_id = register_datasource(source)
+        client = get_dremio_client()
+        call = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
+        dremio_source = await run_sync(call)(file_path)
+        source = create_dremio_source(dremio_source, source_name)
+        source_id = datasource_service.register(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("上传文件失败")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
+
+
+class UpdateDataSourceRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+@router.put("/{source_id}", response_model=DataSourceMetadata)
+async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> DataSourceMetadata:
+    """
+    更新数据源信息
+
+    支持修改数据源的名称和描述
+    """
+    try:
+        if not datasource_service.source_exists(source_id):
+            raise HTTPException(status_code=404, detail="Datasource not found")
+
+        source = datasource_service.get_source(source_id)
+
+        # 更新元数据
+        if data.name is not None:
+            source.metadata.name = data.name
+
+        if data.description is not None:
+            source.metadata.description = data.description
+
+        datasource_service.save_source(source_id, source)
+        return source.metadata
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("更新数据源失败")
+        raise HTTPException(status_code=500, detail=f"Failed to update datasource: {e}") from e
+
+
+list_ds_sem = asyncio.Semaphore(1)
 
 
 @router.get("")
@@ -105,15 +110,9 @@ async def list_datasources() -> list[str]:
     """
     try:
         with contextlib.suppress(Exception):
-            for ds in await run_sync(DremioClient().list_sources)():
-                source_name = ".".join(ds.path)
-                if not any(
-                    source.metadata.name == source_name
-                    for source in datasources.values()
-                    if source.metadata.source_type.startswith("dremio")
-                ):
-                    register_datasource(create_dremio_source(ds))
-        return list(datasources)
+            async with list_ds_sem:
+                await run_sync(datasource_service.sync_from_dremio)()
+        return list(datasource_service.sources)
     except HTTPException:
         raise
     except Exception as e:
@@ -127,9 +126,9 @@ async def get_datasource(source_id: str) -> DataSourceMetadata:
     获取数据源详情
     """
     try:
-        if source_id not in datasources:
+        if not datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
-        return datasources[source_id].metadata
+        return datasource_service.get_source(source_id).metadata
 
     except HTTPException:
         raise
@@ -157,10 +156,10 @@ async def get_datasource_data(
     支持分页获取数据
     """
     try:
-        if source_id not in datasources:
+        if not datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
 
-        source = datasources[source_id]
+        source = datasource_service.get_source(source_id)
 
         # 获取数据
         data = source.get_data(limit + skip)
@@ -193,19 +192,38 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
     """
     删除数据源
     """
-    if source_id not in datasources:
+    if not datasource_service.source_exists(source_id):
         raise HTTPException(status_code=404, detail="Datasource not found")
 
     try:
+        source = datasource_service.get_source(source_id)
+
+        # 如果是Dremio数据源，尝试从Dremio中删除
+        if source.metadata.source_type.startswith("dremio"):
+            try:
+                # 这里需要根据实际情况实现Dremio数据源的删除
+                # 目前Dremio REST API没有直接删除数据源的接口，但可以根据实际情况处理
+                # 例如，如果是上传的文件，可以从external目录中删除
+                if hasattr(source.metadata, "id") and source.metadata.id.startswith("external."):
+                    # 从路径中提取文件名
+                    file_name = source.metadata.id.split(".", 1)[1] if "." in source.metadata.id else ""
+                    if file_name:
+                        # 删除external目录中的文件
+                        client = get_dremio_client()
+                        external_dir = client.external_dir
+                        if external_dir and (fp := external_dir / file_name).exists():
+                            fp.unlink()
+                            logger.info(f"已从Dremio external目录删除文件: {file_name}")
+            except Exception as e:
+                logger.warning(f"从Dremio中删除数据源失败: {e}")
+
         # 从数据源字典中删除
-        datasources.pop(source_id)
+        datasource_service.delete_source(source_id)
 
         # 删除关联的会话
-        from .sessions import sessions
-
-        for session_id, session in list(sessions.items()):
+        for session in list(session_service.sessions.values()):
             if session.dataset_id == source_id:
-                del sessions[session_id]
+                session_service.delete_session(session.id)
 
         return {"success": True, "message": f"Datasource {source_id} deleted"}
 
