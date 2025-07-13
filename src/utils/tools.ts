@@ -29,3 +29,10 @@ export const formatMessage = async (text?: string): Promise<string> => {
 
   return html || '';
 };
+
+export const turncateString = (str: string, maxLength: number): string => {
+  if (str.length <= maxLength) {
+    return str;
+  }
+  return str.slice(0, maxLength) + '...';
+};

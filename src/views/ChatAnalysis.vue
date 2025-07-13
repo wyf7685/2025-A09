@@ -13,6 +13,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import FlowPanel from '@/components/FlowPanel.vue';
+import { turncateString } from '@/utils/tools';
 
 type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[] }
 
@@ -571,7 +572,7 @@ onMounted(async () => {
               <el-icon>
                 <DocumentCopy />
               </el-icon>
-              当前数据集: <strong>{{ currentDataset.name || currentDataset.id.slice(0, 12) + '...' }}</strong>
+              当前数据集: <strong>{{ turncateString(currentDataset.name || currentDataset.id, 12) }}</strong>
               <el-link type="primary" @click="goToAddData" :underline="false">
                 <el-icon>
                   <Edit />
@@ -938,7 +939,7 @@ onMounted(async () => {
 }
 
 .chat-input-area {
-  padding: 16px 24px 24px;
+  padding: 12px 20px 6px;
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
 }
