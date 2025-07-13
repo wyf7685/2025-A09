@@ -1,151 +1,15 @@
-<template>
-  <div class="process-flow">
-    <div class="flow-header">
-      <h3>处理流程</h3>
-      <el-button 
-        type="text" 
-        size="small" 
-        @click="clearFlow"
-        :disabled="flowSteps.length === 0"
-      >
-        清空
-      </el-button>
-    </div>
-    
-    <div class="flow-content">
-      <div v-if="flowSteps.length === 0" class="empty-flow">
-        <el-empty description="暂无处理流程" :image-size="60" />
-      </div>
-      
-      <div v-else class="flow-steps">
-        <div 
-          v-for="(step, index) in flowSteps" 
-          :key="index"
-          :class="['flow-step', { 
-            'active': step.status === 'running',
-            'completed': step.status === 'completed',
-            'error': step.status === 'error'
-          }]"
-        >
-          <div class="step-header">
-            <div class="step-icon">
-              <el-icon v-if="step.status === 'running'">
-                <Loading />
-              </el-icon>
-              <el-icon v-else-if="step.status === 'completed'">
-                <CircleCheck />
-              </el-icon>
-              <el-icon v-else-if="step.status === 'error'">
-                <CircleClose />
-              </el-icon>
-              <el-icon v-else>
-                <CircleCheckFilled />
-              </el-icon>
-            </div>
-            <div class="step-info">
-              <div class="step-title">{{ step.title }}</div>
-              <div class="step-time">{{ formatTime(step.timestamp) }}</div>
-            </div>
-          </div>
-          
-          <!-- 步骤描述 - 支持折叠 -->
-          <div v-if="step.description" class="step-description">
-            <div 
-              :class="['description-content', { 'collapsed': !expandedDescriptions[index] }]"
-              :ref="el => setDescriptionRef(el, index)"
-            >
-              {{ step.description }}
-            </div>
-            <el-button 
-              v-if="descriptionNeedsCollapse[index]"
-              type="text" 
-              size="small" 
-              @click="toggleDescription(index)"
-              class="collapse-btn"
-            >
-              {{ expandedDescriptions[index] ? '收起' : '展开' }}
-              <el-icon class="collapse-icon">
-                <ArrowDown v-if="!expandedDescriptions[index]" />
-                <ArrowUp v-else />
-              </el-icon>
-            </el-button>
-          </div>
-          
-          <!-- 步骤详情 - 支持折叠 -->
-          <div v-if="step.details && step.details.length > 0" class="step-details">
-            <div 
-              :class="['details-content', { 'collapsed': !expandedDetails[index] }]"
-              :ref="el => setDetailsRef(el, index)"
-            >
-              <div 
-                v-for="(detail, detailIndex) in step.details" 
-                :key="detailIndex"
-                class="step-detail"
-              >
-                <el-icon class="detail-icon">
-                  <InfoFilled />
-                </el-icon>
-                <span>{{ detail }}</span>
-              </div>
-            </div>
-            <el-button 
-              v-if="detailsNeedCollapse[index]"
-              type="text" 
-              size="small" 
-              @click="toggleDetails(index)"
-              class="collapse-btn"
-            >
-              {{ expandedDetails[index] ? '收起' : '展开' }}
-              <el-icon class="collapse-icon">
-                <ArrowDown v-if="!expandedDetails[index]" />
-                <ArrowUp v-else />
-              </el-icon>
-            </el-button>
-          </div>
-          
-          <!-- 步骤错误 - 支持折叠 -->
-          <div v-if="step.error" class="step-error">
-            <div 
-              :class="['error-content', { 'collapsed': !expandedErrors[index] }]"
-              :ref="el => setErrorRef(el, index)"
-            >
-              <el-icon class="error-icon">
-                <Warning />
-              </el-icon>
-              <span>{{ step.error }}</span>
-            </div>
-            <el-button 
-              v-if="errorsNeedCollapse[index]"
-              type="text" 
-              size="small" 
-              @click="toggleError(index)"
-              class="collapse-btn error-collapse-btn"
-            >
-              {{ expandedErrors[index] ? '收起' : '展开' }}
-              <el-icon class="collapse-icon">
-                <ArrowDown v-if="!expandedErrors[index]" />
-                <ArrowUp v-else />
-              </el-icon>
-            </el-button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
-import { 
-  Loading, 
-  CircleCheck, 
-  CircleClose, 
-  CircleCheckFilled,
-  InfoFilled,
-  Warning,
+import {
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  CircleCheck,
+  CircleCheckFilled,
+  CircleClose,
+  InfoFilled,
+  Loading,
+  Warning,
 } from '@element-plus/icons-vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 export interface FlowStep {
   id: string
@@ -178,9 +42,9 @@ const detailsNeedCollapse = ref<boolean[]>([])
 const errorsNeedCollapse = ref<boolean[]>([])
 
 // 元素引用
-const descriptionRefs = ref<HTMLElement[]>([])
-const detailsRefs = ref<HTMLElement[]>([])
-const errorRefs = ref<HTMLElement[]>([])
+const descriptionRefs = ref<Element[]>([])
+const detailsRefs = ref<Element[]>([])
+const errorRefs = ref<Element[]>([])
 
 const formatTime = (timestamp: Date) => {
   return timestamp.toLocaleTimeString('zh-CN', {
@@ -195,19 +59,19 @@ const clearFlow = () => {
 }
 
 // 设置元素引用
-const setDescriptionRef = (el: HTMLElement | null, index: number) => {
+const setDescriptionRef = (el: Element | null, index: number) => {
   if (el) {
     descriptionRefs.value[index] = el
   }
 }
 
-const setDetailsRef = (el: HTMLElement | null, index: number) => {
+const setDetailsRef = (el: Element | null, index: number) => {
   if (el) {
     detailsRefs.value[index] = el
   }
 }
 
-const setErrorRef = (el: HTMLElement | null, index: number) => {
+const setErrorRef = (el: Element | null, index: number) => {
   if (el) {
     errorRefs.value[index] = el
   }
@@ -265,16 +129,16 @@ watch(() => props.steps, () => {
     expandedDescriptions.value = new Array(stepsLength).fill(false)
     expandedDetails.value = new Array(stepsLength).fill(false)
     expandedErrors.value = new Array(stepsLength).fill(false)
-    
+
     descriptionNeedsCollapse.value = new Array(stepsLength).fill(false)
     detailsNeedCollapse.value = new Array(stepsLength).fill(false)
     errorsNeedCollapse.value = new Array(stepsLength).fill(false)
-    
+
     // 清空引用数组
     descriptionRefs.value = []
     detailsRefs.value = []
     errorRefs.value = []
-    
+
     // 检查折叠状态
     setTimeout(checkCollapseNeeded, 100)
   })
@@ -284,6 +148,111 @@ onMounted(() => {
   checkCollapseNeeded()
 })
 </script>
+
+<template>
+  <div class="process-flow">
+    <div class="flow-header">
+      <h3>处理流程</h3>
+      <el-button type="text" size="small" @click="clearFlow" :disabled="flowSteps.length === 0">
+        清空
+      </el-button>
+    </div>
+
+    <div class="flow-content">
+
+      <div v-if="flowSteps.length === 0" class="empty-flow">
+        <el-empty description="暂无处理流程" :image-size="60" />
+      </div>
+
+      <div v-else class="flow-steps">
+        <div v-for="(step, index) in flowSteps" :key="index" :class="['flow-step', {
+          'active': step.status === 'running',
+          'completed': step.status === 'completed',
+          'error': step.status === 'error'
+        }]">
+
+          <div class="step-header">
+            <div class="step-icon">
+              <el-icon v-if="step.status === 'running'">
+                <Loading />
+              </el-icon>
+              <el-icon v-else-if="step.status === 'completed'">
+                <CircleCheck />
+              </el-icon>
+              <el-icon v-else-if="step.status === 'error'">
+                <CircleClose />
+              </el-icon>
+              <el-icon v-else>
+                <CircleCheckFilled />
+              </el-icon>
+            </div>
+            <div class="step-info">
+              <div class="step-title">{{ step.title }}</div>
+              <div class="step-time">{{ formatTime(step.timestamp) }}</div>
+            </div>
+          </div>
+
+          <!-- 步骤描述 - 支持折叠 -->
+          <div v-if="step.description" class="step-description">
+            <div :class="['description-content', { 'collapsed': !expandedDescriptions[index] }]"
+              :ref="el => setDescriptionRef(el as Element, index)">
+              {{ step.description }}
+            </div>
+            <el-button v-if="descriptionNeedsCollapse[index]" type="text" size="small" @click="toggleDescription(index)"
+              class="collapse-btn">
+              {{ expandedDescriptions[index] ? '收起' : '展开' }}
+              <el-icon class="collapse-icon">
+                <ArrowDown v-if="!expandedDescriptions[index]" />
+                <ArrowUp v-else />
+              </el-icon>
+            </el-button>
+          </div>
+
+          <!-- 步骤详情 - 支持折叠 -->
+          <div v-if="step.details && step.details.length > 0" class="step-details">
+            <div :class="['details-content', { 'collapsed': !expandedDetails[index] }]"
+              :ref="el => setDetailsRef(el as Element, index)">
+              <div v-for="(detail, detailIndex) in step.details" :key="detailIndex" class="step-detail">
+                <el-icon class="detail-icon">
+                  <InfoFilled />
+                </el-icon>
+                <span>{{ detail }}</span>
+              </div>
+            </div>
+            <el-button v-if="detailsNeedCollapse[index]" type="text" size="small" @click="toggleDetails(index)"
+              class="collapse-btn">
+              {{ expandedDetails[index] ? '收起' : '展开' }}
+              <el-icon class="collapse-icon">
+                <ArrowDown v-if="!expandedDetails[index]" />
+                <ArrowUp v-else />
+              </el-icon>
+            </el-button>
+          </div>
+
+          <!-- 步骤错误 - 支持折叠 -->
+          <div v-if="step.error" class="step-error">
+            <div :class="['error-content', { 'collapsed': !expandedErrors[index] }]"
+              :ref="el => setErrorRef(el as Element, index)">
+              <el-icon class="error-icon">
+                <Warning />
+              </el-icon>
+              <span>{{ step.error }}</span>
+            </div>
+            <el-button v-if="errorsNeedCollapse[index]" type="text" size="small" @click="toggleError(index)"
+              class="collapse-btn error-collapse-btn">
+              {{ expandedErrors[index] ? '收起' : '展开' }}
+              <el-icon class="collapse-icon">
+                <ArrowDown v-if="!expandedErrors[index]" />
+                <ArrowUp v-else />
+              </el-icon>
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</template>
 
 <style lang="scss" scoped>
 .process-flow {
@@ -433,6 +402,7 @@ onMounted(() => {
       max-height: 2.5em; // 约2行高度
       display: -webkit-box;
       -webkit-line-clamp: 2;
+      line-clamp: 2;
       -webkit-box-orient: vertical;
     }
   }
@@ -483,6 +453,7 @@ onMounted(() => {
       max-height: 4.5em; // 约3行高度
       display: -webkit-box;
       -webkit-line-clamp: 3;
+      line-clamp: 3;
       -webkit-box-orient: vertical;
     }
 
@@ -543,4 +514,4 @@ onMounted(() => {
 .flow-content::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
-</style> 
+</style>
