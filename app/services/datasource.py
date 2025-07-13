@@ -31,6 +31,7 @@ class DataSourceService:
                 self.load_source(fp.stem)
             except Exception as e:
                 logger.opt(exception=True).warning(f"Failed to load data source from {fp}: {e}")
+        self._check_unique()
 
     def load_source(self, source_id: str) -> DataSource:
         fp = DATASOURCE_DIR / f"{source_id}.json"
@@ -75,6 +76,15 @@ class DataSourceService:
                 current_ds.pop(source.unique_id)
         for source_id in current_ds.values():
             self.delete_source(source_id)
+        self._check_unique()
+
+    def _check_unique(self) -> None:
+        """检查数据源的唯一性"""
+        unique_ids = set()
+        for source_id, source in list(self.sources.items()):
+            if source.unique_id in unique_ids:
+                del self.sources[source_id]
+            unique_ids.add(source.unique_id)
 
     def register(self, source: DataSource) -> str:
         """

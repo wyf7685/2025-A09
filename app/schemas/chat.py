@@ -94,5 +94,7 @@ class ChatEntry(BaseModel):
                         merged_content.append(AssistantChatMessageText(content=current_text))
                         current_text = ""
                     merged_content.append(item)
+        if current_text:
+            merged_content.append(AssistantChatMessageText(content=current_text))
 
         self.assistant_response.content = merged_content
