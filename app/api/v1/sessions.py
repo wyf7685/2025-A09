@@ -44,6 +44,37 @@ async def create_session(request: CreateSessionRequest) -> Session:
         raise HTTPException(status_code=500, detail=f"Failed to create session: {e}") from e
 
 
+class UpdateSessionRequest(BaseModel):
+    name: str
+
+
+@router.put("/sessions/{session_id}", response_model=Session)
+async def update_session(session_id: str, request: UpdateSessionRequest) -> Session:
+    """
+    更新会话信息
+
+    目前支持更新会话名称
+    """
+    try:
+        if not session_service.session_exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = session_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 更新会话名称
+        session.name = request.name
+        session_service.save_session(session)
+
+        return session
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("更新会话失败")
+        raise HTTPException(status_code=500, detail=f"Failed to update session: {e}") from e
+
+
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str) -> Session:
     """获取会话信息"""
@@ -65,8 +96,15 @@ async def get_sessions() -> list[SessionListItem]:
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str) -> dict[str, Any]:
     """删除会话"""
-    if not session_service.session_exists(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        if not session_service.session_exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
 
-    session_service.delete_session(session_id)
-    return {"success": True, "message": f"Session {session_id} deleted"}
+        session_service.delete_session(session_id)
+        return {"success": True, "message": f"Session {session_id} deleted"}
+    except KeyError as e:
+        logger.warning(f"删除会话时出现错误: {e}")
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from e
+    except Exception as e:
+        logger.exception(f"删除会话失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {e}") from e

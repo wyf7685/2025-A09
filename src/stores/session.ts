@@ -2,11 +2,13 @@ import type { ChatEntry, Session, SessionListItem, ToolCallArtifact } from '@/ty
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
+import { ElMessage } from 'element-plus';
 
 export const useSessionStore = defineStore('session', () => {
   const currentSession = ref<Session | null>(null);
   const sessions = ref<SessionListItem[]>([]);
   const chatHistory = ref<ChatEntry[]>([]);
+  const isDeleting = ref<Record<string, boolean>>({});
 
   // 会话管理
   const createSession = async (dataset_id: string) => {
@@ -20,41 +22,106 @@ export const useSessionStore = defineStore('session', () => {
   };
 
   const setCurrentSessionById = async (sessionId: string) => {
-    setCurrentSession(await getSession(sessionId));
-    await listSessions();
+    try {
+      setCurrentSession(await getSession(sessionId));
+      await listSessions();
+    } catch (error) {
+      console.error('设置当前会话失败:', error);
+      ElMessage.error('设置当前会话失败，请刷新页面重试');
+    }
   };
 
   // 更新会话名称
   const updateSessionName = async (sessionId: string, name: string | null) => {
-    // 更新本地会话列表中的会话名称
-    const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
-    if (sessionIndex !== -1) {
-      sessions.value[sessionIndex].name = name;
-    }
+    if (!name) return;
+    
+    try {
+      // 调用后端API更新会话名称
+      const response = await api.put<Session>(`/sessions/${sessionId}`, { name });
+      
+      // 更新本地会话列表中的会话名称
+      const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
+      if (sessionIndex !== -1) {
+        sessions.value[sessionIndex].name = name;
+      }
 
-    // 如果当前会话是目标会话，也更新当前会话
-    if (currentSession.value?.id === sessionId) {
-      currentSession.value.name = name;
+      // 如果当前会话是目标会话，也更新当前会话
+      if (currentSession.value?.id === sessionId) {
+        currentSession.value.name = name;
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('更新会话名称失败:', error);
+      throw error;
     }
   };
 
   const listSessions = async () => {
-    const response = await api.get<SessionListItem[]>('/sessions');
-    sessions.value = response.data;
-    return response.data;
+    try {
+      const response = await api.get<SessionListItem[]>('/sessions');
+      sessions.value = response.data;
+      return response.data;
+    } catch (error) {
+      console.error('获取会话列表失败:', error);
+      ElMessage.error('获取会话列表失败');
+      throw error;
+    }
   };
 
   const getSession = async (sessionId: string): Promise<Session> => {
-    const response = await api.get<Session>(`/sessions/${sessionId}`);
-    return response.data;
+    try {
+      const response = await api.get<Session>(`/sessions/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`获取会话 ${sessionId} 失败:`, error);
+      throw error;
+    }
   };
 
-  const deleteSession = async (sessionId: string): Promise<void> => {
-    await api.delete(`/sessions/${sessionId}`);
-    if (currentSession.value?.id === sessionId) {
-      currentSession.value = null;
+  const deleteSession = async (sessionId: string, retryCount = 0): Promise<void> => {
+    // 防止重复删除
+    if (isDeleting.value[sessionId]) {
+      return;
     }
-    await listSessions();
+    
+    isDeleting.value[sessionId] = true;
+    
+    try {
+      // 先更新本地状态，提供更好的用户体验
+      if (currentSession.value?.id === sessionId) {
+        currentSession.value = null;
+      }
+      
+      // 从本地列表中移除
+      const sessionIndex = sessions.value.findIndex(s => s.id === sessionId);
+      if (sessionIndex !== -1) {
+        sessions.value.splice(sessionIndex, 1);
+      }
+      
+      // 调用后端API删除
+      await api.delete(`/sessions/${sessionId}`);
+      
+      console.log(`会话 ${sessionId} 删除成功`);
+    } catch (error) {
+      console.error(`删除会话 ${sessionId} 失败:`, error);
+      
+      // 最多重试2次
+      if (retryCount < 2) {
+        console.log(`尝试重新删除会话 ${sessionId}，第 ${retryCount + 1} 次重试`);
+        setTimeout(() => {
+          isDeleting.value[sessionId] = false;
+          deleteSession(sessionId, retryCount + 1);
+        }, 1000); // 延迟1秒后重试
+        return;
+      } else {
+        // 重试失败后，重新获取会话列表以恢复正确的状态
+        await listSessions();
+        throw error;
+      }
+    } finally {
+      isDeleting.value[sessionId] = false;
+    }
   };
 
   // 流式对话分析
@@ -159,5 +226,6 @@ export const useSessionStore = defineStore('session', () => {
     deleteSession,
     sendStreamChatMessage,
     summaryChat,
+    isDeleting: computed(() => isDeleting.value),
   };
 });

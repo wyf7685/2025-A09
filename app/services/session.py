@@ -38,7 +38,10 @@ class SessionService:
         for fp in SESSION_DIR.iterdir():
             if not (fp.is_file() and fp.suffix == ".json"):
                 continue
-            self.load_session(fp)
+            try:
+                self.load_session(fp)
+            except Exception:
+                logger.opt(exception=True).warning(f"Failed to load session from {fp}")
 
     def load_session(self, session_id: str | Path) -> Session:
         fp = SESSION_DIR / f"{session_id}.json" if isinstance(session_id, str) else session_id
@@ -77,12 +80,36 @@ class SessionService:
 
     def delete_session(self, session_id: str) -> None:
         if session_id not in self.sessions:
-            raise KeyError(f"Session with id {session_id} not found")
+            # 检查文件是否存在，如果存在则尝试加载后再删除
+            fp = SESSION_DIR / f"{session_id}.json"
+            if fp.exists():
+                try:
+                    self.load_session(session_id)
+                except Exception:
+                    # 如果加载失败，但文件存在，则直接删除文件
+                    try:
+                        fp.unlink()
+                        logger.info(f"直接删除会话文件: {session_id}")
+                        return
+                    except Exception as e:
+                        logger.exception(f"删除会话文件失败: {e}")
+                        raise KeyError(f"Session with id {session_id} could not be deleted") from e
+            else:
+                raise KeyError(f"Session with id {session_id} not found")
 
-        del self.sessions[session_id]
+        # 从内存中删除会话
+        self.sessions.pop(session_id, None)
+
+        # 删除文件
         fp = SESSION_DIR / f"{session_id}.json"
-        if fp.exists():
-            fp.unlink()
+        try:
+            if fp.exists():
+                fp.unlink()
+                logger.info(f"删除会话文件成功: {session_id}")
+        except Exception as e:
+            logger.exception(f"删除会话文件失败: {e}")
+            # 即使文件删除失败，也不抛出异常，因为内存中的会话已经被删除
+            # 这样前端仍然可以认为删除成功
 
 
 session_service = SessionService()

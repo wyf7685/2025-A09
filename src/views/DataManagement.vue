@@ -2,6 +2,7 @@
 import { useDataSourceStore } from '@/stores/datasource'
 import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
+import { cleaningAPI, type DataQualityReport, type CleaningSuggestion, type CleaningAction } from '@/utils/api'
 import {
   Connection,
   Delete,
@@ -11,7 +12,13 @@ import {
   Refresh,
   Search,
   UploadFilled,
-  View
+  View,
+  Check,
+  Close,
+  Warning,
+  QuestionFilled,
+  CircleCheck,
+  CircleClose
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { onMounted, ref, watch } from 'vue'
@@ -48,6 +55,20 @@ const previewPagination = ref({
   total: 0
 })
 
+// 数据清洗弹窗相关
+const dataCleaningDialogVisible = ref(false)
+const currentUploadFile = ref<File | null>(null)
+const dataQualityReport = ref<DataQualityReport | null>(null)
+const cleaningSuggestions = ref<CleaningSuggestion[]>([])
+const isAnalyzing = ref(false)
+const isCleaning = ref(false)
+const fileMetadata = ref({
+  name: '',
+  description: ''
+})
+const selectedCleaningActions = ref<CleaningAction[]>([])
+const cleaningStep = ref<'upload' | 'analysis' | 'cleaning' | 'complete'>('upload')
+
 const fetchDatasets = async () => {
   isLoading.value = true
   try {
@@ -81,17 +102,23 @@ const handleFileUpload = async (options: any) => {
   const file = options.file
   if (!file) return
 
-  isLoading.value = true
-  try {
-    await dataSourceStore.uploadCsvSource(file)
-    ElMessage.success('文件上传成功！')
-    await fetchDatasets()
-  } catch (error) {
-    ElMessage.error('文件上传失败')
-    console.error(error)
-  } finally {
-    isLoading.value = false
+  // 检查文件类型
+  const allowedTypes = ['csv', 'xlsx', 'xls']
+  const fileExtension = file.name.split('.').pop()?.toLowerCase()
+  
+  if (!allowedTypes.includes(fileExtension)) {
+    ElMessage.error('只支持 CSV 和 Excel 文件格式')
+    return
   }
+
+  // 存储文件信息并显示清洗弹窗
+  currentUploadFile.value = file
+  fileMetadata.value.name = file.name.replace(/\.[^/.]+$/, '') // 移除文件扩展名
+  fileMetadata.value.description = ''
+  dataCleaningDialogVisible.value = true
+  cleaningStep.value = 'upload'
+  
+  // 不再自动分析数据质量，让用户自己选择
 }
 
 const openAddDatabase = () => {
@@ -199,7 +226,175 @@ const loadPreviewData = async (page: number = 1) => {
   }
 }
 
-// 过滤数据源
+// 数据质量分析
+const analyzeDataQuality = async () => {
+  if (!currentUploadFile.value) return
+
+  isAnalyzing.value = true
+  cleaningStep.value = 'analysis'
+    try {
+    // 获取数据质量报告
+    const result = await cleaningAPI.checkDataQuality(currentUploadFile.value)
+    dataQualityReport.value = result.quality_check
+    cleaningSuggestions.value = result.cleaning_suggestions
+    
+    // 保持在 analysis 步骤，让用户查看报告后再决定下一步
+    // 不自动跳转到其他步骤
+    
+  } catch (error) {
+    ElMessage.error('数据质量分析失败')
+    console.error(error)
+    cleaningStep.value = 'upload'
+  } finally {
+    isAnalyzing.value = false
+  }
+}
+
+// 应用清洗动作
+const applyCleaningActions = async () => {
+  if (!currentUploadFile.value || selectedCleaningActions.value.length === 0) return
+
+  isCleaning.value = true
+  try {
+    const result = await cleaningAPI.applyCleaningActions(currentUploadFile.value, selectedCleaningActions.value)
+    
+    if (result.success) {
+      ElMessage.success('数据清洗完成！')
+      cleaningStep.value = 'complete'
+      // 重新分析清洗后的数据质量
+      await analyzeDataQuality()
+    } else {
+      ElMessage.error(result.message || '数据清洗失败')
+    }
+  } catch (error) {
+    ElMessage.error('数据清洗失败')
+    console.error(error)
+  } finally {
+    isCleaning.value = false
+  }
+}
+
+// 跳过清洗直接上传
+const skipCleaningAndUpload = async () => {
+  if (!currentUploadFile.value) return
+
+  isLoading.value = true
+  try {
+    await dataSourceStore.uploadCsvSource(currentUploadFile.value)
+    ElMessage.success('文件上传成功！')
+    dataCleaningDialogVisible.value = false
+    await fetchDatasets()
+  } catch (error) {
+    ElMessage.error('文件上传失败')
+    console.error(error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 完成清洗并上传
+const completeCleaningAndUpload = async () => {
+  if (!currentUploadFile.value) return
+
+  isLoading.value = true
+  try {
+    // 这里应该上传清洗后的文件，暂时使用原文件
+    await dataSourceStore.uploadCsvSource(currentUploadFile.value)
+    ElMessage.success('文件上传成功！')
+    dataCleaningDialogVisible.value = false
+    await fetchDatasets()
+  } catch (error) {
+    ElMessage.error('文件上传失败')
+    console.error(error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 切换清洗动作选择
+const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
+  const action: CleaningAction = {
+    type: suggestion.type,
+    column: suggestion.column,
+    parameters: suggestion.options?.[0]?.method || '' // 默认选择第一个选项的方法
+  }
+  
+  const index = selectedCleaningActions.value.findIndex(a => 
+    a.type === action.type && a.column === action.column
+  )
+  
+  if (index >= 0) {
+    selectedCleaningActions.value.splice(index, 1)
+  } else {
+    selectedCleaningActions.value.push(action)
+  }
+}
+
+// 检查清洗动作是否已选择
+const isCleaningActionSelected = (suggestion: CleaningSuggestion) => {
+  return selectedCleaningActions.value.some(a => 
+    a.type === suggestion.type && a.column === suggestion.column
+  )
+}
+
+// 关闭清洗弹窗
+const closeCleaningDialog = () => {
+  dataCleaningDialogVisible.value = false
+  currentUploadFile.value = null
+  dataQualityReport.value = null
+  cleaningSuggestions.value = []
+  selectedCleaningActions.value = []
+  cleaningStep.value = 'upload'
+  fileMetadata.value = { name: '', description: '' }
+}
+
+// 获取质量评分的颜色
+const getQualityScoreColor = (score: number) => {
+  if (score >= 0.8) return 'success'
+  if (score >= 0.6) return 'warning'
+  return 'danger'
+}
+
+// 获取质量评分的文本
+const getQualityScoreText = (score: number) => {
+  if (score >= 0.9) return '优秀'
+  if (score >= 0.8) return '良好'
+  if (score >= 0.6) return '一般'
+  return '需要改进'
+}
+
+// 获取问题类型的图标
+const getIssueTypeIcon = (type: string) => {
+  switch (type) {
+    case 'missing_values':
+      return QuestionFilled
+    case 'outliers':
+      return Warning
+    case 'duplicates':
+      return DocumentCopy
+    case 'invalid_values':
+      return CircleClose
+    default:
+      return InfoFilled
+  }
+}
+
+// 获取问题类型的颜色
+const getIssueTypeColor = (type: string) => {
+  switch (type) {
+    case 'missing_values':
+      return 'warning'
+    case 'outliers':
+      return 'danger'
+    case 'duplicates':
+      return 'info'
+    case 'invalid_values':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
 const updateFilteredDataSources = () => {
   let filtered = datasources.value
 
@@ -519,6 +714,218 @@ watch(pageSize, updatePaginatedDataSources)
             @current-change="loadPreviewData"
             @size-change="loadPreviewData"
           />
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 数据清洗对话框 -->
+    <el-dialog
+      v-model="dataCleaningDialogVisible"
+      title="数据清洗与分析"
+      width="600px"
+      :before-close="() => dataCleaningDialogVisible = false"
+    >
+      <div class="cleaning-content">
+        <!-- 步骤指示器 -->
+        <div class="cleaning-steps">
+          <div
+            class="step"
+            v-for="(step, index) in ['upload', 'analysis', 'cleaning', 'complete']"
+            :key="step"
+            :class="{ active: cleaningStep === step }"
+          >
+            <div class="step-icon">
+              <el-icon>
+                <Check v-if="cleaningStep !== 'upload' && cleaningStep !== step" />
+                <CircleCheck v-else-if="cleaningStep === step" />
+                <CircleClose v-else />
+              </el-icon>
+            </div>
+            <div class="step-title">{{ index === 3 ? '完成' : `步骤 ${index + 1}` }}</div>
+          </div>
+        </div>        <!-- 上传文件信息 -->
+        <div v-if="cleaningStep === 'upload'" class="upload-info">
+          <div class="file-details">
+            <div class="file-name">{{ fileMetadata.name }}</div>
+            <div class="file-size">{{ currentUploadFile ? (currentUploadFile.size / 1024 / 1024).toFixed(2) : 0 }} MB</div>
+          </div>
+          
+          <!-- 文件元数据编辑 -->
+          <div class="file-metadata">
+            <el-form :model="fileMetadata" label-width="80px">
+              <el-form-item label="文件名称">
+                <el-input
+                  v-model="fileMetadata.name"
+                  placeholder="请输入文件名称"
+                  prefix-icon="Document"
+                />
+              </el-form-item>
+              <el-form-item label="文件描述">
+                <el-input
+                  v-model="fileMetadata.description"
+                  type="textarea"
+                  placeholder="请输入文件描述信息"
+                  :rows="3"
+                />
+              </el-form-item>
+            </el-form>
+          </div>
+          
+          <div class="file-actions">
+            <el-button
+              @click="closeCleaningDialog"
+              style="flex: 1"
+            >
+              取消
+            </el-button>
+            <el-button
+              type="primary"
+              @click="skipCleaningAndUpload"
+              :loading="isLoading"
+              style="flex: 1"
+            >
+              跳过清洗，直接上传
+            </el-button>
+            <el-button
+              type="success"
+              @click="analyzeDataQuality"
+              :loading="isAnalyzing"
+              style="flex: 1"
+            >
+              开始分析数据质量
+            </el-button>
+          </div>
+        </div>        <!-- 数据质量分析结果 -->
+        <div v-if="cleaningStep === 'analysis'" class="analysis-results">
+          <div v-if="isAnalyzing" class="loading-status">
+            <el-empty description="正在分析数据质量，请稍候..." />
+          </div>
+          <div v-else>
+            <div class="quality-report">
+              <div class="report-header">
+                <div class="report-title">数据质量报告</div>
+                <div class="report-score">
+                  <el-tag
+                    :type="getQualityScoreColor(dataQualityReport?.quality_score || 0)"
+                    class="score-tag"
+                  >
+                    {{ (dataQualityReport?.quality_score || 0).toFixed(2) }}
+                    {{ getQualityScoreText(dataQualityReport?.quality_score || 0) }}
+                  </el-tag>
+                </div>
+              </div>              <div class="report-content">
+                <div class="report-item" v-for="(value, key) in dataQualityReport?.data_info" :key="key">
+                  <div class="item-key">{{ key }}</div>
+                  <div class="item-value">
+                    <span
+                      v-if="key === 'rows'"
+                      class="value-row-count"
+                    >
+                      {{ value }}
+                    </span>
+                    <span
+                      v-else-if="key === 'file_size'"
+                      class="value-file-size"
+                    >
+                      {{ value }} bytes
+                    </span>
+                    <span v-else>{{ typeof value === 'number' ? value.toFixed(2) : value }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 继续按钮 -->
+            <div class="analysis-actions">
+              <el-button
+                type="primary"
+                @click="cleaningStep = 'cleaning'"
+                :disabled="cleaningSuggestions.length === 0"
+              >
+                查看清洗建议 ({{ cleaningSuggestions.length }})
+              </el-button>
+              <el-button
+                @click="skipCleaningAndUpload"
+              >
+                跳过清洗直接上传
+              </el-button>
+            </div>
+          </div>
+        </div><!-- 清洗建议选择 -->
+        <div v-if="cleaningStep === 'cleaning'" class="cleaning-suggestions">
+          <div v-if="isCleaning" class="cleaning-progress">
+            <el-empty description="数据清洗中，请稍候..." />
+          </div>
+          <div v-else>
+            <div class="suggestions-header">
+              <div class="title">清洗建议</div>
+              <div class="actions">
+                <el-button
+                  type="primary"
+                  @click="applyCleaningActions"
+                  :loading="isCleaning"
+                  :disabled="selectedCleaningActions.length === 0"
+                >
+                  应用选中的建议 ({{ selectedCleaningActions.length }})
+                </el-button>
+                <el-button
+                  @click="skipCleaningAndUpload"
+                >
+                  跳过清洗直接上传
+                </el-button>
+              </div>
+            </div>
+
+            <div class="suggestions-list">
+              <div
+                class="suggestion-item"
+                v-for="(suggestion, index) in cleaningSuggestions"
+                :key="index"              >
+                <div class="item-icon">
+                  <el-icon :component="getIssueTypeIcon(suggestion.type)" />
+                </div>
+                <div class="item-content">
+                  <div class="item-description">
+                    {{ suggestion.description }}
+                  </div>
+                  <div class="item-details">
+                    <span class="detail-item">
+                      <strong>影响列:</strong> {{ suggestion.column }}
+                    </span>
+                    <span class="detail-item">
+                      <strong>严重程度:</strong> {{ suggestion.severity }}
+                    </span>
+                  </div>
+                </div>
+                <div class="item-action">
+                  <el-checkbox
+                    :checked="isCleaningActionSelected(suggestion)"
+                    @change="toggleCleaningAction(suggestion)"
+                  >
+                    应用此建议
+                  </el-checkbox>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 完成状态 -->
+        <div v-if="cleaningStep === 'complete'" class="complete-status">
+          <el-result
+            status="success"
+            title="数据清洗完成"
+            sub-title="您可以选择重新分析或直接上传清洗后的数据"
+          >
+            <template #extra>
+              <el-button type="primary" @click="completeCleaningAndUpload">
+                上传清洗后的数据
+              </el-button>
+              <el-button @click="analyzeDataQuality">
+                重新分析数据质量
+              </el-button>
+            </template>
+          </el-result>
         </div>
       </div>
     </el-dialog>
@@ -905,6 +1312,221 @@ watch(pageSize, updatePaginatedDataSources)
   }
 }
 
+// 数据清洗对话框内容
+.cleaning-content {
+  padding: 20px;
+
+  .cleaning-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      right: 20px;
+      height: 2px;
+      background: #e5e7eb;
+      z-index: 1;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      flex: 1;
+      z-index: 2;
+
+      .step-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+        transition: all 0.3s ease;
+
+        .el-icon {
+          font-size: 20px;
+          color: #9ca3af;
+        }
+      }
+
+      .step-title {
+        font-size: 12px;
+        color: #6b7280;
+        text-align: center;
+        font-weight: 500;
+      }
+
+      &.active {
+        .step-icon {
+          background: #3b82f6;
+          .el-icon {
+            color: white;
+          }
+        }
+        .step-title {
+          color: #3b82f6;
+          font-weight: 600;
+        }
+      }
+    }
+  }
+
+  .upload-info {
+    padding: 24px;
+    background: #f8fafc;
+    border-radius: 12px;
+    margin-bottom: 24px;
+
+    .file-details {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+
+      .file-name {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+
+      .file-size {
+        font-size: 14px;
+        color: #6b7280;
+        background: #e5e7eb;
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+    }
+
+    .file-metadata {
+      margin: 16px 0;
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+
+      .el-form-item {
+        margin-bottom: 16px;
+
+        :deep(.el-form-item__label) {
+          font-weight: 500;
+          color: #374151;
+        }
+
+        :deep(.el-input__wrapper) {
+          border-radius: 6px;
+          transition: all 0.3s ease;
+
+          &.is-focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+          }
+        }
+
+        :deep(.el-textarea__inner) {
+          border-radius: 6px;
+          transition: all 0.3s ease;
+
+          &:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+          }
+        }
+      }
+    }
+
+    .file-actions {
+      display: flex;
+      gap: 12px;
+
+      .el-button {
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+
+        &:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+      }
+    }
+  }
+
+  .analysis-results {
+    .analysis-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+
+      .el-button {
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+
+        &:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+      }
+    }
+  }
+
+  .cleaning-status {
+    padding: 40px 20px;
+    text-align: center;
+
+    .el-empty {
+      :deep(.el-empty__description) {
+        color: #6b7280;
+        font-size: 16px;
+      }
+    }
+  }
+
+  .complete-status {
+    padding: 20px;
+
+    .el-result {
+      :deep(.el-result__title) {
+        color: #1f2937;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      :deep(.el-result__subtitle) {
+        color: #6b7280;
+        font-size: 14px;
+        margin-top: 8px;
+      }
+
+      :deep(.el-result__extra) {
+        margin-top: 24px;
+
+        .el-button {
+          border-radius: 8px;
+          padding: 10px 20px;
+          font-weight: 500;
+          margin: 0 8px;
+        }
+      }
+    }
+  }
+}
+
 // 响应式设计
 @media (max-width: 768px) {
   .data-management-container {
@@ -953,6 +1575,108 @@ watch(pageSize, updatePaginatedDataSources)
         width: 100%;
         font-size: 12px;
         padding: 4px 8px;
+      }
+    }
+  }
+
+  .cleaning-content {
+    .cleaning-steps {
+      flex-direction: column;
+
+      .step {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+
+        .step-icon {
+          left: auto;
+          right: 0;
+          top: 0;
+          transform: none;
+        }
+
+        .step-title {
+          font-size: 14px;
+        }
+      }
+    }
+
+    .upload-info {
+      .file-details {
+        margin-bottom: 12px;
+
+        .file-name {
+          font-size: 16px;
+        }
+
+        .file-size {
+          font-size: 12px;
+        }
+      }
+
+      .file-actions {
+        flex-direction: column;
+        gap: 8px;
+
+        .el-button {
+          width: 100%;
+          padding: 10px;
+          font-size: 14px;
+        }
+      }
+    }
+
+    .analysis-results {
+      .quality-report {
+        margin-bottom: 16px;
+
+        .report-header {
+          flex-direction: column;
+          align-items: flex-start;
+          margin-bottom: 12px;
+
+          .report-title {
+            font-size: 16px;
+          }
+
+          .report-score {
+            .score-tag {
+              font-size: 14px;
+            }
+          }
+        }
+
+        .report-content {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .suggestions-header {
+        margin-bottom: 12px;
+      }
+
+      .suggestions-list {
+        .suggestion-item {
+          flex-direction: column;
+          align-items: flex-start;
+          padding: 12px;
+          gap: 8px;
+
+          .item-content {
+            .item-description {
+              font-size: 14px;
+            }
+
+            .item-details {
+              flex-direction: column;
+              gap: 4px;
+
+              .detail-item {
+                font-size: 12px;
+              }
+            }
+          }
+        }
       }
     }
   }
