@@ -2,27 +2,27 @@
 import { useDataSourceStore } from '@/stores/datasource'
 import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
-import { cleaningAPI, type DataQualityReport, type CleaningSuggestion, type CleaningAction } from '@/utils/api'
+import { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
 import {
+  Check,
+  CircleCheck,
+  CircleClose,
   Connection,
   Delete,
   DocumentCopy,
   Edit,
   InfoFilled,
+  QuestionFilled,
   Refresh,
   Search,
   UploadFilled,
   View,
-  Check,
-  Close,
-  Warning,
-  QuestionFilled,
-  CircleCheck,
-  CircleClose
+  Warning
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue'
 
 const router = useRouter()
 const sessionStore = useSessionStore();
@@ -39,6 +39,7 @@ const pageSize = ref(10)
 // 对话框相关
 const editDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
+const addDatabaseDialogVisible = ref(false)
 const currentEditSource = ref<DataSourceMetadataWithID | null>(null)
 const editForm = ref({
   name: '',
@@ -105,7 +106,7 @@ const handleFileUpload = async (options: any) => {
   // 检查文件类型
   const allowedTypes = ['csv', 'xlsx', 'xls']
   const fileExtension = file.name.split('.').pop()?.toLowerCase()
-  
+
   if (!allowedTypes.includes(fileExtension)) {
     ElMessage.error('只支持 CSV 和 Excel 文件格式')
     return
@@ -117,21 +118,17 @@ const handleFileUpload = async (options: any) => {
   fileMetadata.value.description = ''
   dataCleaningDialogVisible.value = true
   cleaningStep.value = 'upload'
-  
+
   // 不再自动分析数据质量，让用户自己选择
 }
 
 const openAddDatabase = () => {
-  ElMessageBox.prompt('请输入数据库连接URI', '添加数据库连接', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-  })
-    .then(({ value }) => {
-      ElMessage.success(`连接信息已提交: ${value}`)
-    })
-    .catch(() => {
-      ElMessage.info('已取消操作')
-    })
+  addDatabaseDialogVisible.value = true
+}
+
+const onDatabaseAddSuccess = async () => {
+  ElMessage.success('数据库连接添加成功')
+  await fetchDatasets() // 刷新数据源列表
 }
 
 const selectForAnalysis = async (metadata: DataSourceMetadataWithID) => {
@@ -232,15 +229,15 @@ const analyzeDataQuality = async () => {
 
   isAnalyzing.value = true
   cleaningStep.value = 'analysis'
-    try {
+  try {
     // 获取数据质量报告
     const result = await cleaningAPI.checkDataQuality(currentUploadFile.value)
     dataQualityReport.value = result.quality_check
     cleaningSuggestions.value = result.cleaning_suggestions
-    
+
     // 保持在 analysis 步骤，让用户查看报告后再决定下一步
     // 不自动跳转到其他步骤
-    
+
   } catch (error) {
     ElMessage.error('数据质量分析失败')
     console.error(error)
@@ -257,7 +254,7 @@ const applyCleaningActions = async () => {
   isCleaning.value = true
   try {
     const result = await cleaningAPI.applyCleaningActions(currentUploadFile.value, selectedCleaningActions.value)
-    
+
     if (result.success) {
       ElMessage.success('数据清洗完成！')
       cleaningStep.value = 'complete'
@@ -280,7 +277,7 @@ const skipCleaningAndUpload = async () => {
 
   isLoading.value = true
   try {
-    await dataSourceStore.uploadCsvSource(currentUploadFile.value)
+    await dataSourceStore.uploadFileSource(currentUploadFile.value)
     ElMessage.success('文件上传成功！')
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
@@ -299,7 +296,7 @@ const completeCleaningAndUpload = async () => {
   isLoading.value = true
   try {
     // 这里应该上传清洗后的文件，暂时使用原文件
-    await dataSourceStore.uploadCsvSource(currentUploadFile.value)
+    await dataSourceStore.uploadFileSource(currentUploadFile.value)
     ElMessage.success('文件上传成功！')
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
@@ -318,11 +315,11 @@ const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
     column: suggestion.column,
     parameters: suggestion.options?.[0]?.method || '' // 默认选择第一个选项的方法
   }
-  
-  const index = selectedCleaningActions.value.findIndex(a => 
+
+  const index = selectedCleaningActions.value.findIndex(a =>
     a.type === action.type && a.column === action.column
   )
-  
+
   if (index >= 0) {
     selectedCleaningActions.value.splice(index, 1)
   } else {
@@ -332,7 +329,7 @@ const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
 
 // 检查清洗动作是否已选择
 const isCleaningActionSelected = (suggestion: CleaningSuggestion) => {
-  return selectedCleaningActions.value.some(a => 
+  return selectedCleaningActions.value.some(a =>
     a.type === suggestion.type && a.column === suggestion.column
   )
 }
@@ -450,12 +447,7 @@ watch(pageSize, updatePaginatedDataSources)
         <p>上传、管理和分析您的数据源</p>
       </div>
       <div class="header-actions">
-        <el-button
-          type="primary"
-          :icon="Refresh"
-          @click="fetchDatasets"
-          :loading="isLoading"
-        >
+        <el-button type="primary" :icon="Refresh" @click="fetchDatasets" :loading="isLoading">
           刷新列表
         </el-button>
       </div>
@@ -466,13 +458,7 @@ watch(pageSize, updatePaginatedDataSources)
       <el-row :gutter="24">
         <el-col :xs="24" :sm="12" :md="8">
           <div class="upload-card">
-            <el-upload
-              class="upload-area"
-              drag
-              action="#"
-              :http-request="handleFileUpload"
-              :show-file-list="false"
-            >
+            <el-upload class="upload-area" drag action="#" :http-request="handleFileUpload" :show-file-list="false">
               <el-icon class="upload-icon">
                 <upload-filled />
               </el-icon>
@@ -503,14 +489,8 @@ watch(pageSize, updatePaginatedDataSources)
         <div class="search-header">
           <h3>数据源列表</h3>
           <div class="search-controls">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜索数据源名称或描述..."
-              :prefix-icon="Search"
-              clearable
-              @input="updateDisplayData"
-              style="width: 300px"
-            />
+            <el-input v-model="searchQuery" placeholder="搜索数据源名称或描述..." :prefix-icon="Search" clearable
+              @input="updateDisplayData" style="width: 300px" />
           </div>
         </div>
       </el-card>
@@ -519,12 +499,7 @@ watch(pageSize, updatePaginatedDataSources)
     <!-- 数据源列表 -->
     <div class="data-list-section">
       <el-card shadow="never">
-        <el-table
-          :data="paginatedDataSources"
-          v-loading="isLoading"
-          stripe
-          class="data-table"
-        >
+        <el-table :data="paginatedDataSources" v-loading="isLoading" stripe class="data-table">
           <el-table-column prop="source_id" label="ID" width="120" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag size="small" type="info">{{ row.source_id.slice(0, 8) }}...</el-tag>
@@ -573,40 +548,16 @@ watch(pageSize, updatePaginatedDataSources)
           <el-table-column label="操作" width="240" align="center">
             <template #default="{ row }">
               <div class="action-buttons">
-                <el-button
-                  size="small"
-                  type="primary"
-                  :icon="View"
-                  @click="selectForAnalysis(row)"
-                  plain
-                >
+                <el-button size="small" type="primary" :icon="View" @click="selectForAnalysis(row)" plain>
                   分析
                 </el-button>
-                <el-button
-                  size="small"
-                  type="success"
-                  :icon="InfoFilled"
-                  @click="openPreviewDialog(row)"
-                  plain
-                >
+                <el-button size="small" type="success" :icon="InfoFilled" @click="openPreviewDialog(row)" plain>
                   预览
                 </el-button>
-                <el-button
-                  size="small"
-                  type="warning"
-                  :icon="Edit"
-                  @click="openEditDialog(row)"
-                  plain
-                >
+                <el-button size="small" type="warning" :icon="Edit" @click="openEditDialog(row)" plain>
                   编辑
                 </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  :icon="Delete"
-                  @click="deleteDataSource(row)"
-                  plain
-                >
+                <el-button size="small" type="danger" :icon="Delete" @click="deleteDataSource(row)" plain>
                   删除
                 </el-button>
               </div>
@@ -616,40 +567,23 @@ watch(pageSize, updatePaginatedDataSources)
 
         <!-- 分页器 -->
         <div class="pagination-section">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[5, 10, 20, 50]"
-            :small="false"
-            :disabled="isLoading"
-            :background="true"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="filteredDataSources.length"
-            @current-change="updatePaginatedDataSources"
-            @size-change="updatePaginatedDataSources"
-          />
+          <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[5, 10, 20, 50]"
+            :small="false" :disabled="isLoading" :background="true" layout="total, sizes, prev, pager, next, jumper"
+            :total="filteredDataSources.length" @current-change="updatePaginatedDataSources"
+            @size-change="updatePaginatedDataSources" />
         </div>
       </el-card>
     </div>
 
     <!-- 编辑对话框 -->
-    <el-dialog
-      v-model="editDialogVisible"
-      title="编辑数据源信息"
-      width="500px"
-      :before-close="() => editDialogVisible = false"
-    >
+    <el-dialog v-model="editDialogVisible" title="编辑数据源信息" width="500px"
+      :before-close="() => editDialogVisible = false">
       <el-form :model="editForm" label-width="80px">
         <el-form-item label="名称">
           <el-input v-model="editForm.name" placeholder="请输入数据源名称" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input
-            v-model="editForm.description"
-            type="textarea"
-            placeholder="请输入数据源描述"
-            :rows="3"
-          />
+          <el-input v-model="editForm.description" type="textarea" placeholder="请输入数据源描述" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -661,12 +595,8 @@ watch(pageSize, updatePaginatedDataSources)
     </el-dialog>
 
     <!-- 预览对话框 -->
-    <el-dialog
-      v-model="previewDialogVisible"
-      :title="`预览数据源: ${currentEditSource?.name || ''}`"
-      width="90%"
-      :before-close="() => previewDialogVisible = false"
-    >
+    <el-dialog v-model="previewDialogVisible" :title="`预览数据源: ${currentEditSource?.name || ''}`" width="90%"
+      :before-close="() => previewDialogVisible = false">
       <div class="preview-content">
         <div class="preview-header">
           <el-descriptions :column="3" border>
@@ -683,57 +613,29 @@ watch(pageSize, updatePaginatedDataSources)
         </div>
 
         <div class="preview-table">
-          <el-table
-            :data="previewData"
-            v-loading="previewLoading"
-            stripe
-            border
-            height="400"
-          >
-            <el-table-column
-              v-for="column in previewColumns"
-              :key="column"
-              :prop="column"
-              :label="column"
-              show-overflow-tooltip
-              min-width="120"
-            />
+          <el-table :data="previewData" v-loading="previewLoading" stripe border height="400">
+            <el-table-column v-for="column in previewColumns" :key="column" :prop="column" :label="column"
+              show-overflow-tooltip min-width="120" />
           </el-table>
         </div>
 
         <div class="preview-pagination">
-          <el-pagination
-            v-model:current-page="previewPagination.current"
-            v-model:page-size="previewPagination.pageSize"
-            :page-sizes="[10, 20, 50, 100]"
-            :small="false"
-            :disabled="previewLoading"
-            :background="true"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="previewPagination.total"
-            @current-change="loadPreviewData"
-            @size-change="loadPreviewData"
-          />
+          <el-pagination v-model:current-page="previewPagination.current" v-model:page-size="previewPagination.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :small="false" :disabled="previewLoading" :background="true"
+            layout="total, sizes, prev, pager, next, jumper" :total="previewPagination.total"
+            @current-change="loadPreviewData" @size-change="loadPreviewData" />
         </div>
       </div>
     </el-dialog>
 
     <!-- 数据清洗对话框 -->
-    <el-dialog
-      v-model="dataCleaningDialogVisible"
-      title="数据清洗与分析"
-      width="600px"
-      :before-close="() => dataCleaningDialogVisible = false"
-    >
+    <el-dialog v-model="dataCleaningDialogVisible" title="数据清洗与分析" width="600px"
+      :before-close="() => dataCleaningDialogVisible = false">
       <div class="cleaning-content">
         <!-- 步骤指示器 -->
         <div class="cleaning-steps">
-          <div
-            class="step"
-            v-for="(step, index) in ['upload', 'analysis', 'cleaning', 'complete']"
-            :key="step"
-            :class="{ active: cleaningStep === step }"
-          >
+          <div class="step" v-for="(step, index) in ['upload', 'analysis', 'cleaning', 'complete']" :key="step"
+            :class="{ active: cleaningStep === step }">
             <div class="step-icon">
               <el-icon>
                 <Check v-if="cleaningStep !== 'upload' && cleaningStep !== step" />
@@ -743,59 +645,42 @@ watch(pageSize, updatePaginatedDataSources)
             </div>
             <div class="step-title">{{ index === 3 ? '完成' : `步骤 ${index + 1}` }}</div>
           </div>
-        </div>        <!-- 上传文件信息 -->
+        </div>
+
+        <!-- 上传文件信息 -->
         <div v-if="cleaningStep === 'upload'" class="upload-info">
           <div class="file-details">
             <div class="file-name">{{ fileMetadata.name }}</div>
-            <div class="file-size">{{ currentUploadFile ? (currentUploadFile.size / 1024 / 1024).toFixed(2) : 0 }} MB</div>
+            <div class="file-size">{{ currentUploadFile ? (currentUploadFile.size / 1024 / 1024).toFixed(2) : 0 }} MB
+            </div>
           </div>
-          
+
           <!-- 文件元数据编辑 -->
           <div class="file-metadata">
             <el-form :model="fileMetadata" label-width="80px">
               <el-form-item label="文件名称">
-                <el-input
-                  v-model="fileMetadata.name"
-                  placeholder="请输入文件名称"
-                  prefix-icon="Document"
-                />
+                <el-input v-model="fileMetadata.name" placeholder="请输入文件名称" prefix-icon="Document" />
               </el-form-item>
               <el-form-item label="文件描述">
-                <el-input
-                  v-model="fileMetadata.description"
-                  type="textarea"
-                  placeholder="请输入文件描述信息"
-                  :rows="3"
-                />
+                <el-input v-model="fileMetadata.description" type="textarea" placeholder="请输入文件描述信息" :rows="3" />
               </el-form-item>
             </el-form>
           </div>
-          
+
           <div class="file-actions">
-            <el-button
-              @click="closeCleaningDialog"
-              style="flex: 1"
-            >
+            <el-button @click="closeCleaningDialog" style="flex: 1">
               取消
             </el-button>
-            <el-button
-              type="primary"
-              @click="skipCleaningAndUpload"
-              :loading="isLoading"
-              style="flex: 1"
-            >
+            <el-button type="primary" @click="skipCleaningAndUpload" :loading="isLoading" style="flex: 1">
               跳过清洗，直接上传
             </el-button>
-            <el-button
-              type="success"
-              @click="analyzeDataQuality"
-              :loading="isAnalyzing"
-              style="flex: 1"
-            >
+            <el-button type="success" @click="analyzeDataQuality" :loading="isAnalyzing" style="flex: 1">
               开始分析数据质量
             </el-button>
           </div>
-        </div>        <!-- 数据质量分析结果 -->
+        </div>
+
+        <!-- 数据质量分析结果 -->
         <div v-if="cleaningStep === 'analysis'" class="analysis-results">
           <div v-if="isAnalyzing" class="loading-status">
             <el-empty description="正在分析数据质量，请稍候..." />
@@ -805,28 +690,20 @@ watch(pageSize, updatePaginatedDataSources)
               <div class="report-header">
                 <div class="report-title">数据质量报告</div>
                 <div class="report-score">
-                  <el-tag
-                    :type="getQualityScoreColor(dataQualityReport?.quality_score || 0)"
-                    class="score-tag"
-                  >
+                  <el-tag :type="getQualityScoreColor(dataQualityReport?.quality_score || 0)" class="score-tag">
                     {{ (dataQualityReport?.quality_score || 0).toFixed(2) }}
                     {{ getQualityScoreText(dataQualityReport?.quality_score || 0) }}
                   </el-tag>
                 </div>
-              </div>              <div class="report-content">
+              </div>
+              <div class="report-content">
                 <div class="report-item" v-for="(value, key) in dataQualityReport?.data_info" :key="key">
                   <div class="item-key">{{ key }}</div>
                   <div class="item-value">
-                    <span
-                      v-if="key === 'rows'"
-                      class="value-row-count"
-                    >
+                    <span v-if="key === 'rows'" class="value-row-count">
                       {{ value }}
                     </span>
-                    <span
-                      v-else-if="key === 'file_size'"
-                      class="value-file-size"
-                    >
+                    <span v-else-if="key === 'file_size'" class="value-file-size">
                       {{ value }} bytes
                     </span>
                     <span v-else>{{ typeof value === 'number' ? value.toFixed(2) : value }}</span>
@@ -834,24 +711,20 @@ watch(pageSize, updatePaginatedDataSources)
                 </div>
               </div>
             </div>
-            
+
             <!-- 继续按钮 -->
             <div class="analysis-actions">
-              <el-button
-                type="primary"
-                @click="cleaningStep = 'cleaning'"
-                :disabled="cleaningSuggestions.length === 0"
-              >
+              <el-button type="primary" @click="cleaningStep = 'cleaning'" :disabled="cleaningSuggestions.length === 0">
                 查看清洗建议 ({{ cleaningSuggestions.length }})
               </el-button>
-              <el-button
-                @click="skipCleaningAndUpload"
-              >
+              <el-button @click="skipCleaningAndUpload">
                 跳过清洗直接上传
               </el-button>
             </div>
           </div>
-        </div><!-- 清洗建议选择 -->
+        </div>
+
+        <!-- 清洗建议选择 -->
         <div v-if="cleaningStep === 'cleaning'" class="cleaning-suggestions">
           <div v-if="isCleaning" class="cleaning-progress">
             <el-empty description="数据清洗中，请稍候..." />
@@ -860,27 +733,18 @@ watch(pageSize, updatePaginatedDataSources)
             <div class="suggestions-header">
               <div class="title">清洗建议</div>
               <div class="actions">
-                <el-button
-                  type="primary"
-                  @click="applyCleaningActions"
-                  :loading="isCleaning"
-                  :disabled="selectedCleaningActions.length === 0"
-                >
+                <el-button type="primary" @click="applyCleaningActions" :loading="isCleaning"
+                  :disabled="selectedCleaningActions.length === 0">
                   应用选中的建议 ({{ selectedCleaningActions.length }})
                 </el-button>
-                <el-button
-                  @click="skipCleaningAndUpload"
-                >
+                <el-button @click="skipCleaningAndUpload">
                   跳过清洗直接上传
                 </el-button>
               </div>
             </div>
 
             <div class="suggestions-list">
-              <div
-                class="suggestion-item"
-                v-for="(suggestion, index) in cleaningSuggestions"
-                :key="index"              >
+              <div class="suggestion-item" v-for="(suggestion, index) in cleaningSuggestions" :key="index">
                 <div class="item-icon">
                   <el-icon :component="getIssueTypeIcon(suggestion.type)" />
                 </div>
@@ -898,10 +762,8 @@ watch(pageSize, updatePaginatedDataSources)
                   </div>
                 </div>
                 <div class="item-action">
-                  <el-checkbox
-                    :checked="isCleaningActionSelected(suggestion)"
-                    @change="toggleCleaningAction(suggestion)"
-                  >
+                  <el-checkbox :checked="isCleaningActionSelected(suggestion)"
+                    @change="toggleCleaningAction(suggestion)">
                     应用此建议
                   </el-checkbox>
                 </div>
@@ -912,11 +774,7 @@ watch(pageSize, updatePaginatedDataSources)
 
         <!-- 完成状态 -->
         <div v-if="cleaningStep === 'complete'" class="complete-status">
-          <el-result
-            status="success"
-            title="数据清洗完成"
-            sub-title="您可以选择重新分析或直接上传清洗后的数据"
-          >
+          <el-result status="success" title="数据清洗完成" sub-title="您可以选择重新分析或直接上传清洗后的数据">
             <template #extra>
               <el-button type="primary" @click="completeCleaningAndUpload">
                 上传清洗后的数据
@@ -930,6 +788,8 @@ watch(pageSize, updatePaginatedDataSources)
       </div>
     </el-dialog>
   </div>
+
+  <AddDatabaseDialog v-model:visible="addDatabaseDialogVisible" @success="onDatabaseAddSuccess" />
 </template>
 
 <style lang="scss" scoped>
@@ -945,7 +805,8 @@ watch(pageSize, updatePaginatedDataSources)
   justify-content: space-between;
   align-items: center;
   margin-bottom: 32px;
-    .header-title {
+
+  .header-title {
     h1 {
       font-size: 32px;
       font-weight: 700;
@@ -1368,10 +1229,12 @@ watch(pageSize, updatePaginatedDataSources)
       &.active {
         .step-icon {
           background: #3b82f6;
+
           .el-icon {
             color: white;
           }
         }
+
         .step-title {
           color: #3b82f6;
           font-weight: 600;

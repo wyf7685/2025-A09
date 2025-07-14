@@ -21,9 +21,9 @@ type DremioDatabaseType = Literal["MSSQL", "MYSQL", "ORACLE", "POSTGRES"]
 
 
 class BaseDatabaseConnection(BaseModel):
-    host: str
+    hostname: str
     port: int
-    user: str
+    username: str
     password: str
 
 
@@ -37,6 +37,7 @@ class MySQLConnection(BaseDatabaseConnection):
 
 class PostgreSQLConnection(BaseDatabaseConnection):
     databaseName: str  # noqa: N815
+    authenticationType: Literal["MASTER"] = "MASTER"  # noqa: N815
 
 
 class OracleConnection(BaseDatabaseConnection):

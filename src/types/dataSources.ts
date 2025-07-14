@@ -19,34 +19,14 @@ export type DataSourceMetadataWithID = DataSourceMetadata & {
   source_id: SourceID;
 };
 
-// /**
-//  * 数据库连接配置
-//  */
-// export interface DatabaseConnectionConfig {
-//   host: string;
-//   port: number;
-//   database: string;
-//   username: string;
-//   password: string;
-// }
-
-// /**
-//  * 数据库连接配置
-//  */
-// export interface DatabaseConfig {
-//   name: string;
-//   type: 'postgres' | 'mysql' | 'oracle' | 'sqlserver';
-//   connection: DatabaseConnectionConfig | any;
-// }
-
 // 数据库类型定义
 export type DremioDatabaseType = 'MSSQL' | 'MYSQL' | 'ORACLE' | 'POSTGRES';
 
 // 基础数据库连接接口
 interface BaseDatabaseConnection {
-  host: string;
+  hostname: string;
   port: number;
-  user: string;
+  username: string;
   password: string;
 }
 
