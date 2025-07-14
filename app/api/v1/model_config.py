@@ -2,10 +2,11 @@
 模型配置接口
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.core.custom_model_manager import CustomModelConfig, custom_model_manager
 from app.log import logger
 
 router = APIRouter(prefix="/models")
@@ -18,8 +19,45 @@ class ModelInfo(BaseModel):
     available: bool
 
 
+class CustomModelRequest(BaseModel):
+    name: str
+    provider: str
+    api_url: str
+    api_key: str
+    model_name: str
+
+
 class ModelsResponse(BaseModel):
     models: list[ModelInfo]
+
+
+@router.post("/custom")
+async def set_custom_model(request: CustomModelRequest) -> dict:
+    """设置自定义模型配置"""
+    try:
+        config = CustomModelConfig(
+            id=f"custom-{hash(request.api_url + request.model_name) % 100000}",
+            name=request.name,
+            provider=request.provider,
+            api_url=request.api_url,
+            api_key=request.api_key,
+            model_name=request.model_name,
+        )
+        custom_model_manager.add_model(config)
+        logger.info(f"设置自定义模型: {config.name} ({config.id})")
+        return {"success": True, "message": "自定义模型配置成功", "model_id": config.id}
+    except Exception as e:
+        logger.error(f"设置自定义模型失败: {e}")
+        raise HTTPException(status_code=500, detail="设置自定义模型失败") from e
+
+
+@router.get("/custom/{model_id}")
+async def get_custom_model(model_id: str) -> CustomModelConfig:
+    """获取自定义模型配置"""
+    config = custom_model_manager.get_model(model_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="自定义模型未找到")
+    return config
 
 
 @router.get("/available")

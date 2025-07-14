@@ -3,6 +3,7 @@ import type { FlowStep } from '@/types';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 import { useModelStore } from '@/stores/model';
+import { API_BASE_URL } from '@/utils/api';
 import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
 import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled, Monitor, Setting, Loading, CircleCheck, Clock } from '@element-plus/icons-vue';
 
@@ -41,11 +42,63 @@ const route2Steps = ref([
 const flowSteps = ref<FlowStep[]>([])
 
 // 模型配置相关状态
-const availableModels = computed(() => modelStore.availableModels)
+const storeAvailableModels = computed(() => modelStore.availableModels)
+
+// 自定义API相关状态
+const showCustomApiDialog = ref(false)
+const customApiForm = ref({
+  provider: '',  // 选择的提供商
+  apiKey: '',
+  modelName: '',
+  customApiUrl: ''  // 自定义API URL
+})
+
+// 预设的API提供商配置
+const apiProviders = [
+  {
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4', 'gpt-3.5-turbo', 'gpt-4-turbo']
+  },
+  {
+    name: 'Google',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: ['gemini-2.0-flash', 'gemini-1.5-pro']
+  },
+  {
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    models: ['deepseek-chat', 'deepseek-coder']
+  },
+  {
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    models: ['claude-3-sonnet', 'claude-3-opus', 'claude-3-haiku']
+  },
+  {
+    name: 'Custom',
+    baseUrl: '',
+    models: []
+  }
+]
+
+const selectedProvider = computed(() => {
+  return apiProviders.find(p => p.name === customApiForm.value.provider) || apiProviders[0]
+})
+
+const providerModels = computed(() => {
+  return selectedProvider.value.models
+})
+
 const selectedModel = computed({
   get: () => modelStore.selectedModel?.id || 'gemini-2.0-flash',
   set: (value: string) => {
-    const model = availableModels.value.find(m => m.id === value)
+    if (value === 'custom-api') {
+      // 显示自定义API对话框
+      showCustomApiDialog.value = true
+      return
+    }
+    const model = storeAvailableModels.value.find(m => m.id === value)
     if (model) {
       modelStore.setSelectedModel(model)
     }
@@ -76,8 +129,14 @@ const clearFlowSteps = () => {
 
 // 模型配置方法
 const changeModel = (modelId: string) => {
+  if (modelId === 'custom-api') {
+    // 显示自定义API对话框
+    showCustomApiDialog.value = true
+    return
+  }
+
   selectedModel.value = modelId
-  const model = availableModels.value.find(m => m.id === modelId)
+  const model = storeAvailableModels.value.find(m => m.id === modelId)
 
   // 添加模型切换步骤到流程图
   addFlowStep({
@@ -89,8 +148,108 @@ const changeModel = (modelId: string) => {
   ElMessage.success(`已切换到模型: ${model?.name || modelId}`)
 }
 
+// 处理自定义API配置
+const handleCustomApiSubmit = async () => {
+  if (!customApiForm.value.provider || !customApiForm.value.apiKey || !customApiForm.value.modelName) {
+    ElMessage.error('请填写完整的API信息')
+    return
+  }
+
+  try {
+    const provider = selectedProvider.value
+    let apiUrl = provider.baseUrl
+
+    // 如果是自定义提供商，使用用户输入的URL
+    if (customApiForm.value.provider === 'Custom') {
+      apiUrl = customApiForm.value.customApiUrl
+      if (!apiUrl) {
+        ElMessage.error('请输入自定义API URL')
+        return
+      }
+    }
+
+    console.log('发送的数据:', {
+      name: customApiForm.value.modelName,
+      provider: customApiForm.value.provider,
+      api_url: apiUrl,
+      api_key: customApiForm.value.apiKey,
+      model_name: customApiForm.value.modelName
+    })
+
+    // 调用后端API保存自定义模型配置
+    const response = await fetch(`${API_BASE_URL}/models/custom`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: customApiForm.value.modelName,
+        provider: customApiForm.value.provider,
+        api_url: apiUrl,
+        api_key: customApiForm.value.apiKey,
+        model_name: customApiForm.value.modelName
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('API错误响应:', response.status, errorText)
+      throw new Error(`API调用失败: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+    console.log('API响应:', data)
+
+    // 创建自定义模型对象
+    const customModel = {
+      id: data.model_id,
+      name: customApiForm.value.modelName,
+      provider: customApiForm.value.provider,
+      apiUrl: apiUrl,
+      apiKey: customApiForm.value.apiKey
+    }
+
+    // 更新模型存储
+    modelStore.setCustomModel(customModel)
+    modelStore.setSelectedModel(customModel)
+
+    showCustomApiDialog.value = false
+
+    // 重置表单
+    customApiForm.value = {
+      provider: '',
+      apiKey: '',
+      modelName: '',
+      customApiUrl: ''
+    }
+
+    // 添加模型切换步骤到流程图
+    addFlowStep({
+      title: '自定义模型配置',
+      description: `配置自定义模型: ${customModel.name}`,
+      status: 'completed'
+    })
+
+    ElMessage.success(`已配置自定义模型: ${customModel.name}`)
+  } catch (error) {
+    console.error('配置自定义API失败:', error)
+    ElMessage.error('配置自定义API失败')
+  }
+}
+
+const cancelCustomApi = () => {
+  showCustomApiDialog.value = false
+  // 重置表单
+  customApiForm.value = {
+    provider: '',
+    apiKey: '',
+    modelName: '',
+    customApiUrl: ''
+  }
+}
+
 const getCurrentModelInfo = computed(() => {
-  return modelStore.selectedModel || availableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' }
+  return modelStore.selectedModel || storeAvailableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' }
 })
 
 // 路线切换处理
@@ -313,7 +472,7 @@ defineExpose({
   route1Steps,
   route2Steps,
   flowSteps,
-  availableModels,
+  storeAvailableModels,
   selectedModel,
   getCurrentModelInfo,
   addFlowStep,
@@ -383,10 +542,17 @@ onMounted(async () => {
         <el-select v-model="selectedModel" @change="changeModel" placeholder="选择模型" size="small" class="model-select">
           <el-option-group v-for="provider in ['Google', 'OpenAI', 'DeepSeek', 'Anthropic']" :key="provider"
             :label="provider">
-            <el-option v-for="model in availableModels.filter(m => m.provider === provider)" :key="model.id"
+            <el-option v-for="model in storeAvailableModels.filter(m => m.provider === provider)" :key="model.id"
               :label="model.name" :value="model.id">
               <div class="model-option">
                 <span class="model-name">{{ model.name }}</span>
+              </div>
+            </el-option>
+          </el-option-group>
+          <el-option-group label="自定义">
+            <el-option label="输入API" value="custom-api">
+              <div class="model-option">
+                <span class="model-name">输入API</span>
               </div>
             </el-option>
           </el-option-group>
@@ -484,6 +650,81 @@ onMounted(async () => {
       </div>
     </div>
   </div>
+
+  <!-- 自定义API配置对话框 -->
+  <el-dialog
+    v-model="showCustomApiDialog"
+    title="配置自定义API"
+    width="500px"
+    :before-close="cancelCustomApi"
+  >
+    <el-form :model="customApiForm" label-width="120px">
+      <el-form-item label="API提供商" required>
+        <el-select v-model="customApiForm.provider" placeholder="选择API提供商" style="width: 100%">
+          <el-option
+            v-for="provider in apiProviders"
+            :key="provider.name"
+            :label="provider.name"
+            :value="provider.name"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="API Key" required>
+        <el-input
+          v-model="customApiForm.apiKey"
+          type="password"
+          placeholder="请输入API密钥"
+          show-password
+          clearable
+        />
+      </el-form-item>
+      <el-form-item label="模型名称" required>
+        <el-select
+          v-if="providerModels.length > 0"
+          v-model="customApiForm.modelName"
+          placeholder="选择模型"
+          style="width: 100%"
+          filterable
+          allow-create
+        >
+          <el-option
+            v-for="model in providerModels"
+            :key="model"
+            :label="model"
+            :value="model"
+          />
+        </el-select>
+        <el-input
+          v-else
+          v-model="customApiForm.modelName"
+          placeholder="输入模型名称"
+          clearable
+        />
+      </el-form-item>
+
+      <!-- 自定义API URL输入 (仅当选择Custom提供商时显示) -->
+      <el-form-item v-if="customApiForm.provider === 'Custom'" label="API URL" required>
+        <el-input
+          v-model="customApiForm.customApiUrl"
+          placeholder="例如: https://api.example.com/v1"
+          clearable
+        />
+      </el-form-item>
+
+      <div v-if="selectedProvider.baseUrl" class="api-info">
+        <el-text type="info">API地址: {{ selectedProvider.baseUrl }}</el-text>
+      </div>
+      <div v-else-if="customApiForm.provider === 'Custom'" class="api-info">
+        <el-text type="warning">请输入自定义API URL</el-text>
+      </div>
+    </el-form>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="cancelCustomApi">取消</el-button>
+        <el-button type="primary" @click="handleCustomApiSubmit">确定</el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style lang="scss" scoped>
@@ -862,5 +1103,14 @@ onMounted(async () => {
       }
     }
   }
+}
+
+// 自定义API对话框样式
+.api-info {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  border-left: 3px solid #409eff;
 }
 </style>

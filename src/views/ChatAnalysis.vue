@@ -138,10 +138,21 @@ const mergeTextPart = (parts: AssistantChatMessageContent[]): AssistantChatMessa
 const refreshChatHistory = async () => {
   if (!currentSessionId.value) return
   const session = await sessionStore.getSession(currentSessionId.value)
-  messages.value = session.chat_history.map((entry) => [entry.user_message, {
-    ...entry.assistant_response,
-    content: mergeTextPart(entry.assistant_response.content),
-  }]).flat() || []
+  messages.value = session.chat_history.map((entry) => {
+    const assistantMessage = {
+      ...entry.assistant_response,
+      content: mergeTextPart(entry.assistant_response.content),
+    }
+
+    // 重新提取建议按钮（页面刷新后恢复建议）
+    const mergedContent = assistantMessage.content.map(c => c.type === 'text' ? c.content : '').join('')
+    const suggestions = extractSuggestions(mergedContent)
+    if (suggestions.length > 0) {
+      (assistantMessage as any).suggestions = suggestions
+    }
+
+    return [entry.user_message, assistantMessage]
+  }).flat() || []
   scrollToBottom()
 }
 
