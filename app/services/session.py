@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 
 from app.const import SESSION_DIR
+from app.core.lifespan import lifespan
 from app.log import logger
 from app.schemas.session import Session, SessionListItem
 
@@ -113,4 +114,9 @@ class SessionService:
 
 
 session_service = SessionService()
-session_service.load_sessions()
+
+
+@lifespan.on_startup
+def _() -> None:
+    """在应用启动时加载会话"""
+    session_service.load_sessions()

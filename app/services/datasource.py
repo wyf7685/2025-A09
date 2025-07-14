@@ -5,6 +5,7 @@ import uuid
 from app.const import DATASOURCE_DIR
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
 from app.core.dremio import get_dremio_client
+from app.core.lifespan import lifespan
 from app.log import logger
 
 _dremio_sync_sem = threading.Semaphore(1)
@@ -106,5 +107,23 @@ class DataSourceService:
 
 
 datasource_service = DataSourceService()
-datasource_service.load_sources()
-threading.Thread(target=datasource_service.sync_from_dremio).start()
+
+
+@lifespan.on_startup
+def _() -> None:
+    """在应用启动时加载数据源"""
+
+    datasource_service.load_sources()
+
+    def sync() -> None:
+        from app.log import configure_logging
+
+        try:
+            datasource_service.sync_from_dremio()
+        except Exception:
+            logger.exception("Failed to sync data sources from Dremio")
+        finally:
+            configure_logging()
+
+    threading.Thread(target=sync, daemon=True).start()
+    logger.info("Data sources loaded and synced from Dremio")

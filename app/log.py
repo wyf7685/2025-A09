@@ -1,14 +1,79 @@
 import inspect
-import logging
+import logging.config
+import re
 import sys
 from typing import TYPE_CHECKING
 
 import loguru
 
+from app.utils import escape_tag
+
 if TYPE_CHECKING:
     from loguru import Logger, Record
 
 logger: "Logger" = loguru.logger
+
+
+_ANSI_TO_LOGURU_TAG = {
+    # Fore
+    "\033[30m": "<black>",
+    "\033[31m": "<red>",
+    "\033[32m": "<green>",
+    "\033[33m": "<yellow>",
+    "\033[34m": "<blue>",
+    "\033[35m": "<magenta>",
+    "\033[36m": "<cyan>",
+    "\033[37m": "<white>",
+    # Back
+    "\033[40m": "<BLACK>",
+    "\033[41m": "<RED>",
+    "\033[42m": "<GREEN>",
+    "\033[43m": "<YELLOW>",
+    "\033[44m": "<BLUE>",
+    "\033[45m": "<MAGENTA>",
+    "\033[46m": "<CYAN>",
+    "\033[47m": "<WHITE>",
+    # Style
+    # "\033[0m": "</>",  # RESET
+    "\033[1m": "<bold>",
+    "\033[2m": "<dim>",
+    "\033[3m": "<italic>",
+    "\033[4m": "<underline>",
+    "\033[5m": "<blink>",
+    "\033[7m": "<reverse>",
+    "\033[8m": "<hidden>",
+    "\033[9m": "<strike>",
+}
+_ANSI_RESET = "\033[0m"
+_ANSI_PATTERN = re.compile(r"(\033\[\d+(;\d+)*m)")
+
+
+def _ansi_to_loguru_tag(text: str) -> str:
+    result: list[str] = []
+    open_tags: list[str] = []
+    last_end = 0
+
+    for match in _ANSI_PATTERN.finditer(text):
+        start, end = match.start(), match.end()
+        ansi_code = text[start:end]
+
+        if start > last_end:
+            result.append(text[last_end:start])
+
+        if ansi_code == _ANSI_RESET:
+            result.append("</>" * len(open_tags))
+            open_tags = []
+        elif ansi_code in _ANSI_TO_LOGURU_TAG:
+            loguru_tag = _ANSI_TO_LOGURU_TAG[ansi_code]
+            result.append(loguru_tag)
+            open_tags.append(loguru_tag)
+
+        last_end = end
+
+    if last_end < len(text):
+        result.append(text[last_end:])
+
+    return "".join(result)
 
 
 # https://loguru.readthedocs.io/en/stable/overview.html#entirely-compatible-with-standard-logging
@@ -26,13 +91,30 @@ class LoguruHandler(logging.Handler):  # pragma: no cover
             frame = frame.f_back
             depth += 1
 
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+        kwds = {"depth": depth, "exception": record.exc_info}
+        if colored := record.__dict__.get("color_message"):  # uvicorn color log
+            record.msg = _ansi_to_loguru_tag(escape_tag(colored))
+            kwds["colors"] = True
+
+        logger.opt(**kwds).log(level, record.getMessage())
 
 
 def default_filter(record: "Record") -> bool:
     log_level = record["extra"].get("log_level", "INFO")
     levelno = logger.level(log_level).no if isinstance(log_level, str) else log_level
     return record["level"].no >= levelno
+
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"default": {"class": "app.log.LoguruHandler"}},
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+    },
+}
 
 
 log_format = "<g>{time:HH:mm:ss}</g> [<lvl>{level}</lvl>] <c><u>{name}</u></c> | {message}"
@@ -55,3 +137,8 @@ logger_id_file = logger.add(
     filter=default_filter,
     format=log_format,
 )
+
+
+def configure_logging() -> None:
+    """配置日志记录器。"""
+    logging.config.dictConfig(LOGGING_CONFIG)

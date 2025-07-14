@@ -20,8 +20,8 @@
       "args": [
         "app.main:app",
         //  "--reload",
-        "--log-config",
-        "app/log_config.json",
+        // "--log-config",
+        // "app/log_config.json",
         "--use-colors",
         "--port",
         "8081"
