@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.dremio.abstract import AbstractDremioClient
 from app.core.dremio.rest import DremioRestClient
 from app.log import logger
-from app.schemas.dremio import DremioSource
+from app.schemas.dremio import BaseDatabaseConnection, DremioDatabaseType, DremioSource
 
 
 class DremioFlightClient(AbstractDremioClient):
@@ -45,28 +45,12 @@ class DremioFlightClient(AbstractDremioClient):
         return self._rest.add_data_source_file(file, "excel")
 
     @override
-    def add_data_source_postgres(
+    def add_data_source_database(
         self,
-        host: str,
-        port: int,
-        database: str,
-        user: str,
-        password: str,
-    ) -> str:
-        """
-        添加 PostgreSQL 数据源到 Dremio
-
-        Args:
-            host: PostgreSQL 主机地址
-            port: PostgreSQL 端口
-            database: 数据库名
-            user: 数据库用户名
-            password: 数据库密码
-
-        Returns:
-            str: 数据源名称
-        """
-        return self._rest.add_data_source_postgres(host, port, database, user, password)
+        database_type: DremioDatabaseType,
+        connection: BaseDatabaseConnection,
+    ) -> DremioSource:
+        return self._rest.add_data_source_database(database_type, connection)
 
     @override
     def read_source(

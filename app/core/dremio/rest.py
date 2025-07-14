@@ -14,7 +14,7 @@ from dremio import path_to_dotted
 from app.core.config import settings
 from app.core.dremio.abstract import AbstractDremioClient
 from app.log import logger
-from app.schemas.dremio import DremioContainer, DremioSource
+from app.schemas.dremio import BaseDatabaseConnection, DremioContainer, DremioDatabaseType, DremioSource
 from app.utils import escape_tag
 
 
@@ -233,43 +233,21 @@ class DremioRestClient(AbstractDremioClient):
             type="FILE",
         )
 
-    # TODO: 改写为通用数据库连接
     @override
-    def add_data_source_postgres(
+    def add_data_source_database(
         self,
-        host: str,
-        port: int,
-        database: str,
-        user: str,
-        password: str,
-    ) -> str:
-        """
-        添加 PostgreSQL 数据源到 Dremio
-
-        Args:
-            host: PostgreSQL 主机地址
-            port: PostgreSQL 端口
-            database: 数据库名
-            user: 数据库用户名
-            password: 数据库密码
-
-        Returns:
-            str: 数据源名称
-        """
+        database_type: DremioDatabaseType,
+        connection: BaseDatabaseConnection,
+    ) -> DremioSource:
         source_name = str(uuid.uuid4())
         url = f"{self.base_url}/api/v3/catalog"
+        config = connection.model_dump()
+        config["port"] = str(config["port"])
         payload = {
             "entityType": "source",
             "name": source_name,
-            "type": "POSTGRES",
-            "config": {
-                "hostname": host,
-                "port": str(port),
-                "databaseName": database,
-                "username": user,
-                "password": password,
-                "maxIdleConns": 8,
-            },
+            "type": database_type,
+            "config": config,
             "metadataPolicy": {
                 "authTTLMs": 86400000,
                 "datasetExpireAfterMs": 10800000,
@@ -287,7 +265,11 @@ class DremioRestClient(AbstractDremioClient):
         )
         response.raise_for_status()
         self._expire_source_cache()
-        return source_name
+        return DremioSource(
+            id=f"{source_name}",
+            path=[source_name],
+            type=database_type,
+        )
 
     def query_source_children(self, source_name: str | list[str]) -> list[DremioSource]:
         """

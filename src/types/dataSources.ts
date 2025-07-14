@@ -19,41 +19,56 @@ export type DataSourceMetadataWithID = DataSourceMetadata & {
   source_id: SourceID;
 };
 
-/**
- * 数据源预览信息
- */
-export interface DataSourcePreview {
-  metadata: DataSourceMetadata;
-  preview: Record<string, any>[];
-}
+// /**
+//  * 数据库连接配置
+//  */
+// export interface DatabaseConnectionConfig {
+//   host: string;
+//   port: number;
+//   database: string;
+//   username: string;
+//   password: string;
+// }
 
-/**
- * Dremio 数据源
- */
-export interface DremioSource {
-  path: string[] | string;
-  type: string;
-  id?: string;
-  name?: string;
-  description?: string;
-}
+// /**
+//  * 数据库连接配置
+//  */
+// export interface DatabaseConfig {
+//   name: string;
+//   type: 'postgres' | 'mysql' | 'oracle' | 'sqlserver';
+//   connection: DatabaseConnectionConfig | any;
+// }
 
-/**
- * 数据库连接配置
- */
-export interface DatabaseConnectionConfig {
+// 数据库类型定义
+export type DremioDatabaseType = 'MSSQL' | 'MYSQL' | 'ORACLE' | 'POSTGRES';
+
+// 基础数据库连接接口
+interface BaseDatabaseConnection {
   host: string;
   port: number;
-  database: string;
-  username: string;
+  user: string;
   password: string;
 }
 
-/**
- * 数据库连接配置
- */
-export interface DatabaseConfig {
-  name: string;
-  type: 'postgres' | 'mysql' | 'oracle' | 'sqlserver';
-  connection: DatabaseConnectionConfig | any;
+// MSSQL 连接接口
+export interface MSSQLConnection extends BaseDatabaseConnection {}
+
+// MySQL 连接接口
+export interface MySQLConnection extends BaseDatabaseConnection {}
+
+// PostgreSQL 连接接口
+export interface PostgreSQLConnection extends BaseDatabaseConnection {
+  databaseName: string;
 }
+
+// Oracle 连接接口
+export interface OracleConnection extends BaseDatabaseConnection {
+  instance: string;
+}
+
+// 任意数据库连接类型
+export type AnyDatabaseConnection =
+  | MSSQLConnection
+  | MySQLConnection
+  | PostgreSQLConnection
+  | OracleConnection;

@@ -1,4 +1,4 @@
-import type { DataSourceMetadata, DataSourceMetadataWithID, DremioSource, SourceID } from '@/types';
+import type { AnyDatabaseConnection, DataSourceMetadata, DataSourceMetadataWithID, DremioDatabaseType, SourceID } from '@/types';
 import api from '@/utils/api';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -43,21 +43,7 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
-  const registerDremioSource = async (source: DremioSource) => {
-    try {
-      const response = await api.post<{
-        source_id: SourceID;
-        metadata: DataSourceMetadata;
-      }>('/datasources/register', { source });
-      dataSources.value[response.data.source_id] = response.data.metadata;
-      return response.data;
-    } catch (error) {
-      console.error('Failed to register data source:', error);
-      throw error;
-    }
-  };
-
-  const uploadCsvSource = async (file: File, sourceName?: string) => {
+  const uploadFileSource = async (file: File, sourceName?: string) => {
     const formData = new FormData();
     formData.append('file', file);
     if (sourceName) {
@@ -81,7 +67,31 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
-  const updateDataSource = async (sourceId: SourceID, updates: { name?: string; description?: string }) => {
+  const createDatabaseSource = async(
+    params: {
+      database_type: DremioDatabaseType;
+      connection: AnyDatabaseConnection;
+      name?: string;
+      description?: string;
+    }
+  ) => {
+    try {
+      const response = await api.post<{
+        source_id: SourceID;
+        metadata: DataSourceMetadata;
+      }>('/datasources/database', params);
+      dataSources.value[response.data.source_id] = response.data.metadata;
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create database source:', error);
+      throw error;
+    }
+  }
+
+  const updateDataSource = async (
+    sourceId: SourceID,
+    updates: { name?: string; description?: string },
+  ) => {
     try {
       const response = await api.put<DataSourceMetadata>(`/datasources/${sourceId}`, updates);
       dataSources.value[sourceId] = response.data;
@@ -133,8 +143,8 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     dataSources,
     getDataSource,
     listDataSources,
-    registerDremioSource,
-    uploadCsvSource,
+    uploadFileSource,
+    createDatabaseSource,
     updateDataSource,
     getSourceData,
     deleteDataSource,

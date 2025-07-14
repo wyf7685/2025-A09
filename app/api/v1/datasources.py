@@ -17,7 +17,7 @@ from app.core.datasource import create_dremio_source
 from app.core.datasource.source import DataSourceMetadata
 from app.core.dremio import get_dremio_client
 from app.log import logger
-from app.schemas.dremio import DremioSource
+from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
 from app.services.datasource import datasource_service
 from app.services.session import session_service
 from app.utils import run_sync
@@ -26,20 +26,13 @@ from app.utils import run_sync
 router = APIRouter(prefix="/datasources")
 
 
-class RegisterDataSourceRequest(BaseModel):
-    source: DremioSource
-
-
 class RegisterDataSourceResponse(BaseModel):
     source_id: str
     metadata: DataSourceMetadata
 
 
 @router.post("/upload", response_model=RegisterDataSourceResponse)
-async def upload_file(
-    file: UploadFile = File(...),
-    source_name: str | None = Form(None),
-) -> dict[str, Any]:
+async def upload_file(file: UploadFile = File(), source_name: str | None = Form(None)) -> dict[str, Any]:
     """
     上传CSV/Excel文件并创建数据源
     """
@@ -66,6 +59,34 @@ async def upload_file(
     except Exception as e:
         logger.exception("上传文件失败")
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
+
+
+class AddDataSourceDatabaseRequest(BaseModel):
+    database_type: DremioDatabaseType
+    connection: AnyDatabaseConnection
+    name: str | None = None
+    description: str | None = None
+
+
+@router.post("/database")
+async def add_data_source_database(request: AddDataSourceDatabaseRequest) -> RegisterDataSourceResponse:
+    """
+    添加数据库数据源
+    """
+    try:
+        client = get_dremio_client()
+        dremio_source = await run_sync(client.add_data_source_database)(request.database_type, request.connection)
+        source = create_dremio_source(dremio_source)
+        source_id = datasource_service.register(source)
+        if request.name:
+            source.metadata.name = request.name
+        if request.description:
+            source.metadata.description = request.description
+        datasource_service.save_source(source_id, source)
+        return RegisterDataSourceResponse(source_id=source_id, metadata=source.metadata)
+    except Exception as e:
+        logger.exception("添加数据库数据源失败")
+        raise HTTPException(status_code=500, detail=f"Failed to add database datasource: {e}") from e
 
 
 class UpdateDataSourceRequest(BaseModel):
