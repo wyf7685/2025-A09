@@ -1,11 +1,9 @@
 <script setup lang="ts">
+import { useModelStore } from '@/stores/model';
 import type { FlowStep } from '@/types';
+import { CircleCheck, Clock, DArrowRight, Edit, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
-import { useModelStore } from '@/stores/model';
-import { API_BASE_URL } from '@/utils/api';
-import type { AssistantChatMessage, AssistantChatMessageContent, AssistantChatMessageText, ChatMessage } from '@/types';
-import { ChatDotRound, DArrowLeft, DArrowRight, DataAnalysis, Delete, Document, DocumentCopy, Edit, PieChart, Plus, Search, WarningFilled, Monitor, Setting, Loading, CircleCheck, Clock } from '@element-plus/icons-vue';
 
 const modelStore = useModelStore();
 
@@ -177,41 +175,13 @@ const handleCustomApiSubmit = async () => {
     })
 
     // 调用后端API保存自定义模型配置
-    const response = await fetch(`${API_BASE_URL}/models/custom`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: customApiForm.value.modelName,
-        provider: customApiForm.value.provider,
-        api_url: apiUrl,
-        api_key: customApiForm.value.apiKey,
-        model_name: customApiForm.value.modelName
-      })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('API错误响应:', response.status, errorText)
-      throw new Error(`API调用失败: ${response.status} - ${errorText}`)
-    }
-
-    const data = await response.json()
-    console.log('API响应:', data)
-
-    // 创建自定义模型对象
-    const customModel = {
-      id: data.model_id,
+    const customModel = await modelStore.submitCustomModel({
       name: customApiForm.value.modelName,
       provider: customApiForm.value.provider,
-      apiUrl: apiUrl,
-      apiKey: customApiForm.value.apiKey
-    }
-
-    // 更新模型存储
-    modelStore.setCustomModel(customModel)
-    modelStore.setSelectedModel(customModel)
+      api_url: apiUrl,
+      api_key: customApiForm.value.apiKey,
+      model_name: customApiForm.value.modelName
+    })
 
     showCustomApiDialog.value = false
 

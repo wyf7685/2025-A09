@@ -8,8 +8,8 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import SecretStr
 
 from app.core.config import settings
-from app.core.custom_model_manager import custom_model_manager
 from app.log import logger
+from app.services.custom_model import custom_model_manager
 
 type LLM = Runnable[LanguageModelInput, str]
 
