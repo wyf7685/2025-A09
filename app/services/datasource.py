@@ -114,16 +114,14 @@ def _() -> None:
     """在应用启动时加载数据源"""
 
     datasource_service.load_sources()
+    logger.opt(colors=True).success(f"加载 <y>{len(datasource_service.sources)}</> 个数据源")
 
     def sync() -> None:
-        from app.log import configure_logging
-
         try:
             datasource_service.sync_from_dremio()
         except Exception:
-            logger.exception("Failed to sync data sources from Dremio")
-        finally:
-            configure_logging()
+            logger.exception("从 Dremio 同步数据源失败")
+        else:
+            logger.success("成功从 Dremio 同步数据源")
 
     threading.Thread(target=sync, daemon=True).start()
-    logger.info("Data sources loaded and synced from Dremio")

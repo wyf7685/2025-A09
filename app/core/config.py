@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     DREMIO_EXTERNAL_NAME: str
 
     @property
-    def DREMIO_REST_URL(self) -> str:  # noqa: N802
-        return str(URL(self.DREMIO_BASE_URL).with_port(self.DREMIO_REST_PORT))
+    def DREMIO_REST_URL(self) -> URL:  # noqa: N802
+        return URL(self.DREMIO_BASE_URL).with_port(self.DREMIO_REST_PORT)
 
 
 load_dotenv()
