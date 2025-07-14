@@ -18,7 +18,12 @@ import {
   Warning,
   QuestionFilled,
   CircleCheck,
-  CircleClose
+  CircleClose,
+  Upload,  EditPen,
+  DocumentChecked,
+  Back,
+  RefreshRight,
+  ArrowRight
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { onMounted, ref, watch } from 'vue'
@@ -232,7 +237,8 @@ const analyzeDataQuality = async () => {
 
   isAnalyzing.value = true
   cleaningStep.value = 'analysis'
-    try {
+  
+  try {
     // 获取数据质量报告
     const result = await cleaningAPI.checkDataQuality(currentUploadFile.value)
     dataQualityReport.value = result.quality_check
@@ -250,24 +256,22 @@ const analyzeDataQuality = async () => {
   }
 }
 
-// 应用清洗动作
+// 应用清洗动作（记录用户选择）
 const applyCleaningActions = async () => {
-  if (!currentUploadFile.value || selectedCleaningActions.value.length === 0) return
+  if (selectedCleaningActions.value.length === 0) {
+    ElMessage.warning('请选择至少一个清洗建议')
+    return
+  }
 
   isCleaning.value = true
   try {
-    const result = await cleaningAPI.applyCleaningActions(currentUploadFile.value, selectedCleaningActions.value)
+    // 模拟记录用户选择的过程
+    await new Promise(resolve => setTimeout(resolve, 1000))
     
-    if (result.success) {
-      ElMessage.success('数据清洗完成！')
-      cleaningStep.value = 'complete'
-      // 重新分析清洗后的数据质量
-      await analyzeDataQuality()
-    } else {
-      ElMessage.error(result.message || '数据清洗失败')
-    }
+    ElMessage.success(`已记录 ${selectedCleaningActions.value.length} 个清洗建议选择`)
+    cleaningStep.value = 'complete'
   } catch (error) {
-    ElMessage.error('数据清洗失败')
+    ElMessage.error('记录清洗选择失败')
     console.error(error)
   } finally {
     isCleaning.value = false
@@ -835,43 +839,94 @@ watch(pageSize, updatePaginatedDataSources)
               </div>
             </div>
             
-            <!-- 继续按钮 -->
+            <!-- 继续按钮 -->            <!-- 分析结果操作区域 -->
             <div class="analysis-actions">
-              <el-button
-                type="primary"
-                @click="cleaningStep = 'cleaning'"
-                :disabled="cleaningSuggestions.length === 0"
-              >
-                查看清洗建议 ({{ cleaningSuggestions.length }})
-              </el-button>
-              <el-button
-                @click="skipCleaningAndUpload"
-              >
-                跳过清洗直接上传
-              </el-button>
+              <div class="action-info">
+                <el-alert
+                  :title="dataQualityReport?.is_valid ? '数据质量良好' : '发现数据质量问题'"
+                  :type="dataQualityReport?.is_valid ? 'success' : 'warning'"
+                  :description="dataQualityReport?.is_valid ? 
+                    '您的数据质量良好，可以直接上传或查看详细建议。' : 
+                    `发现 ${cleaningSuggestions.length} 个可优化的问题，建议查看清洗建议以提升数据质量。`"
+                  show-icon
+                  :closable="false"
+                />
+              </div>
+              
+              <div class="action-buttons">                <el-button
+                  type="primary"
+                  @click="cleaningStep = 'cleaning'"
+                  :disabled="cleaningSuggestions.length === 0"
+                  size="large"
+                >
+                  <el-icon><ArrowRight /></el-icon>
+                  下一步：选择清洗建议 ({{ cleaningSuggestions.length }})
+                </el-button>
+                
+                <el-button
+                  type="success"
+                  @click="skipCleaningAndUpload"
+                  size="large"
+                  :disabled="!dataQualityReport"
+                >
+                  <el-icon><Upload /></el-icon>
+                  {{ dataQualityReport?.is_valid ? '直接上传' : '忽略问题并上传' }}
+                </el-button>
+              </div>
             </div>
           </div>
-        </div><!-- 清洗建议选择 -->
+        </div>        <!-- 清洗建议选择 -->
         <div v-if="cleaningStep === 'cleaning'" class="cleaning-suggestions">
           <div v-if="isCleaning" class="cleaning-progress">
-            <el-empty description="数据清洗中，请稍候..." />
+            <el-empty description="正在记录您的清洗选择，请稍候..." />
           </div>
-          <div v-else>
-            <div class="suggestions-header">
-              <div class="title">清洗建议</div>
-              <div class="actions">
+          <div v-else>            <div class="suggestions-header">
+              <div class="header-content">
+                <div class="title">步骤3：选择数据清洗建议</div>
+                <div class="subtitle">
+                  根据数据质量分析结果，我们为您提供了以下清洗建议。请选择您认为合适的建议，系统将记录您的选择。
+                </div>
+              </div>
+              
+              <el-alert
+                title="功能说明"
+                description="本系统提供数据质量检测和清洗建议，但不会自动执行清洗操作。您可以根据这些建议手动优化您的数据文件。"
+                type="info"
+                show-icon
+                :closable="false"
+              />
+            </div>
+
+            <div class="suggestions-actions">
+              <div class="action-info">
+                已选择 {{ selectedCleaningActions.length }} 个建议，共 {{ cleaningSuggestions.length }} 个建议
+              </div>
+              <div class="action-buttons">
                 <el-button
                   type="primary"
                   @click="applyCleaningActions"
                   :loading="isCleaning"
                   :disabled="selectedCleaningActions.length === 0"
+                  size="large"
                 >
-                  应用选中的建议 ({{ selectedCleaningActions.length }})
+                  <el-icon><DocumentChecked /></el-icon>
+                  记录选中的建议 ({{ selectedCleaningActions.length }})
                 </el-button>
+                
                 <el-button
                   @click="skipCleaningAndUpload"
+                  size="large"
                 >
-                  跳过清洗直接上传
+                  <el-icon><Upload /></el-icon>
+                  跳过建议直接上传
+                </el-button>
+                
+                <el-button
+                  @click="cleaningStep = 'analysis'"
+                  size="large"
+                >
+                  <el-icon><Back /></el-icon>
+                  返回分析结果
                 </el-button>
               </div>
             </div>
@@ -908,23 +963,61 @@ watch(pageSize, updatePaginatedDataSources)
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- 完成状态 -->
+        </div>        <!-- 完成状态 -->
         <div v-if="cleaningStep === 'complete'" class="complete-status">
           <el-result
             status="success"
-            title="数据清洗完成"
-            sub-title="您可以选择重新分析或直接上传清洗后的数据"
+            title="处理完成"
+            :sub-title="selectedCleaningActions.length > 0 ? 
+              `已记录 ${selectedCleaningActions.length} 个清洗建议，您可以根据这些建议优化数据质量` : 
+              '数据质量检测完成，可以直接上传数据'"
           >
             <template #extra>
-              <el-button type="primary" @click="completeCleaningAndUpload">
-                上传清洗后的数据
-              </el-button>
-              <el-button @click="analyzeDataQuality">
-                重新分析数据质量
-              </el-button>
-            </template>
+              <div class="complete-actions">
+                <el-button 
+                  type="primary" 
+                  @click="completeCleaningAndUpload"
+                  size="large"
+                >
+                  <el-icon><Upload /></el-icon>
+                  确认上传数据
+                </el-button>
+                
+                <el-button 
+                  @click="analyzeDataQuality"
+                  size="large"
+                >
+                  <el-icon><RefreshRight /></el-icon>
+                  重新分析数据质量
+                </el-button>
+                
+                <el-button 
+                  @click="cleaningStep = 'cleaning'"
+                  v-if="cleaningSuggestions.length > 0"
+                  size="large"
+                >
+                  <el-icon><EditPen /></el-icon>
+                  修改清洗选择
+                </el-button>
+              </div>
+              
+              <div class="complete-summary" v-if="selectedCleaningActions.length > 0">
+                <el-card class="summary-card">
+                  <template #header>
+                    <span>您选择的清洗建议摘要</span>
+                  </template>
+                  <div class="summary-list">
+                    <div 
+                      v-for="(action, index) in selectedCleaningActions" 
+                      :key="index"
+                      class="summary-item"
+                    >
+                      <el-tag type="primary" size="small">{{ action.type }}</el-tag>
+                      <span>{{ action.column }}</span>
+                    </div>
+                  </div>
+                </el-card>
+              </div>            </template>
           </el-result>
         </div>
       </div>
@@ -1464,63 +1557,148 @@ watch(pageSize, updatePaginatedDataSources)
 
   .analysis-results {
     .analysis-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid #e5e7eb;
-
-      .el-button {
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 500;
-        transition: all 0.3s ease;
-
-        &:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      margin-top: 24px;
+      
+      .action-info {
+        margin-bottom: 16px;
+        
+        .el-alert {
+          border-radius: 8px;
+        }
+      }
+      
+      .action-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        
+        .el-button {
+          border-radius: 8px;
+          padding: 12px 24px;
+          font-weight: 500;
+          min-width: 160px;
+          
+          .el-icon {
+            margin-right: 8px;
+          }
         }
       }
     }
   }
 
-  .cleaning-status {
-    padding: 40px 20px;
-    text-align: center;
-
-    .el-empty {
-      :deep(.el-empty__description) {
-        color: #6b7280;
-        font-size: 16px;
+  .cleaning-suggestions {
+    .suggestions-header {
+      margin-bottom: 24px;
+      
+      .header-content {
+        margin-bottom: 16px;
+        
+        .title {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 8px;
+        }
+        
+        .subtitle {
+          font-size: 14px;
+          color: #6b7280;
+        }
+      }
+      
+      .el-alert {
+        border-radius: 8px;
       }
     }
-  }
-
-  .complete-status {
-    padding: 20px;
-
-    .el-result {
-      :deep(.el-result__title) {
-        color: #1f2937;
-        font-size: 20px;
-        font-weight: 600;
-      }
-
-      :deep(.el-result__subtitle) {
-        color: #6b7280;
+    
+    .suggestions-actions {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      border: 1px solid #e5e7eb;
+      
+      .action-info {
         font-size: 14px;
-        margin-top: 8px;
+        color: #6b7280;
+        margin-bottom: 12px;
+        text-align: center;
       }
-
-      :deep(.el-result__extra) {
-        margin-top: 24px;
-
+      
+      .action-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        
         .el-button {
           border-radius: 8px;
           padding: 10px 20px;
           font-weight: 500;
-          margin: 0 8px;
+          
+          .el-icon {
+            margin-right: 6px;
+          }
+        }
+      }
+    }
+  }
+  
+  .complete-status {
+    .complete-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+      
+      .el-button {
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 500;
+        
+        .el-icon {
+          margin-right: 8px;
+        }
+      }
+    }
+    
+    .complete-summary {
+      max-width: 500px;
+      margin: 0 auto;
+      
+      .summary-card {
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        
+        :deep(.el-card__header) {
+          background: #f9fafb;
+          font-weight: 600;
+          color: #1f2937;
+        }
+        
+        .summary-list {
+          .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+            
+            &:last-child {
+              border-bottom: none;
+            }
+            
+            .el-tag {
+              border-radius: 4px;
+            }
+            
+            span {
+              font-size: 14px;
+              color: #374151;
+            }
+          }
         }
       }
     }

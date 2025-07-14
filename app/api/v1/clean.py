@@ -57,10 +57,8 @@ async def check_data_quality(
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
                 content = await file.read()
-                buffer.write(content)
-
-            # 使用数据清洗 Agent 检测数据质量
-            quality_result = clean_agent.check_data_quality(temp_path)
+                buffer.write(content)            # 使用数据清洗 Agent 检测数据质量
+            quality_result = clean_agent.check_data_quality(Path(temp_path))
 
             # 获取详细的清洗建议
             suggestions = clean_agent.get_cleaning_suggestions(quality_result.get("issues", []))
@@ -195,10 +193,8 @@ async def get_cleaning_suggestions(file: UploadFile = File(...)) -> dict[str, An
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
                 content = await file.read()
-                buffer.write(content)
-
-            # 检测数据质量
-            quality_result = clean_agent.check_data_quality(temp_path)
+                buffer.write(content)            # 检测数据质量
+            quality_result = clean_agent.check_data_quality(Path(temp_path))
 
             # 获取清洗建议
             suggestions = clean_agent.get_cleaning_suggestions(quality_result.get("issues", []))
@@ -249,10 +245,8 @@ async def get_quality_report(file: UploadFile = File(...)) -> dict[str, Any]:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
                 content = await file.read()
-                buffer.write(content)
-
-            # 检测数据质量
-            quality_result = clean_agent.check_data_quality(temp_path)
+                buffer.write(content)            # 检测数据质量
+            quality_result = clean_agent.check_data_quality(Path(temp_path))
 
             return {"quality_report": quality_result, "status": "success"}
 
