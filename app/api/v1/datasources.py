@@ -4,25 +4,26 @@
 
 import asyncio
 import contextlib
+import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
+from app.core.config import settings
 from app.core.datasource import create_dremio_source
 from app.core.datasource.source import DataSourceMetadata
-from app.core.dremio import DremioSource, get_dremio_client
+from app.core.dremio import get_dremio_client
 from app.log import logger
+from app.schemas.dremio import DremioSource
 from app.services.datasource import datasource_service
 from app.services.session import session_service
 from app.utils import run_sync
 
 # 创建路由
 router = APIRouter(prefix="/datasources")
-
-# 数据源存储
-# datasources: dict[str, DataSource] = {}
 
 
 class RegisterDataSourceRequest(BaseModel):
@@ -46,16 +47,17 @@ async def upload_file(
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
 
-        if not file.filename.lower().endswith((".csv", ".xlsx", ".xls")):
+        file_ext = Path(file.filename).suffix.lower()
+
+        if file_ext not in {".csv", ".xlsx", ".xls"}:
             raise HTTPException(status_code=400, detail="Unsupported file format")
 
         # 保存文件
-        file_path = UPLOAD_DIR / file.filename
+        file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
         file_path.write_bytes(await file.read())
 
         client = get_dremio_client()
-        call = client.add_data_source_csv if file.filename.lower().endswith(".csv") else client.add_data_source_excel
-        dremio_source = await run_sync(call)(file_path)
+        dremio_source = await run_sync(client.add_data_source_file)(file_path)
         source = create_dremio_source(dremio_source, source_name)
         source_id = datasource_service.register(source)
         return {"source_id": source_id, "metadata": source.metadata}
@@ -204,16 +206,15 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
                 # 这里需要根据实际情况实现Dremio数据源的删除
                 # 目前Dremio REST API没有直接删除数据源的接口，但可以根据实际情况处理
                 # 例如，如果是上传的文件，可以从external目录中删除
-                if hasattr(source.metadata, "id") and source.metadata.id.startswith("external."):
+                if (
+                    source.metadata.id.startswith("external.")
                     # 从路径中提取文件名
-                    file_name = source.metadata.id.split(".", 1)[1] if "." in source.metadata.id else ""
-                    if file_name:
-                        # 删除external目录中的文件
-                        client = get_dremio_client()
-                        external_dir = client.external_dir
-                        if external_dir and (fp := external_dir / file_name).exists():
-                            fp.unlink()
-                            logger.info(f"已从Dremio external目录删除文件: {file_name}")
+                    and (file_name := source.metadata.id.removeprefix("external."))
+                    and (fp := settings.DREMIO_EXTERNAL_DIR / file_name).exists()
+                ):
+                    # 删除external目录中的文件
+                    fp.unlink()
+                    logger.info(f"已从Dremio external目录删除文件: {file_name}")
             except Exception as e:
                 logger.warning(f"从Dremio中删除数据源失败: {e}")
 

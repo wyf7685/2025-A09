@@ -3,7 +3,7 @@ services:
     image: dremio/dremio-oss:latest
     ports:
       - "9047:9047" # UI 端口
-      - "31010:31010" # Arrow Flight 端口
+      - "32010:32010" # Arrow Flight 端口
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置

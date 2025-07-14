@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import HttpUrl, SecretStr
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from yarl import URL
 
 
 class Settings(BaseSettings):
@@ -24,11 +25,16 @@ class Settings(BaseSettings):
     OLLAMA_API_URL: str | None = None
 
     # Dremio REST API config
-    DREMIO_BASE_URL: HttpUrl
+    DREMIO_BASE_URL: str = "http://localhost"
+    DREMIO_REST_PORT: int = 9047
     DREMIO_USERNAME: str
     DREMIO_PASSWORD: SecretStr
     DREMIO_EXTERNAL_DIR: Path
     DREMIO_EXTERNAL_NAME: str
+
+    @property
+    def DREMIO_REST_URL(self) -> str:  # noqa: N802
+        return str(URL(self.DREMIO_BASE_URL).with_port(self.DREMIO_REST_PORT))
 
 
 load_dotenv()

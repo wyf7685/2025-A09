@@ -4,57 +4,29 @@ import shutil
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import pandas as pd
 import requests
+from dremio import path_to_dotted
 
 from app.core.config import settings
+from app.core.dremio.abstract import AbstractDremioClient
 from app.log import logger
+from app.schemas.dremio import DremioContainer, DremioSource
 from app.utils import escape_tag
 
 
-@dataclass
-class DremioSource:
-    id: str
-    path: list[str]
-    type: str
-
-
-@dataclass
-class DremioContainer:
-    id: str
-    path: list[str]
-
-
-class DremioClient:
+class DremioRestClient(AbstractDremioClient):
     """Dremio REST API 客户端"""
 
-    def __init__(
-        self,
-        base_url: str | None = None,
-        username: str | None = None,
-        password: str | None = None,
-        external_dir: Path | None = None,
-        external_name: str | None = None,
-    ) -> None:
-        """
-        初始化 Dremio 客户端
-
-        Args:
-            base_url: Dremio REST API 地址
-            username: 登录 Dremio UI 的用户名
-            password: 登录 Dremio UI 的密码
-            external_dir: 外部数据源本地目录路径
-            external_name: 外部数据源名称
-        """
-        self.base_url: str = base_url or str(settings.DREMIO_BASE_URL).rstrip("/")
-        self.username: str = username or settings.DREMIO_USERNAME
-        self.password: str = password or settings.DREMIO_PASSWORD.get_secret_value()
-        self.external_dir = external_dir or settings.DREMIO_EXTERNAL_DIR
-        self.external_name = external_name or settings.DREMIO_EXTERNAL_NAME
+    def __init__(self) -> None:
+        self.base_url: str = settings.DREMIO_REST_URL.rstrip("/")
+        self.username: str = settings.DREMIO_USERNAME
+        self.password: str = settings.DREMIO_PASSWORD.get_secret_value()
+        self.external_dir = settings.DREMIO_EXTERNAL_DIR
+        self.external_name = settings.DREMIO_EXTERNAL_NAME
 
         self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
@@ -64,7 +36,7 @@ class DremioClient:
         self._container_cache = None
         self._source_cache = None
 
-    def get_token(self) -> str:
+    def _get_token(self) -> str:
         """
         获取临时 Token，如果已存在则直接返回
 
@@ -102,7 +74,7 @@ class DremioClient:
         """
 
         return {
-            "Authorization": f"_dremio{self.get_token()}",
+            "Authorization": f"_dremio{self._get_token()}",
             "Content-Type": "application/json",
         }
 
@@ -191,7 +163,6 @@ class DremioClient:
 
         Args:
             sql_query: SQL 查询语句
-            token: 可选的认证 token
 
         Returns:
             pandas.DataFrame: 查询结果的 DataFrame
@@ -199,12 +170,8 @@ class DremioClient:
         results = self.execute_sql_query(sql_query)
         return pd.DataFrame(results["rows"])
 
-    def _format_source_name_table(self, source_name: str | list[str]) -> str:
-        if isinstance(source_name, list):
-            return ".".join(f'"{part}"' for part in source_name)
-        return f'"{source_name}"'
-
-    def add_data_source_csv(self, file: Path) -> DremioSource:
+    @override
+    def _add_data_source_csv(self, file: Path) -> DremioSource:
         """
         添加 CSV 数据源到 Dremio 外部目录
 
@@ -251,7 +218,8 @@ class DremioClient:
             type="FILE",
         )
 
-    def add_data_source_excel(self, file: Path) -> DremioSource:
+    @override
+    def _add_data_source_excel(self, file: Path) -> DremioSource:
         if self.external_dir is None:
             raise ValueError("外部数据源目录未设置")
 
@@ -266,6 +234,7 @@ class DremioClient:
         )
 
     # TODO: 改写为通用数据库连接
+    @override
     def add_data_source_postgres(
         self,
         host: str,
@@ -347,6 +316,7 @@ class DremioClient:
 
         return sources
 
+    @override
     def read_source(
         self,
         source_name: str | list[str],
@@ -367,7 +337,7 @@ class DremioClient:
         Returns:
             pandas.DataFrame: 数据源数据
         """
-        source_name = self._format_source_name_table(source_name)
+        source_name = path_to_dotted(source_name)
 
         if limit is None:
             fetch_all = True
@@ -413,6 +383,7 @@ class DremioClient:
         logger.warning("警告: 无法获取全部数据，返回最多可获取的数据")
         return self.execute_sql_to_dataframe(f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY")
 
+    @override
     def shape(self, source_name: str | list[str]) -> tuple[int, int]:
         """
         获取数据源的形状（行数和列数）
@@ -424,7 +395,7 @@ class DremioClient:
             tuple[int, int]: (行数, 列数)
         """
 
-        sql_query = f"SELECT COUNT(*) as row_count FROM {self._format_source_name_table(source_name)}"
+        sql_query = f"SELECT COUNT(*) as row_count FROM {path_to_dotted(source_name)}"
         result = self.execute_sql_to_dataframe(sql_query)
         row_count = int(result.iloc[0]["row_count"])
 
@@ -433,7 +404,7 @@ class DremioClient:
 
         return row_count, col_count
 
-    def list_containers(self) -> list[DremioContainer]:
+    def _list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")
         if self._container_cache is not None:
             logger.info("使用缓存的容器列表")
@@ -451,6 +422,7 @@ class DremioClient:
         self._container_cache = containers
         return containers
 
+    @override
     def list_sources(self) -> list[DremioSource]:
         logger.info("查询 Dremio 中的所有数据源...")
         if self._source_cache is not None:
@@ -458,7 +430,7 @@ class DremioClient:
             return self._source_cache
 
         sources: list[DremioSource] = []
-        for container in self.list_containers():
+        for container in self._list_containers():
             sources.extend(self.query_source_children(container.path))
         self._source_cache = sources
         logger.info(f"共找到 {len(sources)} 个数据源")

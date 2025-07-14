@@ -3,8 +3,8 @@ from typing import Any, override
 import pandas as pd
 from pydantic import BaseModel
 
-from app.core.dremio import get_dremio_client
-from app.core.dremio.rest import DremioClient, DremioSource
+from app.core.dremio import AbstractDremioClient, get_dremio_client
+from app.schemas.dremio import DremioSource
 
 from .source import DataSource, DataSourceMetadata
 
@@ -37,10 +37,10 @@ class DremioDataSource(DataSource):
 
         super().__init__(metadata)
         self.source = source
-        self._client: DremioClient | None = None
+        self._client: AbstractDremioClient | None = None
 
     @property
-    def client(self) -> DremioClient:
+    def client(self) -> AbstractDremioClient:
         """获取 Dremio 客户端"""
         if self._client is None:
             self._client = get_dremio_client()

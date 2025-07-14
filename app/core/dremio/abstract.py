@@ -1,0 +1,132 @@
+import abc
+from pathlib import Path
+from typing import Literal
+
+import pandas as pd
+
+from app.schemas.dremio import DremioSource
+
+
+class AbstractDremioClient(abc.ABC):
+    @abc.abstractmethod
+    def _add_data_source_csv(self, file: Path) -> DremioSource:
+        """
+        添加 CSV 数据源到 Dremio 外部目录
+
+        Args:
+            file: CSV 文件路径
+
+        Returns:
+            DremioSource: 生成的 DremioSource 对象
+
+        Raises:
+            ValueError: 如果未设置 external_dir
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    @abc.abstractmethod
+    def _add_data_source_excel(self, file: Path) -> DremioSource:
+        """
+        添加 Excel 数据源到 Dremio 外部目录
+
+        Args:
+            file: Excel 文件路径
+
+        Returns:
+            DremioSource: 生成的 DremioSource 对象
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    def add_data_source_file(self, file: Path, format: Literal["csv", "excel"] | None = None) -> DremioSource:
+        """
+        添加文件数据源到 Dremio 外部目录
+
+        Args:
+            file: 文件路径
+            format: 文件格式，支持 "csv" 或 "excel"，如果为 None 则根据文件扩展名自动判断
+
+        Returns:
+            DremioSource: 生成的 DremioSource 对象
+        """
+        if format is None:
+            suffix = file.suffix.lower()
+            if suffix == ".csv":
+                format = "csv"
+            elif suffix in {".xlsx", ".xls"}:
+                format = "excel"
+            else:
+                raise ValueError("Unsupported file format. Please specify 'csv' or 'excel'.")
+
+        if format == "csv":
+            return self._add_data_source_csv(file)
+        if format == "excel":
+            return self._add_data_source_excel(file)
+        raise ValueError(f"Unsupported format: {format}. Supported formats are 'csv' and 'excel'.")
+
+    @abc.abstractmethod
+    def add_data_source_postgres(
+        self,
+        host: str,
+        port: int,
+        database: str,
+        user: str,
+        password: str,
+    ) -> str:
+        """
+        添加 PostgreSQL 数据源到 Dremio
+
+        Args:
+            host: PostgreSQL 主机地址
+            port: PostgreSQL 端口
+            database: 数据库名
+            user: 数据库用户名
+            password: 数据库密码
+
+        Returns:
+            str: 数据源名称
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    @abc.abstractmethod
+    def read_source(
+        self,
+        source_name: str | list[str],
+        limit: int | None = None,
+        *,
+        fetch_all: bool = False,
+    ) -> pd.DataFrame:
+        """
+        读取数据源的数据
+
+        Args:
+            source_name: 数据源名称
+            limit: 返回的行数限制
+            fetch_all: 是否获取全部数据（会忽略limit参数）
+
+        Returns:
+            pandas.DataFrame: 数据源数据
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    @abc.abstractmethod
+    def shape(self, source_name: str | list[str]) -> tuple[int, int]:
+        """
+        获取数据源的形状（行数和列数）
+
+        Args:
+            source_name: 数据源名称
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    @abc.abstractmethod
+    def list_sources(self) -> list[DremioSource]:
+        """
+        列出 Dremio 中的所有数据源
+
+        Returns:
+            list[DremioSource]: DremioSource 对象列表
+        """
+        raise NotImplementedError("This method should be implemented by subclasses.")
