@@ -28,6 +28,8 @@ export interface LLMModel {
   name: string;
   provider: string;
   description?: string;
+  apiUrl?: string; // 自定义API URL
+  apiKey?: string; // 自定义API Key
 }
 
 /**

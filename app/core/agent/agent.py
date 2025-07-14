@@ -1,6 +1,5 @@
 # ruff: noqa: PD011
 
-import functools
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -399,10 +398,17 @@ TOOLS_TO_RESUME = {
 
 
 def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFrame:
-    for call in functools.reduce(
-        (lambda a, b: a + b),
-        (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
-    ):
+    # 收集所有AI消息的tool_calls
+    all_tool_calls = []
+    for m in messages:
+        if isinstance(m, AIMessage) and m.tool_calls:
+            all_tool_calls.extend(m.tool_calls)
+
+    # 如果没有tool_calls，直接返回
+    if not all_tool_calls:
+        return df
+
+    for call in all_tool_calls:
         if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
             logger.opt(colors=True).info(
                 f"恢复工具调用: <y>{escape_tag(call['name'])}</> - {escape_tag(str(call['args']))}"
