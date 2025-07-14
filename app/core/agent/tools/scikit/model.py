@@ -1,11 +1,12 @@
 import inspect
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict, cast
 
 import joblib
 import numpy as np
 import pandas as pd
+from pydantic import TypeAdapter
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -50,17 +51,28 @@ _MODEL_CONFIG = {
         "logistic_regression": "sklearn.linear_model:LogisticRegression",
     },
 }
+_MODEL_TASK_TYPE: dict[str, Literal["regression", "classification"]] = {
+    "linear_regression": "regression",
+    "decision_tree_regressor": "regression",
+    "random_forest_regressor": "regression",
+    "gradient_boosting_regressor": "regression",
+    "xgboost_regressor": "regression",
+    "decision_tree_classifier": "classification",
+    "random_forest_classifier": "classification",
+    "gradient_boosting_classifier": "classification",
+    "xgboost_classifier": "classification",
+    "logistic_regression": "classification",
+}
 
 
 def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
     """根据模型类型获取模型实例"""
-    # 确定任务类型
-    task_type = "classification" if "classifier" in model_type or model_type == "logistic_regression" else "regression"
-
     # 验证模型类型
-    if model_type not in _MODEL_CONFIG.get(task_type, {}):
+    if model_type not in _MODEL_TASK_TYPE:
         raise ValueError(f"不支持的模型类型: {model_type}")
 
+    # 确定任务类型
+    task_type = _MODEL_TASK_TYPE[model_type]
     model_path = _MODEL_CONFIG[task_type][model_type]
 
     # 尝试导入模型
@@ -242,7 +254,7 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     """
     model = trained_model_info["model"]
     X_test = trained_model_info["X_test"]
-    y_test = trained_model_info["Y_test"]  # 修正键名
+    y_test = trained_model_info["Y_test"]
     model_type = trained_model_info["model_type"]
 
     y_pred = model.predict(X_test)
@@ -251,11 +263,12 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     message = ""
 
     # 根据模型类型选择评估指标
-    if "regressor" in model_type or "regression" in model_type:  # 回归任务
+    task_type = _MODEL_TASK_TYPE.get(model_type)
+    if task_type == "regression":  # 回归任务
         metrics["mean_squared_error"] = mean_squared_error(y_test, y_pred)
         metrics["r2_score"] = r2_score(y_test, y_pred)
         message = "模型评估完成 (回归任务)。"
-    elif "classifier" in model_type:  # 分类任务
+    elif task_type == "classification":  # 分类任务
         # 如果目标变量被编码过，需要将预测结果也转换为整数
         if le := trained_model_info.get("label_encoder"):
             # 对于分类模型，y_pred通常是类别索引，但如果模型输出是概率，可能需要argmax
@@ -320,7 +333,7 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
             metrics["confusion_matrix"] = cm.tolist()
             message = "模型评估完成 (分类任务)。"
     else:
-        message = f"不支持的模型类型 '{model_type}' 进行评估。"
+        message = f"不支持对模型类型 '{model_type}' 进行评估。"
 
     return {
         "metrics": metrics,
@@ -356,7 +369,7 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
     model = model_info["model"]
     try:
         joblib.dump(model, file_path.with_suffix(".joblib"))
-        # 还可以保存模型的元数据，例如特征列表、目标列、编码器等
+        # 保存模型的元数据，例如特征列表、目标列、编码器等
         meta_data: ModelMetadata = {
             "model_type": model_info["model_type"],
             "feature_columns": model_info["feature_columns"],
@@ -367,9 +380,9 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
         if le := model_info.get("label_encoder"):
             meta_data["label_encoder_classes"] = cast("np.ndarray", le.classes_).tolist()
 
-        metadata_path = file_path.with_suffix(".metadata.json")
-        with metadata_path.open("w", encoding="utf-8") as f:
-            json.dump(meta_data, f, ensure_ascii=False, indent=4)
+        file_path.with_suffix(".metadata.json").write_bytes(
+            json.dumps(meta_data, ensure_ascii=False, indent=2).encode()
+        )
 
         return {"message": "保存模型成功", "metadata": meta_data}
     except Exception as e:
@@ -420,7 +433,7 @@ def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainM
     try:
         model = joblib.load(file_path.with_suffix(".joblib"))
         metadata = load_model_metadata(file_path)
-        return load_model_metadata(file_path), resume_train_result(df, metadata, model)
+        return metadata, resume_train_result(df, metadata, model)
     except Exception:
         logger.opt(colors=True).exception("<r>加载模型失败</r>")
         raise
@@ -439,7 +452,7 @@ def load_model_metadata(file_path: Path) -> ModelMetadata:
     metadata_path = file_path.with_suffix(".metadata.json")
     try:
         with metadata_path.open("r", encoding="utf-8") as f:
-            return cast("ModelMetadata", json.load(f))
+            return TypeAdapter(ModelMetadata).validate_json(f.read())
     except Exception:
         logger.opt(colors=True).exception("<r>加载模型元数据失败</r>")
         raise

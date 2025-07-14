@@ -10,9 +10,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.core.model_registry import model_registry
 from app.log import logger
 from app.schemas.ml_model import MLModelInfoOut
+from app.services.model_registry import model_registry
 
 router = APIRouter()
 

@@ -11,8 +11,8 @@ import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
 from app.const import MODEL_DIR
-from app.core.model_registry import model_registry
 from app.log import logger
+from app.services.model_registry import model_registry
 from app.utils import escape_tag
 
 from .feature_importance import FeatureImportanceResult, analyze_feature_importance
@@ -154,7 +154,7 @@ def scikit_tools(
             formatted = f"成功创建模型！\n模型ID: {model_id}\n模型类型: {model_type}"
             if parsed_hyperparams:
                 formatted += f"\n应用超参数: {parsed_hyperparams}"
-            elif parsed_hyperparams is None:
+            elif parsed_hyperparams is None and hyperparams is not None:
                 formatted += "\n\n超参数解析错误，将使用默认参数"
 
             return formatted
