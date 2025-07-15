@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
-const API_BASE_URL = 'http://127.0.0.1:8081/api';
+export const API_BASE_URL = 'http://127.0.0.1:8081/api';
 
 // 创建 axios 实例
 const api = axios.create({
@@ -160,7 +160,10 @@ export const cleaningAPI = {
   },
 
   // 应用清洗动作
-  applyCleaningActions: async (file: File, actions: CleaningAction[]): Promise<{ success: boolean; message: string; cleaned_file_path?: string }> => {
+  applyCleaningActions: async (
+    file: File,
+    actions: CleaningAction[],
+  ): Promise<{ success: boolean; message: string; cleaned_file_path?: string }> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('actions', JSON.stringify(actions));
