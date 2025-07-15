@@ -1,11 +1,11 @@
 # ruff: noqa: S608, S113
-import json
+
 import shutil
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, override
+from typing import Any, Literal, override
 
 import pandas as pd
 import requests
@@ -22,9 +22,9 @@ class DremioRestClient(AbstractDremioClient):
     """Dremio REST API 客户端"""
 
     def __init__(self) -> None:
-        self.base_url: str = settings.DREMIO_REST_URL.rstrip("/")
-        self.username: str = settings.DREMIO_USERNAME
-        self.password: str = settings.DREMIO_PASSWORD.get_secret_value()
+        self.base_url = settings.DREMIO_REST_URL
+        self.username = settings.DREMIO_USERNAME
+        self.password = settings.DREMIO_PASSWORD.get_secret_value()
         self.external_dir = settings.DREMIO_EXTERNAL_DIR
         self.external_name = settings.DREMIO_EXTERNAL_NAME
 
@@ -54,15 +54,12 @@ class DremioRestClient(AbstractDremioClient):
         Returns:
             str: 认证 token
         """
-        login_url = f"{self.base_url}/apiv2/login"
-        login_payload = {"userName": self.username, "password": self.password}
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(
-            login_url,
-            headers=headers,
-            data=json.dumps(login_payload),
+        response = self._request(
+            "POST",
+            "/apiv2/login",
+            json={"userName": self.username, "password": self.password},
+            with_auth=False,
         )
-        response.raise_for_status()
         return response.json()["token"]
 
     def get_auth_header(self) -> dict[str, str]:
@@ -78,6 +75,20 @@ class DremioRestClient(AbstractDremioClient):
             "Content-Type": "application/json",
         }
 
+    def _request(
+        self,
+        method: Literal["GET", "POST", "PUT", "DELETE"],
+        path: str,
+        *,
+        with_auth: bool = True,
+        **kwargs: Any,
+    ) -> requests.Response:
+        headers = self.get_auth_header() if with_auth else kwargs.pop("headers", {})
+        url = str(self.base_url.with_path(path))
+        response = requests.request(method, url, headers=headers, **kwargs)
+        response.raise_for_status()
+        return response
+
     def create_query_job(self, sql_query: str) -> str:
         """
         创建查询任务
@@ -88,15 +99,11 @@ class DremioRestClient(AbstractDremioClient):
         Returns:
             str: 查询任务 ID
         """
-        submit_url = f"{self.base_url}/api/v3/sql"
-        sql_payload = {"sql": sql_query}
-
-        response = requests.post(
-            submit_url,
-            headers=self.get_auth_header(),
-            data=json.dumps(sql_payload),
+        response = self._request(
+            "POST",
+            "/api/v3/sql",
+            json={"sql": sql_query},
         )
-        response.raise_for_status()
         return response.json()["id"]
 
     def wait_for_job_completion(self, job_id: str) -> dict[str, Any]:
@@ -112,9 +119,8 @@ class DremioRestClient(AbstractDremioClient):
         Raises:
             Exception: 任务失败时抛出异常
         """
-        job_status_url = f"{self.base_url}/api/v3/job/{job_id}"
         while True:
-            response = requests.get(job_status_url, headers=self.get_auth_header())
+            response = self._request("GET", f"/api/v3/job/{job_id}", with_auth=False)
             response.raise_for_status()
             job_status = response.json()
             if job_status["jobState"] == "COMPLETED":
@@ -134,10 +140,7 @@ class DremioRestClient(AbstractDremioClient):
         Returns:
             dict[str, Any]: 查询结果
         """
-        result_url = f"{self.base_url}/api/v3/job/{job_id}/results"
-        response = requests.get(result_url, headers=self.get_auth_header())
-        response.raise_for_status()
-        return response.json()
+        return self._request("GET", f"/api/v3/job/{job_id}/results").json()
 
     def execute_sql_query(self, sql_query: str) -> dict[str, Any]:
         """
@@ -150,7 +153,7 @@ class DremioRestClient(AbstractDremioClient):
             dict[str, Any]: 查询结果
         """
         job_id = self.create_query_job(sql_query)
-        logger.opt(colors=True).info(f"查询提交成功: <c>{job_id}</>\n<y>{escape_tag(sql_query)}</>")
+        logger.opt(colors=True).info(f"查询提交成功: <c>{job_id}</>\n{escape_tag(sql_query)}")
 
         self.wait_for_job_completion(job_id)
         logger.opt(colors=True).success(f"查询完成: <c>{job_id}</>")
@@ -191,7 +194,6 @@ class DremioRestClient(AbstractDremioClient):
         shutil.copyfile(file, self.external_dir / source_name)
 
         # 设置 "external"."{source_name}" 的属性: 自动读取文件首行作为列名
-        url = f"{self.base_url}/apiv2/source/{self.external_name}/file_format/{source_name}"
         payload = {
             "fieldDelimiter": ",",
             "quote": '"',
@@ -204,12 +206,11 @@ class DremioRestClient(AbstractDremioClient):
             "type": "Text",
         }
 
-        response = requests.put(
-            url,
-            headers=self.get_auth_header(),
-            data=json.dumps(payload),
+        self._request(
+            "PUT",
+            f"/apiv2/source/{self.external_name}/file_format/{source_name}",
+            json=payload,
         )
-        response.raise_for_status()
 
         self._expire_source_cache()
         return DremioSource(
@@ -223,7 +224,11 @@ class DremioRestClient(AbstractDremioClient):
         if self.external_dir is None:
             raise ValueError("外部数据源目录未设置")
 
-        source_name = f"{uuid.uuid4()}{file.suffix}"
+        suffix = file.suffix.lower()
+        if suffix not in {".xlsx", ".xls"}:
+            suffix = ".xlsx"
+
+        source_name = f"{uuid.uuid4()}{suffix}"
         shutil.copyfile(file, self.external_dir / source_name)
 
         self._expire_source_cache()
@@ -239,15 +244,11 @@ class DremioRestClient(AbstractDremioClient):
         database_type: DremioDatabaseType,
         connection: BaseDatabaseConnection,
     ) -> DremioSource:
-        source_name = str(uuid.uuid4())
-        url = f"{self.base_url}/api/v3/catalog"
-        config = connection.model_dump()
-        config["port"] = str(config["port"])
         payload = {
             "entityType": "source",
-            "name": source_name,
+            "name": (source_name := str(uuid.uuid4())),
             "type": database_type,
-            "config": config,
+            "config": {**connection.model_dump(), "port": str(connection.port)},
             "metadataPolicy": {
                 "authTTLMs": 86400000,
                 "datasetExpireAfterMs": 10800000,
@@ -258,45 +259,13 @@ class DremioRestClient(AbstractDremioClient):
             },
         }
 
-        response = requests.post(
-            url,
-            headers=self.get_auth_header(),
-            data=json.dumps(payload),
-        )
-        response.raise_for_status()
+        self._request("POST", "/api/v3/catalog", json=payload)
         self._expire_source_cache()
         return DremioSource(
             id=f"{source_name}",
             path=[source_name],
             type=database_type,
         )
-
-    def query_source_children(self, source_name: str | list[str]) -> list[DremioSource]:
-        """
-        查询指定数据源(数据库)的所有子项
-
-        Args:
-            source_name: 数据源名称
-
-        Returns:
-            list[DremioSource]: 数据源子项列表
-        """
-        logger.info(f"查询数据源 {source_name} 的子项...")
-        if isinstance(source_name, list):
-            source_name = "/".join(source_name)
-        url = f"{self.base_url}/api/v3/catalog/by-path/{source_name}"
-        response = requests.get(url, headers=self.get_auth_header())
-        response.raise_for_status()
-
-        sources: list[DremioSource] = []
-        for child in response.json()["children"]:
-            path: list[str] = child["path"]
-            if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
-                sources.append(DremioSource(id=child["id"], path=path, type=ds_type))
-            elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
-                sources.extend(self.query_source_children(path))
-
-        return sources
 
     @override
     def read_source(
@@ -392,17 +361,51 @@ class DremioRestClient(AbstractDremioClient):
             logger.info("使用缓存的容器列表")
             return self._container_cache
 
-        url = f"{self.base_url}/api/v3/catalog"
-        response = requests.get(url, headers=self.get_auth_header())
-        response.raise_for_status()
-
+        response = self._request("GET", "/api/v3/catalog")
         containers = [
             DremioContainer(id=item["id"], path=item["path"])
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
         self._container_cache = containers
+        logger.opt(colors=True).info(f"共找到 <y>{len(containers)}</> 个容器")
         return containers
+
+    def _query_source_children(self, *paths: list[str]) -> list[DremioSource]:
+        """
+        查询指定数据源(数据库)的所有子项
+
+        Args:
+            paths: 数据源路径
+
+        Returns:
+            list[DremioSource]: 数据源子项列表
+        """
+        sources: list[DremioSource] = []
+
+        def query(path: str | list[str]) -> None:
+            colored = f"<c>{escape_tag(repr(path))}</>"
+            logger.opt(colors=True).info(f"查询数据源 {colored} 的子项...")
+
+            try:
+                response = self._request("GET", f"/api/v3/catalog/by-path/{'/'.join(path)}")
+            except Exception as e:
+                logger.opt(colors=True).warning(f"查询数据源 {colored} 失败: {e}")
+                return
+
+            for child in response.json()["children"]:
+                if child["type"] == "DATASET" and (ds_type := child.get("datasetType")):
+                    sources.append(DremioSource(id=child["id"], path=child["path"], type=ds_type))
+                elif child["type"] == "CONTAINER" and child["containerType"] == "FOLDER":
+                    futures.append(executor.submit(query, child["path"]))
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(query, path) for path in paths]
+            while futures:
+                fut = futures.pop(0)
+                fut.result()
+
+        return sources
 
     @override
     def list_sources(self) -> list[DremioSource]:
@@ -411,9 +414,7 @@ class DremioRestClient(AbstractDremioClient):
             logger.info("使用缓存的数据源列表")
             return self._source_cache
 
-        sources: list[DremioSource] = []
-        for container in self._list_containers():
-            sources.extend(self.query_source_children(container.path))
-        self._source_cache = sources
-        logger.info(f"共找到 {len(sources)} 个数据源")
+        containers = self._list_containers()
+        self._source_cache = sources = self._query_source_children(*(c.path for c in containers))
+        logger.opt(colors=True).info(f"共找到 <y>{len(sources)}</> 个数据源")
         return sources

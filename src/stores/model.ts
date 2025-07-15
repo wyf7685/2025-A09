@@ -47,6 +47,37 @@ export const useModelStore = defineStore('model', () => {
     selectedModel.value = model;
   };
 
+  const submitCustomModel = async (params: {
+    name: string;
+    provider: string;
+    api_url: string;
+    api_key: string;
+    model_name: string;
+  }) => {
+    try {
+      const response = await api.post<{
+        success: true;
+        message: string;
+        model_id: string;
+      }>('/models/custom', params);
+
+      const customModel = {
+        id: response.data.model_id,
+        name: params.model_name,
+        provider: params.provider,
+        apiUrl: params.api_url,
+        apiKey: params.api_key,
+      };
+      setCustomModel(customModel);
+      setSelectedModel(customModel);
+
+      return customModel;
+    } catch (error) {
+      console.error('Failed to submit custom model:', error);
+      throw error;
+    }
+  };
+
   // 设置自定义模型
   const setCustomModel = (model: LLMModel) => {
     // 将自定义模型添加到可用模型列表中（如果不存在的话）
@@ -67,5 +98,6 @@ export const useModelStore = defineStore('model', () => {
     fetchAvailableModels,
     setSelectedModel,
     setCustomModel,
+    submitCustomModel,
   };
 });

@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import functools
 import importlib
+import inspect
 import platform
 import re
 from collections.abc import Callable, Coroutine
@@ -60,6 +61,16 @@ def configure_matplotlib_fonts() -> None:
 
 
 configure_matplotlib_fonts()
+
+
+def is_coroutine_callable(call: Callable[..., Any]) -> bool:
+    """检查 call 是否是一个 callable 协程函数"""
+    if inspect.isroutine(call):
+        return inspect.iscoroutinefunction(call)
+    if inspect.isclass(call):
+        return False
+    func_ = getattr(call, "__call__", None)  # noqa: B004
+    return inspect.iscoroutinefunction(func_)
 
 
 def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, R]]:

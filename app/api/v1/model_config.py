@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import settings
-from app.core.custom_model_manager import CustomModelConfig, custom_model_manager
 from app.log import logger
+from app.services.custom_model import CustomModelConfig, custom_model_manager
 
 router = APIRouter(prefix="/models")
 
