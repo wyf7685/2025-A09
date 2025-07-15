@@ -5,8 +5,10 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda
+from pydantic import SecretStr
 
 from app.core.config import settings
+from app.core.custom_model_manager import custom_model_manager
 from app.log import logger
 
 type LLM = Runnable[LanguageModelInput, str]
@@ -70,6 +72,19 @@ def get_llm() -> LLM:
 def get_chat_model(model_id: str | None = None) -> BaseChatModel:
     """获取指定的聊天模型实例"""
     model_name = model_id or settings.TEST_MODEL_NAME
+
+    # 检查是否是自定义模型
+    if custom_model_manager.is_custom_model(model_name):
+        try:
+            config = custom_model_manager.get_model(model_name)
+            if config:
+                logger.info(f"使用自定义模型: {config.name}")
+                from langchain_openai import ChatOpenAI
+
+                return ChatOpenAI(model=config.model_name, api_key=SecretStr(config.api_key), base_url=config.api_url)
+        except Exception as e:
+            logger.error(f"创建自定义模型失败: {e}")
+            logger.warning("回退到默认模型")
 
     # 根据模型ID判断使用哪个提供商
     if model_name.startswith("gemini"):
