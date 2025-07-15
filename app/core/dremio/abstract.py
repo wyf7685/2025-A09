@@ -63,30 +63,6 @@ class AbstractDremioClient(abc.ABC):
             return self._add_data_source_excel(file)
         raise ValueError(f"Unsupported format: {format}. Supported formats are 'csv' and 'excel'.")
 
-    # @abc.abstractmethod
-    # def add_data_source_postgres(
-    #     self,
-    #     host: str,
-    #     port: int,
-    #     database: str,
-    #     user: str,
-    #     password: str,
-    # ) -> str:
-    #     """
-    #     添加 PostgreSQL 数据源到 Dremio
-
-    #     Args:
-    #         host: PostgreSQL 主机地址
-    #         port: PostgreSQL 端口
-    #         database: 数据库名
-    #         user: 数据库用户名
-    #         password: 数据库密码
-
-    #     Returns:
-    #         str: 数据源名称
-    #     """
-    #     raise NotImplementedError("This method should be implemented by subclasses.")
-
     @abc.abstractmethod
     def add_data_source_database(
         self,

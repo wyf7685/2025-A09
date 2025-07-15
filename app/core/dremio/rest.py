@@ -18,6 +18,24 @@ from app.schemas.dremio import BaseDatabaseConnection, DremioContainer, DremioDa
 from app.utils import escape_tag
 
 
+class _Cache[T]:
+    def __init__(self) -> None:
+        self._value: T | None = None
+
+    def get(self) -> T | None:
+        return self._value
+
+    def set(self, value: T) -> None:
+        self._value = value
+
+    def expire(self) -> None:
+        self._value = None
+
+
+_source_cache = _Cache[list[DremioSource]]()
+_container_cache = _Cache[list[DremioContainer]]()
+
+
 class DremioRestClient(AbstractDremioClient):
     """Dremio REST API 客户端"""
 
@@ -30,11 +48,6 @@ class DremioRestClient(AbstractDremioClient):
 
         self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
-        self._expire_source_cache()
-
-    def _expire_source_cache(self) -> None:
-        self._container_cache = None
-        self._source_cache = None
 
     def _get_token(self) -> str:
         """
@@ -212,7 +225,7 @@ class DremioRestClient(AbstractDremioClient):
             json=payload,
         )
 
-        self._expire_source_cache()
+        _source_cache.expire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -231,7 +244,7 @@ class DremioRestClient(AbstractDremioClient):
         source_name = f"{uuid.uuid4()}{suffix}"
         shutil.copyfile(file, self.external_dir / source_name)
 
-        self._expire_source_cache()
+        _source_cache.expire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -260,7 +273,7 @@ class DremioRestClient(AbstractDremioClient):
         }
 
         self._request("POST", "/api/v3/catalog", json=payload)
-        self._expire_source_cache()
+        _container_cache.expire()
         return DremioSource(
             id=f"{source_name}",
             path=[source_name],
@@ -357,9 +370,9 @@ class DremioRestClient(AbstractDremioClient):
 
     def _list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")
-        if self._container_cache is not None:
+        if (cache := _container_cache.get()) is not None:
             logger.info("使用缓存的容器列表")
-            return self._container_cache
+            return cache
 
         response = self._request("GET", "/api/v3/catalog")
         containers = [
@@ -410,9 +423,9 @@ class DremioRestClient(AbstractDremioClient):
     @override
     def list_sources(self) -> list[DremioSource]:
         logger.info("查询 Dremio 中的所有数据源...")
-        if self._source_cache is not None:
+        if (cache := _source_cache.get()) is not None:
             logger.info("使用缓存的数据源列表")
-            return self._source_cache
+            return cache
 
         containers = self._list_containers()
         self._source_cache = sources = self._query_source_children(*(c.path for c in containers))
