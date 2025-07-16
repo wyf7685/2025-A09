@@ -51,6 +51,11 @@ class DremioDataSource(DataSource):
         """加载 Dremio 数据源数据"""
         return self.client.read_source(self.source.path, n_rows)
 
+    @override
+    def _shape(self) -> tuple[int, int]:
+        """获取 Dremio 数据源的形状"""
+        return self.client.shape(self.source.path)
+
     def get_source(self) -> DremioSource:
         """获取 Dremio 源"""
         return self.source

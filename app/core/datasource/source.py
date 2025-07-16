@@ -55,6 +55,28 @@ class DataSource(abc.ABC):
         """
         raise NotImplementedError("子类必须实现_load方法")
 
+    @abc.abstractmethod
+    def _shape(self) -> tuple[int, int]:
+        """
+        获取数据源的形状
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        raise NotImplementedError("子类必须实现get_shape方法")
+
+    def get_shape(self) -> tuple[int, int]:
+        """
+        获取数据源的形状
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        shape = self._full_data.shape if self._full_data is not None else self._shape()
+        self.metadata.row_count = shape[0]
+        self.metadata.column_count = shape[1]
+        return shape
+
     def get_preview(self, n_rows: int = 5, force_reload: bool = False) -> pd.DataFrame:
         """
         获取数据源的预览数据

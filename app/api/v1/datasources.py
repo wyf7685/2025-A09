@@ -190,15 +190,11 @@ async def get_datasource_data(
             data = data.iloc[skip:]
 
         # 获取总行数
-        total_rows = source.metadata.row_count
-        if total_rows is None:
-            # 如果元数据中没有行数信息，可以选择加载完整数据获取行数
-            # 但这可能影响性能，所以这里只是返回已加载的数据行数
-            total_rows = len(data) + skip
+        rows, _ = source.get_shape()
 
         return {
             "data": data.to_dict(orient="records"),
-            "total": total_rows,
+            "total": rows,
             "skip": skip,
             "limit": limit,
         }

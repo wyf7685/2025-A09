@@ -47,6 +47,10 @@ class CSVDataSource(DataSource):
         return pd.read_csv(self.file_path, **kwargs)
 
     @override
+    def _shape(self) -> tuple[int, int]:
+        return self._load().shape
+
+    @override
     def copy(self) -> "CSVDataSource":
         return CSVDataSource(file_path=self.file_path, metadata=self.metadata.copy(), **self.pandas_kwargs)
 
