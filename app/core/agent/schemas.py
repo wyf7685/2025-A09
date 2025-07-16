@@ -23,9 +23,10 @@ type DatasetID = str
 type Sources = MutableMapping[DatasetID, DataSource]
 type DatasetGetter = Callable[[DatasetID], pd.DataFrame]
 type DatasetCreator = Callable[[pd.DataFrame], DatasetID]
+type DatasetRenamer = Callable[[DatasetID, DatasetID], None]
 
 
-def sources_fn(sources: Sources) -> tuple[DatasetGetter, DatasetCreator]:
+def sources_fn(sources: Sources) -> tuple[DatasetGetter, DatasetCreator, DatasetRenamer]:
     def get_df(dataset_id: DatasetID) -> pd.DataFrame:
         if dataset_id not in sources:
             raise ValueError(f"数据源 {dataset_id} 不存在")
@@ -36,7 +37,12 @@ def sources_fn(sources: Sources) -> tuple[DatasetGetter, DatasetCreator]:
         sources[source_id] = create_df_source(df, source_id)
         return source_id
 
-    return get_df, create_df
+    def rename_df(old_id: DatasetID, new_id: DatasetID) -> None:
+        if old_id not in sources:
+            raise ValueError(f"数据源 {old_id} 不存在")
+        sources[new_id] = sources.pop(old_id)
+
+    return get_df, create_df, rename_df
 
 
 def format_sources_overview(sources: Sources) -> str:

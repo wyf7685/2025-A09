@@ -1,1 +1,2 @@
-from .agent import DataAnalyzerAgent as DataAnalyzerAgent
+from .clean_data import CleanDataAgent as CleanDataAgent
+from .data_analyzer import DataAnalyzerAgent as DataAnalyzerAgent

@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.const import UPLOAD_DIR
-from app.core.agent.clean_data_agent import CleanDataAgent
+from app.core.agent import CleanDataAgent
 from app.log import logger
 
 # 创建路由实例

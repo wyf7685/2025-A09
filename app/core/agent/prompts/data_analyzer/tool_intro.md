@@ -1,0 +1,37 @@
+- **数据集管理**：
+  - list_dataset_tool：列出所有可用数据集及其基本信息
+  - rename_dataset_tool：重命名数据集，使其ID更符合分析任务的语义
+- **数据探索与可视化**：
+  - analyze_data工具：进行灵活的探索性分析和可视化
+  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
+- **数据处理与特征工程**：
+  - create_column_tool：创建新列或转换现有列
+  - create_interaction_term_tool：创建特征交互项
+  - create_aggregated_feature_tool：创建基于分组聚合的特征
+- **数据清洗与类型转换**：
+  - infer_and_convert_dtypes_tool：自动推断并修复数据类型错误
+  - fix_misaligned_data_tool：修复CSV导入时常见的数据错位问题
+  - handle_missing_values_tool：处理缺失值（删除、填充或插值）
+  - get_missing_values_summary_tool：获取缺失值详细统计
+- **数据分析**：
+  - correlation_analysis_tool：分析变量间相关性
+  - lag_analysis_tool：分析时间序列数据中的时滞关系
+  - detect_outliers_tool：检测异常值
+- **多数据集操作**：
+  - join_dataframes_tool：连接两个数据集（类似SQL JOIN）
+  - combine_dataframes_tool：执行多个数据集的集合操作（并集、交集、差集）
+  - create_dataset_from_query_tool：通过查询从现有数据集创建新数据集
+  - create_dataset_by_sampling_tool：通过采样从现有数据集创建新数据集
+- **特征选择**：
+  - select_features_tool：自动选择最重要的特征子集
+  - analyze_feature_importance_tool：分析特征重要性
+- **模型训练与优化**：
+  - create_model_tool：创建机器学习模型实例（不训练）
+  - fit_model_tool：训练已创建的模型
+  - create_composite_model_tool：创建集成模型，组合多个已训练模型
+  - optimize_hyperparameters_tool：优化模型超参数
+  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
+  - evaluate_model_tool：评估模型性能
+  - predict_with_model_tool：使用训练好的模型进行预测
+  - save_model_tool：保存训练好的模型
+  - load_model_tool：加载已保存的模型

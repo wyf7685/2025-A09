@@ -3,11 +3,21 @@ from typing import Any
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
-from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID, OperationFailed
+from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID, DatasetRenamer, OperationFailed
 from app.log import logger
 from app.utils import escape_tag
 
 from .analysis import corr_analys, detect_outliers, lag_analys
+from .clean import (
+    CleanMisalignedDataResult,
+    ConvertDtypesResult,
+    HandleMissingValuesResult,
+    MissingValuesSummary,
+    fix_misaligned_data,
+    get_missing_values_summary,
+    handle_missing_values,
+    infer_and_convert_dtypes,
+)
 from .columns import (
     CreateAggregatedFeatureResult,
     CreateColumnResult,
@@ -17,12 +27,6 @@ from .columns import (
     create_interaction_term,
 )
 from .inspect import InspectDataframeOptions, InspectDataframeResult, inspect_dataframe
-from .missing_values import (
-    HandleMissingValuesResult,
-    MissingValuesSummary,
-    get_missing_values_summary,
-    handle_missing_values,
-)
 from .multi import (
     CombineDataframesOperation,
     CombineDataframesResult,
@@ -36,7 +40,11 @@ from .multi import (
 )
 
 
-def dataframe_tools(get_df: DatasetGetter, create_df: DatasetCreator) -> list[BaseTool]:
+def dataframe_tools(
+    get_df: DatasetGetter,
+    create_df: DatasetCreator,
+    rename_df: DatasetRenamer,
+) -> list[BaseTool]:
     @tool
     def correlation_analysis_tool(
         dataset_id: DatasetID,
@@ -226,6 +234,84 @@ def dataframe_tools(get_df: DatasetGetter, create_df: DatasetCreator) -> list[Ba
         return inspect_dataframe(get_df(dataset_id), options)
 
     @tool
+    def infer_and_convert_dtypes_tool(
+        dataset_id: DatasetID,
+        columns: list[str] | None = None,
+        to_numeric: bool = True,
+        to_datetime: bool = True,
+        to_category: bool = True,
+        category_threshold: float = 0.05,
+        datetime_format: str | None = None,
+        in_place: bool = False,
+    ) -> ConvertDtypesResult:
+        """
+        自动推断并转换数据集中的列类型，修复常见的类型错误。
+
+        此工具可以解决例如CSV导入后数值列变为字符串、日期未正确识别等问题。
+        推荐在数据导入后立即使用，以确保数据类型正确，优化内存使用。
+
+        Args:
+            dataset_id (str): 操作的数据集ID
+            columns (list[str], optional): 要转换的列名列表。如果为None，则尝试转换所有可能的列
+            to_numeric (bool): 是否尝试将列转换为数值型，默认为True
+            to_datetime (bool): 是否尝试将列转换为日期时间类型，默认为True
+            to_category (bool): 是否尝试将唯一值比例低的列转换为分类类型，默认为True
+            category_threshold (float): 将列转换为分类类型的唯一值比例阈值，默认为0.05
+                                      当唯一值数量/总行数 < category_threshold时，将转换为分类类型
+            datetime_format (str, optional): 日期时间格式字符串，如'%Y-%m-%d'。如果为None，则尝试自动推断
+            in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
+
+        Returns:
+            dict: 包含转换结果的详细信息，包括成功和失败的列、转换前后的类型以及内存使用变化
+        """
+        result = infer_and_convert_dtypes(
+            get_df(dataset_id), columns, to_numeric, to_datetime, to_category, category_threshold, datetime_format
+        )
+
+        if result[0] is not None:
+            new_id = create_df(result[0])
+            if in_place:
+                rename_df(new_id, dataset_id)
+                new_id = dataset_id
+            result[1]["new_dataset_id"] = new_id
+
+        return result[1]
+
+    @tool
+    def fix_misaligned_data_tool(
+        dataset_id: DatasetID,
+        suspected_columns: list[str] | None = None,
+        alignment_pattern: str | None = None,
+        in_place: bool = False,
+    ) -> CleanMisalignedDataResult | OperationFailed:
+        """
+        修复数据错位问题，常见于导入CSV文件时分隔符识别错误。
+
+        此工具可以解决如下场景：当一行数据的字段错位到下一列时，自动检测并修复这些问题。
+        例如：当一个单元格内包含逗号或分号时，CSV导入可能会将其错误地分割为多列。
+
+        Args:
+            dataset_id (str): 操作的数据集ID
+            suspected_columns (list[str], optional): 疑似包含错位数据的列。如果为None，将检查所有对象类型的列
+            alignment_pattern (str, optional): 用于检测错位的正则表达式模式。默认检测常见分隔符如逗号、分号和制表符
+            in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
+
+        Returns:
+            dict: 包含修复结果的详细信息，包括修复的行数、修复前后的样本对比
+        """
+        result = fix_misaligned_data(get_df(dataset_id), suspected_columns, alignment_pattern)
+
+        if result[0] is not None:
+            new_id = create_df(result[0])
+            if in_place:
+                rename_df(new_id, dataset_id)
+                new_id = dataset_id
+            if result[1]["success"]:
+                result[1]["new_dataset_id"] = new_id
+
+        return result[1]
+
+    @tool
     def handle_missing_values_tool(
         dataset_id: DatasetID,
         column: str | None = None,
@@ -375,6 +461,9 @@ def dataframe_tools(get_df: DatasetGetter, create_df: DatasetCreator) -> list[Ba
         inspect_dataframe_tool,
         get_missing_values_summary_tool,
         handle_missing_values_tool,
+        # 数据清洗和类型转换工具
+        infer_and_convert_dtypes_tool,
+        fix_misaligned_data_tool,
         # 数据分析工具（分析数据特性）
         correlation_analysis_tool,
         detect_outliers_tool,
