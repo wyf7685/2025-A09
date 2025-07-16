@@ -153,7 +153,8 @@ const refreshChatHistory = async () => {
 
     return [entry.user_message, assistantMessage]
   }).flat() || []
-  scrollToBottom()
+  // 等 AssistantMessage 加载再滚动到底部
+  nextTick(scrollToBottom)
 }
 
 const switchSession = async (sessionId: string) => {
@@ -549,6 +550,10 @@ const sendMessage = async (): Promise<void> => {
 onMounted(async () => {
   await loadSessions()
   await dataSourceStore.listDataSources() // 加载数据源
+
+  if (currentSessionId) {
+    await refreshChatHistory()
+  }
 })
 </script>
 
@@ -1283,7 +1288,8 @@ onMounted(async () => {
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
       transition: all 0.3s ease;
 
-      &:hover, &:focus {
+      &:hover,
+      &:focus {
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 1px #10b981;
       }
     }
