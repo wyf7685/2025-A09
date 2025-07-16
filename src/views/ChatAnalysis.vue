@@ -571,16 +571,11 @@ onMounted(async () => {
           </el-icon>
           <span class="session-name">{{ session.name || `会话 ${session.id.slice(0, 8)}` }}</span>
           <div class="session-actions">
-            <el-button type="text" :icon="Edit" size="small" class="action-btn" @click.stop="openEditSessionDialog(session.id, session.name || `会话 ${session.id.slice(0, 8)}`)" />
-            <el-button
-              type="text"
-              :icon="Delete"
-              size="small"
-              class="action-btn"
+            <el-button type="text" :icon="Edit" size="small" class="action-btn"
+              @click.stop="openEditSessionDialog(session.id, session.name || `会话 ${session.id.slice(0, 8)}`)" />
+            <el-button type="text" :icon="Delete" size="small" class="action-btn"
               @click.stop="confirmDeleteSession(session.id, session.name || `会话 ${session.id.slice(0, 8)}`)"
-              :loading="sessionStore.isDeleting[session.id]"
-              :disabled="sessionStore.isDeleting[session.id]"
-            />
+              :loading="sessionStore.isDeleting[session.id]" :disabled="sessionStore.isDeleting[session.id]" />
           </div>
         </div>
       </div>
@@ -605,9 +600,14 @@ onMounted(async () => {
 
       <!-- Chat Messages -->
       <div class="chat-messages" ref="messagesContainer">
-        <div v-if="!messages.length" class="empty-state">
+        <div v-if="!currentSessionId || !currentDataset" class="empty-state">
           <div class="empty-message">
             <p>选择一个数据集，开始您的数据分析对话</p>
+          </div>
+        </div>
+        <div v-else-if="!messages.length" class="empty-state">
+          <div class="empty-message">
+            <p>输入分析需求，开始您的数据分析对话</p>
           </div>
         </div>
         <div v-for="(message, index) in messages" :key="index">
@@ -730,14 +730,8 @@ onMounted(async () => {
       <div class="edit-session-dialog">
         <el-form :model="{ name: editingSessionName }" label-position="top">
           <el-form-item label="会话名称">
-            <el-input
-              v-model="editingSessionName"
-              placeholder="请输入会话名称"
-              maxlength="50"
-              show-word-limit
-              clearable
-              autofocus
-            />
+            <el-input v-model="editingSessionName" placeholder="请输入会话名称" maxlength="50" show-word-limit clearable
+              autofocus />
           </el-form-item>
         </el-form>
       </div>

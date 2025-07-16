@@ -402,7 +402,7 @@ const toggleRouteManually = () => {
   console.log(`[手动路线切换] ${currentRoute} -> ${newRoute}`)
   logRouteStatus(`手动切换路线到: ${newRoute}`)
 
-  ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '其他处理'}`)
+  ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '调用工具分析'}`)
 }
 
 // 检查是否有活跃步骤
@@ -553,7 +553,7 @@ onMounted(async () => {
           </div>
           <el-radio-group v-model="selectedRoute" @change="handleRouteChange" disabled>
             <el-radio-button label="route1">生成总体报告</el-radio-button>
-            <el-radio-button label="route2">其他处理</el-radio-button>
+            <el-radio-button label="route2">调用工具分析</el-radio-button>
           </el-radio-group>
           <div class="route-description">
             <span v-if="currentRouteReason" class="route-reason">
@@ -622,63 +622,28 @@ onMounted(async () => {
   </div>
 
   <!-- 自定义API配置对话框 -->
-  <el-dialog
-    v-model="showCustomApiDialog"
-    title="配置自定义API"
-    width="500px"
-    :before-close="cancelCustomApi"
-  >
+  <el-dialog v-model="showCustomApiDialog" title="配置自定义API" width="500px" :before-close="cancelCustomApi">
     <el-form :model="customApiForm" label-width="120px">
       <el-form-item label="API提供商" required>
         <el-select v-model="customApiForm.provider" placeholder="选择API提供商" style="width: 100%">
-          <el-option
-            v-for="provider in apiProviders"
-            :key="provider.name"
-            :label="provider.name"
-            :value="provider.name"
-          />
+          <el-option v-for="provider in apiProviders" :key="provider.name" :label="provider.name"
+            :value="provider.name" />
         </el-select>
       </el-form-item>
       <el-form-item label="API Key" required>
-        <el-input
-          v-model="customApiForm.apiKey"
-          type="password"
-          placeholder="请输入API密钥"
-          show-password
-          clearable
-        />
+        <el-input v-model="customApiForm.apiKey" type="password" placeholder="请输入API密钥" show-password clearable />
       </el-form-item>
       <el-form-item label="模型名称" required>
-        <el-select
-          v-if="providerModels.length > 0"
-          v-model="customApiForm.modelName"
-          placeholder="选择模型"
-          style="width: 100%"
-          filterable
-          allow-create
-        >
-          <el-option
-            v-for="model in providerModels"
-            :key="model"
-            :label="model"
-            :value="model"
-          />
+        <el-select v-if="providerModels.length > 0" v-model="customApiForm.modelName" placeholder="选择模型"
+          style="width: 100%" filterable allow-create>
+          <el-option v-for="model in providerModels" :key="model" :label="model" :value="model" />
         </el-select>
-        <el-input
-          v-else
-          v-model="customApiForm.modelName"
-          placeholder="输入模型名称"
-          clearable
-        />
+        <el-input v-else v-model="customApiForm.modelName" placeholder="输入模型名称" clearable />
       </el-form-item>
 
       <!-- 自定义API URL输入 (仅当选择Custom提供商时显示) -->
       <el-form-item v-if="customApiForm.provider === 'Custom'" label="API URL" required>
-        <el-input
-          v-model="customApiForm.customApiUrl"
-          placeholder="例如: https://api.example.com/v1"
-          clearable
-        />
+        <el-input v-model="customApiForm.customApiUrl" placeholder="例如: https://api.example.com/v1" clearable />
       </el-form-item>
 
       <div v-if="selectedProvider.baseUrl" class="api-info">

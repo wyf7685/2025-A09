@@ -2,22 +2,24 @@
 模型注册表 - 统一管理所有训练好的模型
 """
 
-import json
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.const import DATA_DIR
+from pydantic import TypeAdapter
+
+from app.const import DATA_DIR, MODEL_DIR
 from app.log import logger
 from app.schemas.ml_model import MLModelInfo
 
+_models_ta = TypeAdapter(dict[str, MLModelInfo])
 
 class ModelRegistry:
     """模型注册表"""
 
     def __init__(self) -> None:
-        self.models_dir = DATA_DIR / "models"
+        self.models_dir = MODEL_DIR
         self.registry_file = DATA_DIR / "model_registry.json"
         self.models_dir.mkdir(exist_ok=True)
         self._models: dict[str, MLModelInfo] = {}
@@ -27,10 +29,8 @@ class ModelRegistry:
         """加载模型注册表"""
         if self.registry_file.exists():
             try:
-                with self.registry_file.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                    for model_id, model_data in data.items():
-                        self._models[model_id] = MLModelInfo(**model_data)
+                data = _models_ta.validate_json(self.registry_file.read_bytes())
+                self._models.update(data)
                 logger.info(f"已加载模型注册表: {len(self._models)} 个模型")
             except Exception as e:
                 logger.warning(f"加载模型注册表失败: {e}")
@@ -39,9 +39,7 @@ class ModelRegistry:
     def _save_registry(self) -> None:
         """保存模型注册表"""
         try:
-            data = {model_id: model.model_dump() for model_id, model in self._models.items()}
-            with self.registry_file.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            self.registry_file.write_bytes(_models_ta.dump_json(self._models))
             logger.debug("模型注册表已保存")
         except Exception as e:
             logger.error(f"保存模型注册表失败: {e}")
