@@ -238,8 +238,9 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
         datasource_service.delete_source(source_id)
 
         # 删除关联的会话
+        # TODO: 考虑其他删除方式
         for session in list(session_service.sessions.values()):
-            if session.dataset_id == source_id:
+            if source_id in session.dataset_ids:
                 session_service.delete_session(session.id)
 
         return {"success": True, "message": f"Datasource {source_id} deleted"}

@@ -5,21 +5,21 @@ import pandas as pd
 
 from app.core.dremio.rest import DremioSource
 
-from .csv import CSVDataSource
 from .dremio import DremioDataSource
+from .file import FileDataSource
 from .memory import InMemoryDataSource
 from .source import DataSource as DataSource
 from .source import DataSourceMetadata
 
 
-def create_csv_source(file_path: Path, name: str | None = None, **pandas_kwargs: Any) -> CSVDataSource:
+def create_file_source(file_path: Path, name: str | None = None, **pandas_kwargs: Any) -> FileDataSource:
     """
-    创建 CSV 数据源
+    创建 CSV/Excel 数据源
 
     Args:
-        file_path: CSV 文件路径
+        file_path: CSV/Excel 文件路径
         name: 数据源名称，默认使用文件名
-        **pandas_kwargs: 传递给 pandas.read_csv 的参数
+        **pandas_kwargs: 传递给 read_csv/read_excel 的参数
 
     Returns:
         CSVDataSource: CSV 数据源
@@ -30,7 +30,7 @@ def create_csv_source(file_path: Path, name: str | None = None, **pandas_kwargs:
         source_type="csv",
     )
 
-    return CSVDataSource(file_path, metadata, **pandas_kwargs)
+    return FileDataSource(file_path, metadata, **pandas_kwargs)
 
 
 def create_dremio_source(
@@ -94,7 +94,7 @@ def create_df_source(
 def deserialize_data_source(type: str, data: dict[str, Any]) -> DataSource:  # noqa: A002
     match type:
         case "csv":
-            return CSVDataSource.deserialize(data)
+            return FileDataSource.deserialize(data)
         case "dremio":
             return DremioDataSource.deserialize(data)
         case _:
@@ -104,7 +104,7 @@ def deserialize_data_source(type: str, data: dict[str, Any]) -> DataSource:  # n
 __all__ = [
     "DataSource",
     "DataSourceMetadata",
-    "create_csv_source",
     "create_df_source",
     "create_dremio_source",
+    "create_file_source",
 ]

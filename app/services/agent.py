@@ -45,8 +45,8 @@ class DataAnalyzerAgentService:
 
         llm = get_llm()
         chat_model = get_chat_model(model_id)
-        data_source = datasource_service.get_source(session.dataset_id).copy()
-        agent = DataAnalyzerAgent(data_source, llm, chat_model, session.id)
+        sources = {source_id: datasource_service.get_source(source_id).copy() for source_id in session.dataset_ids}
+        agent = DataAnalyzerAgent(sources, llm, chat_model, session.id)
         agent.load_state(state_file)
         self.agents[session.id] = model_id, agent
         logger.info(f"为会话 {session.id} 创建新 Agent，使用模型: {model_id}")

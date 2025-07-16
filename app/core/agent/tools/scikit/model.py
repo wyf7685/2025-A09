@@ -244,10 +244,10 @@ class EvaluateModelResult(TypedDict):
 def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     """
     评估训练好的机器学习模型。
-    接受 train_model 函数的返回值作为输入。
+    接受 fit_model 函数的返回值作为输入。
 
     Args:
-        trained_model_info (dict): 包含训练好的模型和测试集数据的字典，由 `train_model` 函数返回。
+        trained_model_info (dict): 包含训练好的模型和测试集数据的字典，由 `fit_model` 函数返回。
 
     Returns:
         dict: 包含模型评估指标、消息和预测结果摘要的字典。
@@ -360,7 +360,7 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
     保存训练好的机器学习模型及其元数据。
 
     Args:
-        model_info (dict): 包含训练好的模型及其信息的字典，由 `train_model` 函数返回。
+        model_info (dict): 包含训练好的模型及其信息的字典，由 `fit_model` 函数返回。
         file_path (str): 模型保存的路径。
 
     Returns:
@@ -456,3 +456,93 @@ def load_model_metadata(file_path: Path) -> ModelMetadata:
     except Exception:
         logger.opt(colors=True).exception("<r>加载模型元数据失败</r>")
         raise
+
+
+class PredictionResult(TypedDict):
+    """模型预测的结果"""
+
+    message: str  # 预测操作的结果消息
+    prediction_dataset_id: str
+    predictions_summary: dict[str, float]  # 预测结果的描述性统计
+    model_type: str  # 模型类型
+    task_type: Literal["regression", "classification"]  # 任务类型
+
+
+def predict_with_model(
+    model_info: TrainModelResult,
+    input_data: pd.DataFrame,
+    input_features: list[str] | None = None,
+) -> tuple[pd.DataFrame, PredictionResult]:
+    """
+    使用训练好的模型进行预测，并将预测结果保存到新的DataFrame中。
+
+    Args:
+        model_info (TrainModelResult): 包含训练好的模型及其信息的字典，由 `fit_model` 函数返回。
+        input_data (pd.DataFrame): 要进行预测的输入数据
+        input_features (list[str], optional): 输入数据的特征列名列表。如果不提供，将使用model_info中的特征列。
+
+    Returns:
+        tuple[pd.DataFrame, PredictionResult]: 包含预测结果的新DataFrame和预测结果信息字典的元组
+    """
+    model = model_info["model"]
+    model_type = model_info["model_type"]
+    task_type = _MODEL_TASK_TYPE.get(model_type)
+
+    if task_type is None:
+        raise ValueError(f"不支持的模型类型: {model_type}")
+
+    # 如果没有指定特征列，则使用模型训练时的特征列
+    if input_features is None:
+        input_features = model_info["feature_columns"]
+
+    # 验证所有特征列是否都存在
+    missing_features = [f for f in input_features if f not in input_data.columns]
+    if missing_features:
+        raise ValueError(f"输入数据中缺少以下特征列: {', '.join(missing_features)}")
+
+    # 提取特征数据
+    X = input_data[input_features].copy()
+
+    # 进行预测
+    logger.opt(colors=True).info(f"使用模型 <e>{escape_tag(model_type)}</e> 进行预测")
+    predictions: np.ndarray = model.predict(X)
+
+    # 创建结果DataFrame
+    result_df = pd.DataFrame()
+
+    # 添加预测结果列
+    result_df["predictions"] = predictions
+
+    # 处理分类模型的解码
+    decoded: np.ndarray | None = None
+    le: LabelEncoder | None = model_info.get("label_encoder")
+    if task_type == "classification" and le is not None:
+        try:
+            decoded = cast("np.ndarray", le.inverse_transform(predictions.astype(int)))
+        except Exception as e:
+            logger.opt(colors=True).warning(f"无法解码预测结果: <r>{escape_tag(str(e))}</r>")
+        else:
+            result_df["predictions_decoded"] = decoded
+            logger.opt(colors=True).info(f"分类预测结果已解码，样例: <y>{escape_tag(str(decoded[:5]))}</y>")
+
+    # 生成预测结果摘要
+    predictions_summary = pd.Series(predictions).describe().to_dict()
+
+    # 构建结果消息
+    if task_type == "regression":
+        message = f"回归预测完成。预测样例: {predictions[:5]}"
+    elif task_type == "classification":
+        if decoded is not None:
+            message = f"分类预测完成。预测类别样例: {decoded[:5]}"
+        else:
+            message = f"分类预测完成。预测样例(编码): {predictions[:5]}"
+    else:
+        message = f"预测完成。预测样例: {predictions[:5]}"
+
+    return result_df, {
+        "message": message,
+        "prediction_dataset_id": "{{UNSET}}",
+        "predictions_summary": predictions_summary,
+        "model_type": model_type,
+        "task_type": task_type,
+    }

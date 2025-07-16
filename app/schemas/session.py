@@ -7,7 +7,7 @@ from .chat import ChatEntry
 
 class Session(BaseModel):
     id: str
-    dataset_id: str
+    dataset_ids: list[str]
     name: str | None = None
     chat_history: list[ChatEntry] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())

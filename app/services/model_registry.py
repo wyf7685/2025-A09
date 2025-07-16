@@ -10,10 +10,12 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from app.const import DATA_DIR, MODEL_DIR
+from app.core.lifespan import lifespan
 from app.log import logger
 from app.schemas.ml_model import MLModelInfo
 
 _models_ta = TypeAdapter(dict[str, MLModelInfo])
+
 
 class ModelRegistry:
     """模型注册表"""
@@ -23,7 +25,6 @@ class ModelRegistry:
         self.registry_file = DATA_DIR / "model_registry.json"
         self.models_dir.mkdir(exist_ok=True)
         self._models: dict[str, MLModelInfo] = {}
-        self._load_registry()
 
     def _load_registry(self) -> None:
         """加载模型注册表"""
@@ -149,3 +150,4 @@ class ModelRegistry:
 
 # 全局模型注册表实例
 model_registry = ModelRegistry()
+lifespan.on_startup(model_registry._load_registry)  # noqa: SLF001

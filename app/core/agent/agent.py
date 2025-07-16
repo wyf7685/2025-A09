@@ -1,27 +1,62 @@
-# ruff: noqa: PD011
-
+import functools
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
 
-import pandas as pd
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableLambda, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel
 
+from app.core.agent.events import StreamEvent, fix_message_content, process_stream_event
+from app.core.agent.schemas import (
+    AgentValues,
+    DataAnalyzerAgentState,
+    DatasetID,
+    Sources,
+    format_sources_overview,
+    sources_fn,
+)
+from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
+from app.core.agent.tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 from app.core.chain.llm import LLM
-from app.core.datasource import DataSource
 from app.log import logger
 from app.utils import escape_tag
 
-from .events import StreamEvent, fix_message_content, process_stream_event
-from .tools import analyzer_tool, dataframe_tools, scikit_tools
-from .tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
+TOOL_INTRO = """\
+- **数据探索与可视化**：
+  - analyze_data工具：进行灵活的探索性分析和可视化
+  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
+- **数据处理与特征工程**：
+  - create_column_tool：创建新列或转换现有列
+  - create_interaction_term_tool：创建特征交互项
+  - create_aggregated_feature_tool：创建基于分组聚合的特征
+- **数据分析**：
+  - correlation_analysis_tool：分析变量间相关性
+  - lag_analysis_tool：分析时间序列数据中的时滞关系
+  - detect_outliers_tool：检测异常值
+- **多数据集操作**：
+  - join_dataframes_tool：连接两个数据集（类似SQL JOIN）
+  - combine_dataframes_tool：执行多个数据集的集合操作（并集、交集、差集）
+  - create_dataset_from_query_tool：通过查询从现有数据集创建新数据集
+  - create_dataset_by_sampling_tool：通过采样从现有数据集创建新数据集
+- **特征选择**：
+  - select_features_tool：自动选择最重要的特征子集
+  - analyze_feature_importance_tool：分析特征重要性
+- **模型训练与优化**：
+  - create_model_tool：创建机器学习模型实例（不训练）
+  - fit_model_tool：训练已创建的模型
+  - create_composite_model_tool：创建集成模型，组合多个已训练模型
+  - optimize_hyperparameters_tool：优化模型超参数
+  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
+  - evaluate_model_tool：评估模型性能
+  - predict_with_model_tool：使用训练好的模型进行预测
+  - save_model_tool：保存训练好的模型
+  - load_model_tool：加载已保存的模型
+"""
 
 SYSTEM_PROMPT = """\
 你是一位专业的数据分析师，擅长解决复杂的数据分析问题。
@@ -50,29 +85,7 @@ SYSTEM_PROMPT = """\
 {overview}
 
 ## 工具选择指南
-- **数据探索与可视化**：
-  - analyze_data工具：进行灵活的探索性分析和可视化
-  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
-- **数据处理与特征工程**：
-  - create_column_tool：创建新列或转换现有列
-  - create_interaction_term_tool：创建特征交互项
-  - create_aggregated_feature_tool：创建基于分组聚合的特征
-- **数据分析**：
-  - correlation_analysis_tool：分析变量间相关性
-  - lag_analysis_tool：分析时间序列数据中的时滞关系
-  - detect_outliers_tool：检测异常值
-- **特征选择**：
-  - select_features_tool：自动选择最重要的特征子集
-  - analyze_feature_importance_tool：分析特征重要性
-- **模型训练与优化**：
-  - create_model_tool：创建机器学习模型实例（不训练）
-  - fit_model_tool：训练已创建的模型
-  - create_composite_model_tool：创建集成模型，组合多个已训练模型
-  - optimize_hyperparameters_tool：优化模型超参数
-  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
-  - evaluate_model_tool：评估模型性能
-  - save_model_tool：保存训练好的模型
-  - load_model_tool：加载已保存的模型
+{tool_intro}
 
 ## 推荐分析流程
 1. **数据理解与目标明确**：
@@ -91,32 +104,37 @@ SYSTEM_PROMPT = """\
    - 编码分类变量
    - 处理日期时间数据
 
-4. **探索性数据分析**：
+4. **多数据集处理(如适用)**：
+   - 使用join_dataframes_tool连接相关数据集
+   - 使用combine_dataframes_tool执行数据集的集合操作
+   - 使用create_dataset_from_query_tool或create_dataset_by_sampling_tool创建分析子集
+
+5. **探索性数据分析**：
    - 使用correlation_analysis_tool分析变量间相关关系
    - 使用detect_outliers_tool识别并处理异常值
    - 分析数据分布和趋势
    - 探索关键变量的时间模式(如适用)
 
-5. **高级分析与假设验证**：
+6. **高级分析与假设验证**：
    - 进行分组比较分析
    - 假设检验和统计推断
    - 识别关键影响因素
    - 使用lag_analysis_tool分析时序关系(如适用)
 
-6. **特征工程与数据转换**：
+7. **特征工程与数据转换**：
    - 使用create_interaction_term_tool创建特征交互项
    - 使用create_aggregated_feature_tool创建聚合特征
    - 构建业务相关的派生指标
    - 特征工程后，使用inspect_dataframe_tool检查处理后的数据结果
 
-7. **模型构建(如需)**：
+8. **模型构建(如需)**：
    - 使用analyze_feature_importance_tool分析特征重要性
    - 使用select_features_tool选择最佳特征子集
    - 使用create_model_tool创建模型，然后使用fit_model_tool训练
    - 使用create_composite_model_tool组合多个模型创建更强的集成模型
    - 使用evaluate_model_tool评估模型性能
 
-8. **结果可视化与解释**：
+9. **结果可视化与解释**：
    - 创建关键发现的直观图表
    - 将分析结果与业务问题关联
    - 提供明确的数据洞察和行动建议
@@ -128,9 +146,61 @@ SYSTEM_PROMPT = """\
 1. 使用inspect_dataframe_tool全面了解数据
 2. 使用correlation_analysis_tool、detect_outliers_tool等分析数据特性
 3. 使用create_column_tool等工具进行数据清洗和特征工程
-4. 使用select_features_tool和analyze_feature_importance_tool选择最佳特征
-5. 创建并训练模型（使用create_model_tool和fit_model_tool）
-6. 评估和优化模型性能
+4. 需要时，使用join_dataframes_tool或combine_dataframes_tool整合多个数据源
+5. 使用select_features_tool和analyze_feature_importance_tool选择最佳特征
+6. 创建并训练模型（使用create_model_tool和fit_model_tool）
+7. 评估和优化模型性能
+
+## 多数据集操作最佳实践
+
+**数据集连接策略**：
+- 使用join_dataframes_tool连接相关数据集，类似SQL JOIN操作
+- 根据业务需求选择适当的连接类型（内连接、左连接、右连接、全连接）
+- 确保连接键的数据类型一致，避免类型不匹配导致的连接问题
+
+**数据集集合操作**：
+- 使用combine_dataframes_tool执行并集、交集、差集等集合操作
+- 根据列结构决定是否需要匹配列（match_columns参数）
+- 当进行交集或差集操作时，注意观察结果集的大小变化
+
+**数据集派生**：
+- 使用create_dataset_from_query_tool基于条件筛选创建分析子集
+- 使用create_dataset_by_sampling_tool创建训练集、测试集或验证集
+- 分层采样（stratify_by参数）有助于保持目标变量分布
+
+**多数据集工作流示例**：
+<code>
+# 1. 检查原始数据集
+main_data_info = inspect_dataframe_tool(dataset_id="main_data")
+
+# 2. 连接辅助数据集
+joined_data_result = join_dataframes_tool(
+    left_dataset_id="main_data",
+    right_dataset_id="reference_data",
+    join_type="left",
+    left_on="customer_id",
+    right_on="id"
+)
+
+# 3. 从连接结果创建分析子集
+analysis_subset_result = create_dataset_from_query_tool(
+    dataset_id=joined_data_result["new_dataset_id"],
+    query="purchase_amount > 100 and customer_type == 'premium'"
+)
+
+# 4. 创建训练集和测试集
+train_data_result = create_dataset_by_sampling_tool(
+    dataset_id=analysis_subset_result["new_dataset_id"],
+    frac=0.7,
+    stratify_by="target_variable",
+    random_state=42
+)
+
+test_data_result = create_dataset_from_query_tool(
+    dataset_id=analysis_subset_result["new_dataset_id"],
+    query=f"index not in {{train_data_result['creation_details']['sampled_indices']}}"
+)
+</code>
 
 **特征工程最佳实践**：
 - 使用create_column_tool处理缺失值和异常值
@@ -221,6 +291,54 @@ ensemble_id = create_composite_model_tool(
 # 6. 评估集成模型
 ensemble_eval = evaluate_model_tool(ensemble_id)
 </code>
+
+**预测与应用工作流**：
+1. 使用fit_model_tool训练模型或load_model_tool加载模型
+2. 使用evaluate_model_tool评估模型性能
+3. 使用predict_with_model_tool对新数据进行预测
+4. 分析预测结果，提取关键见解
+
+**模型预测工作流示例**：
+<code>
+# 1. 训练或加载模型
+model_id = create_model_tool(
+    model_type="random_forest_classifier",
+    hyperparams={{"n_estimators": 100, "max_depth": 10}}
+)
+trained_model_id = fit_model_tool(
+    model_id=model_id,
+    features=["feature1", "feature2", "feature3"],
+    target="target_variable"
+)
+
+# 2. 评估模型性能
+evaluation = evaluate_model_tool(trained_model_id)
+print(f"模型准确率: {{evaluation['metrics']['accuracy']}}")
+
+# 3. 使用模型进行预测
+prediction_result = predict_with_model_tool(
+    dataset_id="test_data",  # 包含新数据的数据集
+    model_id=trained_model_id,
+    input_features=["feature1", "feature2", "feature3"]  # 可选，默认使用训练时的特征
+)
+
+# 4. 分析预测结果
+prediction_dataset_id = prediction_result["prediction_dataset_id"]
+predictions_info = inspect_dataframe_tool(
+    dataset_id=prediction_dataset_id,
+    options={{
+        "n_rows_preview": 10,
+        "show_summary_stats": True
+    }}
+)
+</code>
+
+**预测结果解释最佳实践**：
+- 解释预测分布的特点（如均值、分位数、极值）
+- 识别异常预测并分析可能原因
+- 将预测结果与实际观察值对比（如有）
+- 针对分类问题，分析各类别的预测比例
+- 针对回归问题，评估预测值的范围是否符合业务逻辑
 
 ### 主动优化指导
 当用户要求优化模型性能时，请主动采取以下步骤：
@@ -325,29 +443,7 @@ SUMMARY_PROMPT = """\
    - 避免直接提及工具ID，而是描述执行的操作（如"进行了相关性分析"而非"使用correlation_analysis_tool"）
 
 ## 数据分析工具说明：
-- **数据探索与可视化**：
-  - analyze_data：进行灵活的探索性分析和可视化
-  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
-- **数据处理与特征工程**：
-  - create_column_tool：创建新列或转换现有列
-  - create_interaction_term_tool：创建特征交互项
-  - create_aggregated_feature_tool：创建基于分组聚合的特征
-- **数据分析**：
-  - correlation_analysis_tool：分析变量间相关性
-  - lag_analysis_tool：分析时间序列数据中的时滞关系
-  - detect_outliers_tool：检测异常值
-- **特征选择**：
-  - select_features_tool：自动选择最重要的特征子集
-  - analyze_feature_importance_tool：分析特征重要性
-- **模型训练与优化**：
-  - create_model_tool：创建机器学习模型实例（不训练）
-  - fit_model_tool：训练已创建的模型
-  - create_composite_model_tool：创建集成模型，组合多个已训练模型
-  - optimize_hyperparameters_tool：优化模型超参数
-  - plot_learning_curve_tool：评估模型性能随训练样本量的变化
-  - evaluate_model_tool：评估模型性能
-  - save_model_tool：保存训练好的模型
-  - load_model_tool：加载已保存的模型
+{tool_intro}
 
 ## 数据分析过程概括指南：
 1. 识别并总结用户进行的主要数据探索步骤
@@ -393,15 +489,6 @@ SUMMARY_PROMPT = """\
 """
 
 
-class AgentValues(TypedDict):
-    messages: list[AnyMessage]
-
-
-class AgentState(BaseModel):
-    values: AgentValues
-    models: dict[str, Path]
-
-
 TOOLS_TO_RESUME = {
     "create_column_tool": create_column,
     "create_interaction_term_tool": create_interaction_term,
@@ -409,16 +496,14 @@ TOOLS_TO_RESUME = {
 }
 
 
-def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFrame:
-    # 收集所有AI消息的tool_calls
-    all_tool_calls = []
-    for m in messages:
-        if isinstance(m, AIMessage) and m.tool_calls:
-            all_tool_calls.extend(m.tool_calls)
+def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
+    all_tool_calls = functools.reduce(
+        (lambda a, b: a + b),
+        (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
+    )
 
-    # 如果没有tool_calls，直接返回
     if not all_tool_calls:
-        return df
+        return
 
     for call in all_tool_calls:
         if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
@@ -426,7 +511,8 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
                 f"恢复工具调用: <y>{escape_tag(call['name'])}</> - {escape_tag(str(call['args']))}"
             )
             try:
-                result = tool(df=df, **call["args"])
+                dataset_id = cast("DatasetID", call["args"]["dataset_id"])
+                result = tool(df=sources[dataset_id].get_full(), **call["args"])
             except Exception as err:
                 logger.opt(colors=True, exception=True).warning(
                     f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(str(err))}"
@@ -436,7 +522,6 @@ def resume_tool_calls(df: pd.DataFrame, messages: list[AnyMessage]) -> pd.DataFr
                 logger.opt(colors=True).warning(
                     f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(result['message'])}"
                 )
-    return df
 
 
 def format_conversation(messages: list[AnyMessage], *, include_figures: bool) -> tuple[str, list[str]]:
@@ -480,40 +565,42 @@ def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object
 
 def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, tuple[str, list[str]]]:
     conversation, figures = format_conversation(messages, include_figures=True)
-    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation"])
-    return (lambda _: {"conversation": conversation}) | prompt | llm | (lambda s: (s, figures))
+    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation", "tool_intro"])
+    params = {"conversation": conversation, "tool_intro": TOOL_INTRO}
+    return (lambda _: params) | prompt | llm | (lambda s: (s, figures))
 
 
 class DataAnalyzerAgent:
     def __init__(
         self,
-        data_source: DataSource,
+        sources: Sources,
         llm: LLM,
         chat_model: BaseChatModel,
         session_id: str,
         *,
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
-        self.data_source = data_source
+        self.sources = sources
         self.llm = llm
         self.session_id = session_id
-        analyzer = analyzer_tool(data_source, llm)
-        df_tools = dataframe_tools(data_source.get_full)
-        sk_tools, models, saved_models = scikit_tools(data_source.get_full, session_id)
+
+        get_df, create_df = sources_fn(sources)
+        analyzer = analyzer_tool(sources, llm)
+        df_tools = dataframe_tools(get_df, create_df)
+        sk_tools, models, saved_models = scikit_tools(get_df, create_df, session_id)
+        sc_tools = sources_tools(sources)
 
         self.agent = create_react_agent(
             model=chat_model,
-            tools=[analyzer, *df_tools, *sk_tools],
-            prompt=SYSTEM_PROMPT.format(overview=data_source.format_overview()),
+            tools=[analyzer, *df_tools, *sk_tools, *sc_tools],
+            prompt=SYSTEM_PROMPT.format(
+                overview=format_sources_overview(sources),
+                tool_intro=TOOL_INTRO,
+            ),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
         )
-        self.config = ensure_config(
-            {
-                "recursion_limit": 200,
-                "configurable": {"thread_id": threading.get_ident()},
-            }
-        )
+        self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
         self.trained_models = models
         self.saved_models = saved_models
 
@@ -539,19 +626,19 @@ class DataAnalyzerAgent:
             return
 
         try:
-            state = AgentState.model_validate_json(state_file.read_bytes())
+            state = DataAnalyzerAgentState.model_validate_json(state_file.read_bytes())
         except ValueError:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
         self.agent.update_state(self.config, state.values)
         self.saved_models.update(state.models)
-        self.data_source.set_full_data(resume_tool_calls(self.data_source.get_full(), state.values["messages"]))
+        resume_tool_calls(self.sources, state.values["messages"])
         logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(state.values['messages'])}</>")
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
-        state = AgentState(
+        state = DataAnalyzerAgentState(
             values=cast("AgentValues", self.agent.get_state(self.config).values),
             models=self.saved_models,
         )

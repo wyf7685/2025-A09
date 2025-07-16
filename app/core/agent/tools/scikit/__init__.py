@@ -3,14 +3,13 @@ import base64
 import contextlib
 import json
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, cast
 
-import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
 from app.const import MODEL_DIR
+from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID
 from app.log import logger
 from app.services.model_registry import model_registry
 from app.utils import escape_tag
@@ -22,6 +21,7 @@ from .model import (
     EvaluateModelResult,
     ModelInstanceInfo,
     ModelMetadata,
+    PredictionResult,
     SaveModelResult,
     TrainModelResult,
     create_model,
@@ -29,6 +29,7 @@ from .model import (
     fit_model,
     load_model,
     load_model_metadata,
+    predict_with_model,
     save_model,
 )
 from .model_composite import (
@@ -80,7 +81,8 @@ type ModelID = str
 
 
 def scikit_tools(
-    df_ref: Callable[[], pd.DataFrame],
+    get_df: DatasetGetter,
+    create_df: DatasetCreator,
     session_id: str,
 ) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
@@ -164,6 +166,7 @@ def scikit_tools(
 
     @tool
     def fit_model_tool(
+        dataset_id: DatasetID,
         model_id: ModelID,
         features: list[str],
         target: str,
@@ -174,6 +177,7 @@ def scikit_tools(
         使用指定的模型实例和数据进行训练。
 
         Args:
+            dataset_id (str): 操作的数据集ID。
             model_id (str): 由create_model_tool或create_composite_model_tool创建的模型ID
             features (list[str]): 特征列的名称列表。
             target (str): 目标列的名称。
@@ -198,7 +202,9 @@ def scikit_tools(
                 f"特征: <c>{escape_tag(str(features))}</c>，"
                 f"目标: <e>{escape_tag(target)}</e>"
             )
-            result = fit_model(df_ref(), features, target, model, model_type, test_size, random_state, hyperparams)
+            result = fit_model(
+                get_df(dataset_id), features, target, model, model_type, test_size, random_state, hyperparams
+            )
 
             train_model_cache[model_id] = result
             return _format_train_result_for_llm(model_id, result)
@@ -367,7 +373,7 @@ def scikit_tools(
         return result
 
     @tool
-    def load_model_tool(model_id: ModelID) -> ModelMetadata:
+    def load_model_tool(dataset_id: DatasetID, model_id: ModelID) -> ModelMetadata:
         """
         从文件加载训练好的机器学习模型，恢复模型的使用能力。
 
@@ -382,6 +388,7 @@ def scikit_tools(
         注意：加载模型后无需重新训练，可以直接使用模型ID进行其他操作。
 
         Args:
+            dataset_id (str): 关联的数据集ID。
             model_id (str): 模型ID，由之前会话中的 `fit_model_tool` 返回并通过 `save_model_tool` 保存。
 
         Returns:
@@ -392,7 +399,7 @@ def scikit_tools(
 
         file_path = saved_models[model_id]
         logger.opt(colors=True).info(f"<g>加载模型</>: <c>{escape_tag(str(file_path))}</>")
-        metadata, train_result = load_model(df_ref(), file_path)
+        metadata, train_result = load_model(get_df(dataset_id), file_path)
         train_model_cache[model_id] = train_result
         return metadata
 
@@ -408,7 +415,36 @@ def scikit_tools(
         return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
 
     @tool
+    def predict_with_model_tool(
+        dataset_id: DatasetID,
+        model_id: ModelID,
+        input_features: list[str] | None = None,
+    ) -> PredictionResult:
+        """
+        使用训练好的模型进行预测，并将预测结果保存到新的DataFrame中。
+        新DataFrame将包含以下列:
+            - `predictions`: 模型预测结果
+            - `predictions_decoded`: 如果是分类任务，包含解码后的预测结果
+
+        Args:
+            dataset_id (str): 要进行预测的输入数据集ID。
+            model_id (str): 模型ID，由 `fit_model_tool` 返回。
+            input_features (list[str], optional): 输入数据的特征列名列表。如果不提供，将使用训练时使用的特征列。
+
+        Returns:
+            dict: 包含预测结果的字典
+        """
+        if model_id not in train_model_cache:
+            raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
+
+        logger.opt(colors=True).info(f"<g>使用模型进行预测</>, ID = <c>{escape_tag(model_id)}</>")
+        prediction, result = predict_with_model(train_model_cache[model_id], get_df(dataset_id), input_features)
+        result["prediction_dataset_id"] = create_df(prediction)
+        return result
+
+    @tool
     def select_features_tool(
+        dataset_id: DatasetID,
         features: list[str],
         target: str,
         method: str = "rf_importance",
@@ -420,6 +456,7 @@ def scikit_tools(
         使用多种方法自动选择最重要的特征子集。
 
         Args:
+            dataset_id (str): 操作的数据集ID。
             features (list[str]): 候选特征列表
             target (str): 目标变量列名
             method (str): 特征选择方法，可选:
@@ -440,7 +477,7 @@ def scikit_tools(
         logger.opt(colors=True).info(
             f"<g>开始特征选择</>，方法: <y>{escape_tag(method)}</>, 候选特征数: <c>{len(features)}</>"
         )
-        result, figure = select_features(df_ref(), features, target, method, task_type, n_features, threshold)
+        result, figure = select_features(get_df(dataset_id), features, target, method, task_type, n_features, threshold)
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
@@ -450,6 +487,7 @@ def scikit_tools(
 
     @tool
     def analyze_feature_importance_tool(
+        dataset_id: DatasetID,
         features: list[str],
         target: str,
         method: str = "rf_importance",
@@ -459,6 +497,7 @@ def scikit_tools(
         分析特征重要性，帮助理解哪些特征对目标变量影响最大。
 
         Args:
+            dataset_id (str): 操作的数据集ID。
             features (list[str]): 要分析的特征列表
             target (str): 目标变量列名
             method (str): 特征重要性计算方法，可选:
@@ -475,7 +514,7 @@ def scikit_tools(
         logger.opt(colors=True).info(
             f"<g>开始分析特征重要性</>，方法: <y>{escape_tag(method)}</>, 特征数: <c>{len(features)}</>"
         )
-        result, figure = analyze_feature_importance(df_ref(), features, target, method, task_type)
+        result, figure = analyze_feature_importance(get_df(dataset_id), features, target, method, task_type)
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
@@ -485,6 +524,7 @@ def scikit_tools(
 
     @tool
     def optimize_hyperparameters_tool(
+        dataset_id: DatasetID,
         features: list[str],
         target: str,
         model_type: str = "random_forest",
@@ -499,6 +539,7 @@ def scikit_tools(
         使用网格搜索或随机搜索优化机器学习模型的超参数。
 
         Args:
+            dataset_id (str): 操作的数据集ID。
             features: 特征列名列表
             target: 目标变量列名
             model_type: 模型类型，可选:
@@ -522,7 +563,7 @@ def scikit_tools(
             f"<g>开始超参数优化</>，模型: <e>{escape_tag(model_type)}</>, 方法: <y>{escape_tag(method)}</>"
         )
         result, figure = optimize_hyperparameters(
-            df_ref(), features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
+            get_df(dataset_id), features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
         )
 
         artifact = {}
@@ -535,6 +576,7 @@ def scikit_tools(
 
     @tool
     def plot_learning_curve_tool(
+        dataset_id: DatasetID,
         features: list[str],
         target: str,
         model_type: str = "random_forest",
@@ -548,6 +590,7 @@ def scikit_tools(
         学习曲线可以帮助诊断模型是否存在偏差或方差问题。
 
         Args:
+            dataset_id (str): 操作的数据集ID。
             features: 特征列名列表
             target: 目标变量列名
             model_type: 模型类型，与optimize_hyperparameters_tool相同
@@ -561,7 +604,7 @@ def scikit_tools(
         """
         logger.opt(colors=True).info(f"<g>开始生成学习曲线</>，模型: <e>{escape_tag(model_type)}</>")
         result, figure = plot_learning_curve(
-            df_ref(), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
+            get_df(dataset_id), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
         )
 
         artifact = {}
@@ -589,6 +632,7 @@ def scikit_tools(
         save_model_tool,
         load_model_tool,
         list_saved_models_tool,
+        predict_with_model_tool,
     ]
 
     return tools, train_model_cache, saved_models

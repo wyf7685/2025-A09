@@ -1,10 +1,10 @@
 import base64
 
-from langchain_core.tools import Tool
+from langchain_core.tools import BaseTool, tool
 
+from app.core.agent.schemas import DatasetID, Sources
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
-from app.core.datasource import DataSource
 from app.core.executor import CodeExecutor, format_result
 from app.log import logger
 from app.utils import escape_tag
@@ -32,26 +32,33 @@ TOOL_DESCRIPTION = """\
 - 异常检测(使用detect_outliers_tool代替)
 - 模型训练(使用train_model_tool代替)
 
-使用方式：提供具体的分析需求描述，无需自己编写代码。
+使用方式：提供要用于数据分析的数据集ID和具体的分析需求描述，无需自己编写代码。
 """
 
 
-def analyzer_tool(data_source: DataSource, llm: LLM) -> Tool:
+def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
     Args:
-        df (pd.DataFrame): 要用于数据分析的DataFrame。
+        sources (Sources): 要用于数据分析的数据集。
         llm (LLM): 用于生成分析代码的语言模型。
 
     Returns:
         Tool: 用于数据分析的LangChain工具。
     """
-    analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(data_source))
+    analyzers: dict[DatasetID, NL2DataAnalysis] = {}
 
-    def analyze(query: str) -> tuple[str, dict[str, str]]:
+    @tool(description=TOOL_DESCRIPTION)
+    def analyze_data(dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
+        if not (source := sources.get(dataset_id)):
+            raise ValueError(f"数据集 {dataset_id} 不存在")
+
+        if dataset_id not in analyzers:
+            analyzers[dataset_id] = NL2DataAnalysis(llm, executor=CodeExecutor(source))
+
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = analyzer.invoke((data_source, query))
+        result = analyzers[dataset_id].invoke((source, query))
 
         # 处理图片结果
         artifact = {}
@@ -65,10 +72,5 @@ def analyzer_tool(data_source: DataSource, llm: LLM) -> Tool:
 
         return format_result(result), artifact
 
-    tool = Tool(
-        name="analyze_data",
-        description=TOOL_DESCRIPTION,
-        func=analyze,
-    )
-    tool.response_format = "content_and_artifact"
-    return tool
+    analyze_data.response_format = "content_and_artifact"
+    return analyze_data

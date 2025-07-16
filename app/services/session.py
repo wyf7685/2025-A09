@@ -23,7 +23,7 @@ class SessionService:
 
     def create_session(self, dataset_id: str, name: str | None = None) -> Session:
         session_id = str(uuid.uuid4())
-        session = Session(id=session_id, dataset_id=dataset_id, name=name)
+        session = Session(id=session_id, dataset_ids=[dataset_id], name=name)
         self.save_session(session)
         self.sessions[session_id] = session
         return session

@@ -1,15 +1,11 @@
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 import pandas as pd
 
+from app.core.agent.schemas import OperationFailed
 from app.log import logger
 from app.utils import escape_tag
-
-
-class OperationFailed(TypedDict):
-    success: Literal[False]
-    message: str
 
 
 class CreateColumnResult(TypedDict):

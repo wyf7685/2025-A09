@@ -2,8 +2,9 @@ from pathlib import Path
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
+from app.core.agent.schemas import Sources
 from app.core.chain import get_chat_model, get_llm, rate_limiter
-from app.core.datasource import create_csv_source
+from app.core.datasource import create_file_source
 from app.log import logger
 from app.utils import escape_tag
 
@@ -17,9 +18,21 @@ def log_event(event: StreamEvent) -> None:
                 f"开始工具调用: <c>{event.id}</>\n{escape_tag(event.name)}({escape_tag(str(event.args))})"
             )
         case "tool_result":
-            logger.opt(colors=True).info(f"工具调用结果: <c>{event.id}</>\n{escape_tag(str(event.result))}")
+            logger.opt(colors=True).info(f"工具调用结果: <c>{event.id}</>\n{escape_tag(str(event.result)[:1000])}")
         case "tool_error":
             logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
+
+
+def prefetch_data(sources: Sources) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor() as executor:
+        futures = {source_id: executor.submit(source.get_full) for source_id, source in sources.items()}
+        for source_id, future in futures.items():
+            try:
+                future.result()
+            except Exception:
+                logger.exception(f"数据加载失败: {source_id}")
 
 
 def test_agent() -> None:
@@ -27,9 +40,16 @@ def test_agent() -> None:
     limiter = rate_limiter(14)
     llm = limiter | get_llm()
 
-    data_source = create_csv_source(Path("test.csv"))
+    # See 飞桨/碳中和—工业废气排放检测
+    test_data_dir = Path("data/test")
+    sources: Sources = {
+        "train": create_file_source(test_data_dir / "train.csv", sep="\t"),
+        "test": create_file_source(test_data_dir / "test.csv", sep="\t"),
+    }
+    prefetch_data(sources)
+
     agent = DataAnalyzerAgent(
-        data_source=data_source,
+        sources=sources,
         llm=llm,
         chat_model=get_chat_model(),
         session_id="TEST",
