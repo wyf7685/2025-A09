@@ -63,7 +63,7 @@ class DremioDataSource(DataSource):
     @override
     def copy(self) -> "DremioDataSource":
         """创建 Dremio 数据源的副本"""
-        return DremioDataSource(source=self.source, metadata=self.metadata.copy())
+        return DremioDataSource(source=self.source, metadata=self.metadata.model_copy())
 
     @property
     @override

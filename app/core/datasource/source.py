@@ -1,31 +1,27 @@
 import abc
-import dataclasses
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 import pandas as pd
+from pydantic import BaseModel, Field
 
 from app.log import logger
 
 
-@dataclass
-class DataSourceMetadata:
+class DataSourceMetadata(BaseModel):
     """数据源元数据"""
 
     id: str
     name: str
-    source_type: str  # 'csv', 'postgres', 'dremio' 等
-    created_at: datetime = field(default_factory=datetime.now)
+    source_type: str
+    created_at: datetime = Field(default_factory=datetime.now)
     description: str = ""
     row_count: int | None = None
     column_count: int | None = None
     columns: list[str] | None = None
     dtypes: dict[str, str] | None = None
     preview_rows: int = 5
-
-    def copy(self) -> "DataSourceMetadata":
-        return DataSourceMetadata(**dataclasses.asdict(self))
+    column_aliases: dict[str, str] | None = None
 
 
 class DataSource(abc.ABC):
@@ -135,11 +131,8 @@ class DataSource(abc.ABC):
         """
         logger.debug("获取数据源完整数据")
         if self._full_data is None:
-            self._full_data = self._load(None)
-
-            # 更新元数据
-            if self.metadata.row_count is None:
-                self.metadata.row_count = len(self._full_data)
+            self.set_full_data(self._load())
+            assert self._full_data is not None
 
         return self._full_data
 
@@ -161,9 +154,24 @@ class DataSource(abc.ABC):
         self.metadata.columns = data.columns.tolist()
         self.metadata.dtypes = {col: str(dtype) for col, dtype in data.dtypes.items()}
 
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典表示"""
-        return dataclasses.asdict(self.metadata)
+    def format_overview(self) -> str:
+        df = self.get_preview(self.metadata.preview_rows)
+        w, h = self.get_shape()
+        column_alias = (
+            (f"列别名:\n{aliases}\n" + "".join(f"  {col}: {alias}\n" for col, alias in aliases.items()) + "\n")
+            if (aliases := self.metadata.column_aliases)
+            else ""
+        )
+
+        return (
+            f"数据规模: {w} 行 × {h} 列\n"
+            f"列数据类型:\n{df.dtypes}\n"
+            f"数据源名称: {self.metadata.name}\n"
+            f"数据源描述: {self.metadata.description or '无'}\n"
+            f"列名:\n{df.columns.tolist()}\n"
+            f"{column_alias}"
+            f"数据预览:\n{df.to_string()}\n"
+        )
 
     @abc.abstractmethod
     def copy[S](self: S) -> S:

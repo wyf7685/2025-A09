@@ -8,7 +8,7 @@ from .source import DataSource, DataSourceMetadata
 
 
 class CSVDataSourceModel(BaseModel):
-    file_path: str
+    file_path: Path
     metadata: DataSourceMetadata
     pandas_kwargs: dict[str, Any] = {}
 
@@ -52,7 +52,7 @@ class CSVDataSource(DataSource):
 
     @override
     def copy(self) -> "CSVDataSource":
-        return CSVDataSource(file_path=self.file_path, metadata=self.metadata.copy(), **self.pandas_kwargs)
+        return CSVDataSource(file_path=self.file_path, metadata=self.metadata.model_copy(), **self.pandas_kwargs)
 
     @property
     @override
@@ -63,7 +63,7 @@ class CSVDataSource(DataSource):
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """序列化 CSV 数据源"""
         return "csv", CSVDataSourceModel(
-            file_path=str(self.file_path),
+            file_path=self.file_path,
             metadata=self.metadata,
             pandas_kwargs=self.pandas_kwargs,
         ).model_dump(mode="json")

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.core.chain.llm import LLM
 from app.core.datasource import DataSource
 from app.log import logger
-from app.utils import escape_tag, format_overview
+from app.utils import escape_tag
 
 from .events import StreamEvent, fix_message_content, process_stream_event
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
@@ -504,7 +504,7 @@ class DataAnalyzerAgent:
         self.agent = create_react_agent(
             model=chat_model,
             tools=[analyzer, *df_tools, *sk_tools],
-            prompt=SYSTEM_PROMPT.format(overview=format_overview(data_source.get_preview())),
+            prompt=SYSTEM_PROMPT.format(overview=data_source.format_overview()),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
         )

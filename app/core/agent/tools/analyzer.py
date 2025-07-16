@@ -7,7 +7,7 @@ from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.datasource import DataSource
 from app.core.executor import CodeExecutor, format_result
 from app.log import logger
-from app.utils import escape_tag, format_overview
+from app.utils import escape_tag
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -48,11 +48,10 @@ def analyzer_tool(data_source: DataSource, llm: LLM) -> Tool:
         Tool: 用于数据分析的LangChain工具。
     """
     analyzer = NL2DataAnalysis(llm, executor=CodeExecutor(data_source))
-    overview = format_overview(data_source.get_preview())
 
     def analyze(query: str) -> tuple[str, dict[str, str]]:
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = analyzer.invoke((overview, query))
+        result = analyzer.invoke((data_source, query))
 
         # 处理图片结果
         artifact = {}

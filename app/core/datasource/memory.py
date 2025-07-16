@@ -45,7 +45,7 @@ class InMemoryDataSource(DataSource):
     @override
     def copy(self) -> "InMemoryDataSource":
         """创建内存数据源的副本"""
-        return InMemoryDataSource(df=self._data.copy(), metadata=self.metadata.copy())
+        return InMemoryDataSource(df=self._data.copy(), metadata=self.metadata.model_copy())
 
     @property
     @override
