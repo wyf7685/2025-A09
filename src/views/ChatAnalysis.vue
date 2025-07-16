@@ -550,9 +550,8 @@ const sendMessage = async (): Promise<void> => {
 onMounted(async () => {
   await loadSessions()
   await dataSourceStore.listDataSources() // 加载数据源
-
   if (currentSessionId) {
-    await refreshChatHistory()
+    refreshChatHistory()
   }
 })
 </script>
