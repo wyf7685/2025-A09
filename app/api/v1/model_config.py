@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.log import logger
-from app.services.custom_model import CustomModelConfig, custom_model_manager
+from app.schemas.custom_model import CustomModelConfig, LLModelID
+from app.services.custom_model import custom_model_manager
 
 router = APIRouter(prefix="/models")
 
@@ -25,10 +26,6 @@ class CustomModelRequest(BaseModel):
     api_url: str
     api_key: str
     model_name: str
-
-
-class ModelsResponse(BaseModel):
-    models: list[ModelInfo]
 
 
 @router.post("/custom")
@@ -52,12 +49,16 @@ async def set_custom_model(request: CustomModelRequest) -> dict:
 
 
 @router.get("/custom/{model_id}")
-async def get_custom_model(model_id: str) -> CustomModelConfig:
+async def get_custom_model(model_id: LLModelID) -> CustomModelConfig:
     """获取自定义模型配置"""
     config = custom_model_manager.get_model(model_id)
     if not config:
         raise HTTPException(status_code=404, detail="自定义模型未找到")
     return config
+
+
+class ModelsResponse(BaseModel):
+    models: list[ModelInfo]
 
 
 @router.get("/available")

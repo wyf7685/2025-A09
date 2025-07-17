@@ -3,20 +3,9 @@
 管理用户自定义的API模型配置
 """
 
-from pydantic import BaseModel
 
 from app.log import logger
-
-
-class CustomModelConfig(BaseModel):
-    """自定义模型配置"""
-
-    id: str
-    name: str
-    provider: str
-    api_url: str
-    api_key: str
-    model_name: str  # 实际调用的模型名称
+from app.schemas.custom_model import CustomModelConfig
 
 
 class CustomModelManager:

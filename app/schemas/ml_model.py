@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, computed_field
 
+from app.schemas.session import SessionID
+
 
 class MLModelInfoOut(BaseModel):
     """模型信息"""
@@ -13,7 +15,7 @@ class MLModelInfoOut(BaseModel):
     description: str = ""
     created_at: str
     last_used: str = ""
-    session_id: str = ""
+    session_id: SessionID = ""
     dataset_id: str = ""
 
     # 模型性能指标

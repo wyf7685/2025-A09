@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.log import logger
-from app.schemas.session import Session, SessionListItem
+from app.schemas.session import Session, SessionID, SessionListItem
 from app.services.datasource import datasource_service
 from app.services.session import session_service
 
@@ -49,7 +49,7 @@ class UpdateSessionRequest(BaseModel):
 
 
 @router.put("/sessions/{session_id}", response_model=Session)
-async def update_session(session_id: str, request: UpdateSessionRequest) -> Session:
+async def update_session(session_id: SessionID, request: UpdateSessionRequest) -> Session:
     """
     更新会话信息
 
@@ -76,7 +76,7 @@ async def update_session(session_id: str, request: UpdateSessionRequest) -> Sess
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str) -> Session:
+async def get_session(session_id: SessionID) -> Session:
     """获取会话信息"""
     if session := session_service.get_session(session_id):
         return session
@@ -94,7 +94,7 @@ async def get_sessions() -> list[SessionListItem]:
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str) -> dict[str, Any]:
+async def delete_session(session_id: SessionID) -> dict[str, Any]:
     """删除会话"""
     try:
         if not session_service.session_exists(session_id):

@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from app.core.config import settings
 from app.log import logger
+from app.schemas.custom_model import LLModelID
 from app.services.custom_model import custom_model_manager
 
 type LLM = Runnable[LanguageModelInput, str]
@@ -69,7 +70,7 @@ def get_llm() -> LLM:
     return OllamaLLM(model=model_name)
 
 
-def get_chat_model(model_id: str | None = None) -> BaseChatModel:
+def get_chat_model(model_id: LLModelID | None = None) -> BaseChatModel:
     """获取指定的聊天模型实例"""
     model_name = model_id or settings.TEST_MODEL_NAME
 

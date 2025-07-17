@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
+from app.schemas.session import SessionID
 from app.services.agent import AgentInUse, AgentNotFound, daa_service
 from app.services.session import session_service
 
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/chat")
 
 
 class ChatRequest(BaseModel):
-    session_id: str
+    session_id: SessionID
     message: str
     model_id: str = "gemini-2.0-flash"  # 默认模型
 
@@ -85,12 +86,12 @@ async def chat_analysis_stream(request: ChatRequest) -> StreamingResponse:
 
 
 class SummaryRequest(BaseModel):
-    session_id: str
+    session_id: SessionID
     model_id: str | None = None
 
 
 class SummaryResponse(BaseModel):
-    session_id: str
+    session_id: SessionID
     summary: str
     figures: list[str]
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())

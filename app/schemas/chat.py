@@ -1,10 +1,11 @@
 import json
 from datetime import datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.agent.events import StreamEvent
+if TYPE_CHECKING:
+    from app.core.agent.events import StreamEvent
 
 
 class UserChatMessage(BaseModel):
@@ -53,7 +54,7 @@ class ChatEntry(BaseModel):
     user_message: UserChatMessage
     assistant_response: AssistantChatMessage = Field(default_factory=AssistantChatMessage)
 
-    def add_stream_event(self, event: StreamEvent) -> None:
+    def add_stream_event(self, event: "StreamEvent") -> None:
         resp = self.assistant_response
         match event.type:
             case "llm_token":

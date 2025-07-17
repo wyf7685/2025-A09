@@ -24,6 +24,7 @@ from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, s
 from app.core.agent.tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 from app.core.chain.llm import LLM
 from app.log import logger
+from app.schemas.session import SessionID
 from app.utils import escape_tag
 
 PROMPT_DIR = Path(__file__).parent / "prompts" / "data_analyzer"
@@ -127,7 +128,7 @@ class DataAnalyzerAgent:
         sources: Sources,
         llm: LLM,
         chat_model: BaseChatModel,
-        session_id: str,
+        session_id: SessionID,
         *,
         # for rate limiting
         pre_model_hook: RunnableLambda | None = None,

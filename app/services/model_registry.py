@@ -13,6 +13,7 @@ from app.const import DATA_DIR, MODEL_DIR
 from app.core.lifespan import lifespan
 from app.log import logger
 from app.schemas.ml_model import MLModelInfo
+from app.schemas.session import SessionID
 
 _models_ta = TypeAdapter(dict[str, MLModelInfo])
 
@@ -49,7 +50,7 @@ class ModelRegistry:
         self,
         name: str,
         model_type: str,
-        session_id: str,
+        session_id: SessionID,
         dataset_id: str,
         description: str,
         features: list[str],
@@ -90,7 +91,7 @@ class ModelRegistry:
         """获取模型信息"""
         return self._models.get(model_id)
 
-    def list_models(self, session_id: str | None = None) -> list[MLModelInfo]:
+    def list_models(self, session_id: SessionID | None = None) -> list[MLModelInfo]:
         """列出所有模型"""
         models = list(self._models.values())
         if session_id:
@@ -143,7 +144,7 @@ class ModelRegistry:
         """获取模型总数"""
         return len(self._models)
 
-    def get_session_models(self, session_id: str) -> list[MLModelInfo]:
+    def get_session_models(self, session_id: SessionID) -> list[MLModelInfo]:
         """获取会话的所有模型"""
         return [m for m in self._models.values() if m.session_id == session_id]
 

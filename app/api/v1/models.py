@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.log import logger
 from app.schemas.ml_model import MLModelInfoOut
+from app.schemas.session import SessionID
 from app.services.model_registry import model_registry
 
 router = APIRouter()
@@ -22,7 +23,7 @@ class GetModelsResponse(BaseModel):
 
 
 @router.get("/models")
-async def get_trained_models(session_id: str) -> dict[str, Sequence[MLModelInfoOut]]:
+async def get_trained_models(session_id: SessionID) -> dict[str, Sequence[MLModelInfoOut]]:
     """获取已训练的模型列表"""
     try:
         if not session_id:

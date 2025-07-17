@@ -4,39 +4,24 @@ from collections.abc import AsyncGenerator
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm
+from app.exception import AgentInUse, AgentNotFound
 from app.log import logger
-from app.schemas.session import Session
+from app.schemas.custom_model import LLModelID
+from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
 from app.utils import run_sync
-
-type SessionID = str
-type ModelID = str
-
-
-class DAAServiceError(Exception):
-    pass
-
-
-class AgentNotFound(DAAServiceError):
-    def __init__(self, session_id: SessionID) -> None:
-        super().__init__(f"Agent not found for session {session_id}")
-
-
-class AgentInUse(DAAServiceError):
-    def __init__(self, session_id: SessionID) -> None:
-        super().__init__(f"Agent for session {session_id} is currently in use")
 
 
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
-        self.agents: dict[SessionID, tuple[ModelID | None, DataAnalyzerAgent]] = {}
+        self.agents: dict[SessionID, tuple[LLModelID | None, DataAnalyzerAgent]] = {}
         self.in_use: dict[SessionID, bool] = {}
 
     @run_sync
     def create_agent(
         self,
         session: Session,
-        model_id: ModelID | None = None,
+        model_id: LLModelID | None = None,
     ) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
         state_file = STATE_DIR / f"{session.id}.json"
@@ -55,7 +40,7 @@ class DataAnalyzerAgentService:
     def get_agent(
         self,
         session: Session,
-        model_id: ModelID | None = None,
+        model_id: LLModelID | None = None,
     ) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
         previous, agent = self.agents.get(session.id, (None, None))
@@ -82,7 +67,7 @@ class DataAnalyzerAgentService:
     async def use_agent(
         self,
         session: Session,
-        model_id: ModelID | None = None,
+        model_id: LLModelID | None = None,
         *,
         create_if_non_exist: bool,
     ) -> AsyncGenerator[DataAnalyzerAgent]:

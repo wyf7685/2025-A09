@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from app.const import MODEL_DIR
 from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID
 from app.log import logger
+from app.schemas.session import SessionID
 from app.services.model_registry import model_registry
 from app.utils import escape_tag
 
@@ -83,7 +84,7 @@ type ModelID = str
 def scikit_tools(
     get_df: DatasetGetter,
     create_df: DatasetCreator,
-    session_id: str,
+    session_id: SessionID,
 ) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
     train_model_cache: dict[ModelID, TrainModelResult] = {}

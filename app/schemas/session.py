@@ -4,9 +4,11 @@ from pydantic import BaseModel, Field
 
 from .chat import ChatEntry
 
+type SessionID = str
+
 
 class Session(BaseModel):
-    id: str
+    id: SessionID
     dataset_ids: list[str]
     name: str | None = None
     chat_history: list[ChatEntry] = Field(default_factory=list)
@@ -14,7 +16,7 @@ class Session(BaseModel):
 
 
 class SessionListItem(BaseModel):
-    id: str
+    id: SessionID
     name: str
     created_at: str
     chat_count: int

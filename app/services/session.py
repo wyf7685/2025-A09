@@ -5,14 +5,14 @@ from pathlib import Path
 from app.const import SESSION_DIR
 from app.core.lifespan import lifespan
 from app.log import logger
-from app.schemas.session import Session, SessionListItem
+from app.schemas.session import Session, SessionID, SessionListItem
 
 
 class SessionService:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
 
-    def session_exists(self, session_id: str) -> bool:
+    def session_exists(self, session_id: SessionID) -> bool:
         if session_id in self.sessions:
             return True
         try:
@@ -28,7 +28,7 @@ class SessionService:
         self.sessions[session_id] = session
         return session
 
-    def get_session(self, session_id: str) -> Session | None:
+    def get_session(self, session_id: SessionID) -> Session | None:
         if session_id in self.sessions:
             return self.sessions[session_id]
         with contextlib.suppress(Exception):
@@ -44,7 +44,7 @@ class SessionService:
             except Exception:
                 logger.opt(exception=True).warning(f"Failed to load session from {fp}")
 
-    def load_session(self, session_id: str | Path) -> Session:
+    def load_session(self, session_id: SessionID | Path) -> Session:
         fp = SESSION_DIR / f"{session_id}.json" if isinstance(session_id, str) else session_id
         if not fp.exists():
             raise KeyError(f"Session with id {session_id} not found")
@@ -79,7 +79,7 @@ class SessionService:
             for session in self.sessions.values()
         ]
 
-    def delete_session(self, session_id: str) -> None:
+    def delete_session(self, session_id: SessionID) -> None:
         if session_id not in self.sessions:
             # 检查文件是否存在，如果存在则尝试加载后再删除
             fp = SESSION_DIR / f"{session_id}.json"
