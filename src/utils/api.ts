@@ -84,6 +84,8 @@ export const checkHealth = async (): Promise<{ status: string }> => {
 export interface DataQualityReport {
   is_valid: boolean;
   quality_score: number;
+  total_rows?: number;
+  total_columns?: number;
   issues: Array<{
     type: string;
     column?: string;
@@ -110,6 +112,9 @@ export interface CleaningSuggestion {
     description: string;
   }>;
   severity: string;
+  priority?: string;
+  impact?: string;
+  reason?: string;
   column: string;
   type: string;
 }
@@ -121,7 +126,7 @@ export interface CleaningAction {
 }
 
 export interface ApiResponse {
-  file_info: {
+  file_info?: {
     file_id: string;
     original_filename: string;
     user_filename: string;
@@ -129,13 +134,41 @@ export interface ApiResponse {
     upload_time: string;
     file_size: number;
   };
-  quality_check: DataQualityReport;
-  cleaning_suggestions: CleaningSuggestion[];
+  quality_check?: DataQualityReport;
+  quality_report?: DataQualityReport;
+  cleaning_suggestions?: CleaningSuggestion[];
+  field_mappings?: Record<string, string>;
   status: string;
+  success?: boolean;
+  error?: string;
+  summary?: string;
+  quality_score?: number;
 }
 
 export const cleaningAPI = {
-  // 检查文件数据质量
+  // 使用智能Agent分析数据质量并生成清洗建议
+  analyzeDataQuality: async (
+    file: File,
+    userRequirements?: string,
+    modelName?: string
+  ): Promise<ApiResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (userRequirements) {
+      formData.append('user_requirements', userRequirements);
+    }
+    if (modelName) {
+      formData.append('model_name', modelName);
+    }
+    const response = await api.post('/clean/analyze', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 检查文件数据质量（保持向后兼容）
   checkDataQuality: async (file: File): Promise<ApiResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -147,10 +180,16 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 获取清洗建议
-  getCleaningSuggestions: async (file: File): Promise<CleaningSuggestion[]> => {
+  // 获取清洗建议（支持用户自定义要求）
+  getCleaningSuggestions: async (
+    file: File,
+    userRequirements?: string
+  ): Promise<CleaningSuggestion[]> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (userRequirements) {
+      formData.append('user_requirements', userRequirements);
+    }
     const response = await api.post('/clean/suggestions', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -175,15 +214,59 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 获取详细的质量报告
-  getQualityReport: async (file: File): Promise<DataQualityReport> => {
+  // 获取详细的质量报告（支持用户自定义要求）
+  getQualityReport: async (
+    file: File,
+    userRequirements?: string
+  ): Promise<DataQualityReport> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (userRequirements) {
+      formData.append('user_requirements', userRequirements);
+    }
     const response = await api.post('/clean/quality-report', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  },
+
+  // 获取字段映射（LLM猜测字段名）
+  getFieldMapping: async (
+    file: File,
+    userRequirements?: string,
+    modelName?: string
+  ): Promise<{
+    field_mappings: Record<string, string>;
+    summary: string;
+    status: string;
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (userRequirements) {
+      formData.append('user_requirements', userRequirements);
+    }
+    if (modelName) {
+      formData.append('model_name', modelName);
+    }
+    const response = await api.post('/clean/field-mapping', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 健康检查
+  healthCheck: async (): Promise<{
+    status: string;
+    service: string;
+    agent_status: string;
+    timestamp: string;
+    version: string;
+  }> => {
+    const response = await api.get('/clean/health');
     return response.data;
   },
 };

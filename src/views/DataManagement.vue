@@ -5,8 +5,8 @@ import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
 import { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
 import {
-  ArrowRight, Back, Check, CircleCheck, CircleClose, Connection, Delete, DocumentChecked, DocumentCopy, Edit,
-  EditPen, InfoFilled, QuestionFilled, Refresh, RefreshRight, Search, Upload, UploadFilled, View, Warning
+  ArrowDown, ArrowRight, Back, Check, CircleCheck, CircleClose, Connection, DataAnalysis, Delete, Document, DocumentChecked, DocumentCopy, Edit,
+  EditPen, Grid, InfoFilled, QuestionFilled, Refresh, RefreshRight, Search, Upload, UploadFilled, View, Warning
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { onMounted, ref, watch } from 'vue'
@@ -49,14 +49,28 @@ const dataCleaningDialogVisible = ref(false)
 const currentUploadFile = ref<File | null>(null)
 const dataQualityReport = ref<DataQualityReport | null>(null)
 const cleaningSuggestions = ref<CleaningSuggestion[]>([])
+const fieldMappings = ref<Record<string, string>>({})
 const isAnalyzing = ref(false)
 const isCleaning = ref(false)
 const fileMetadata = ref({
   name: '',
   description: ''
 })
+const userRequirements = ref('')
 const selectedCleaningActions = ref<CleaningAction[]>([])
 const cleaningStep = ref<'upload' | 'analysis' | 'cleaning' | 'complete'>('upload')
+const analysisResult = ref<any>(null)
+
+// 智能分析相关
+const isSmartAnalyzing = ref(false)
+const showAdvancedOptions = ref(false)
+const selectedModel = ref('')
+const availableModels = ref([
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (推荐)' },
+  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+  { value: 'gpt-4', label: 'GPT-4' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+])
 
 const fetchDatasets = async () => {
   isLoading.value = true
@@ -104,10 +118,17 @@ const handleFileUpload = async (options: any) => {
   currentUploadFile.value = file
   fileMetadata.value.name = file.name.replace(/\.[^/.]+$/, '') // 移除文件扩展名
   fileMetadata.value.description = ''
+  userRequirements.value = ''
+  selectedModel.value = availableModels.value[0].value
   dataCleaningDialogVisible.value = true
   cleaningStep.value = 'upload'
 
-  // 不再自动分析数据质量，让用户自己选择
+  // 重置状态
+  dataQualityReport.value = null
+  cleaningSuggestions.value = []
+  fieldMappings.value = {}
+  selectedCleaningActions.value = []
+  analysisResult.value = null
 }
 
 const openAddDatabase = () => {
@@ -211,7 +232,41 @@ const loadPreviewData = async (page: number = 1) => {
   }
 }
 
-// 数据质量分析
+// 智能数据质量分析
+const analyzeDataQualityWithAI = async () => {
+  if (!currentUploadFile.value) return
+
+  isSmartAnalyzing.value = true
+  cleaningStep.value = 'analysis'
+
+  try {
+    // 使用新的智能Agent API
+    const result = await cleaningAPI.analyzeDataQuality(
+      currentUploadFile.value,
+      userRequirements.value || undefined,
+      selectedModel.value || undefined
+    )
+
+    if (result.success) {
+      analysisResult.value = result
+      dataQualityReport.value = result.quality_report || null
+      cleaningSuggestions.value = result.cleaning_suggestions || []
+      fieldMappings.value = result.field_mappings || {}
+
+      ElMessage.success('智能数据质量分析完成！')
+    } else {
+      throw new Error(result.error || '分析失败')
+    }
+  } catch (error) {
+    ElMessage.error('智能数据质量分析失败')
+    console.error(error)
+    cleaningStep.value = 'upload'
+  } finally {
+    isSmartAnalyzing.value = false
+  }
+}
+
+// 传统数据质量分析（保持向后兼容）
 const analyzeDataQuality = async () => {
   if (!currentUploadFile.value) return
 
@@ -221,11 +276,8 @@ const analyzeDataQuality = async () => {
   try {
     // 获取数据质量报告
     const result = await cleaningAPI.checkDataQuality(currentUploadFile.value)
-    dataQualityReport.value = result.quality_check
-    cleaningSuggestions.value = result.cleaning_suggestions
-
-    // 保持在 analysis 步骤，让用户查看报告后再决定下一步
-    // 不自动跳转到其他步骤
+    dataQualityReport.value = result.quality_check || null
+    cleaningSuggestions.value = result.cleaning_suggestions || []
 
   } catch (error) {
     ElMessage.error('数据质量分析失败')
@@ -264,7 +316,13 @@ const skipCleaningAndUpload = async () => {
 
   isLoading.value = true
   try {
-    await dataSourceStore.uploadFileSource(currentUploadFile.value)
+    // 创建一个新的文件对象，保留用户修改的文件名
+    const modifiedFile = new File([currentUploadFile.value], fileMetadata.value.name + '.' + currentUploadFile.value.name.split('.').pop(), {
+      type: currentUploadFile.value.type,
+      lastModified: currentUploadFile.value.lastModified
+    })
+
+    await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
     ElMessage.success('文件上传成功！')
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
@@ -282,8 +340,14 @@ const completeCleaningAndUpload = async () => {
 
   isLoading.value = true
   try {
+    // 创建一个新的文件对象，保留用户修改的文件名
+    const modifiedFile = new File([currentUploadFile.value], fileMetadata.value.name + '.' + currentUploadFile.value.name.split('.').pop(), {
+      type: currentUploadFile.value.type,
+      lastModified: currentUploadFile.value.lastModified
+    })
+
     // 这里应该上传清洗后的文件，暂时使用原文件
-    await dataSourceStore.uploadFileSource(currentUploadFile.value)
+    await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
     ElMessage.success('文件上传成功！')
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
@@ -327,23 +391,27 @@ const closeCleaningDialog = () => {
   currentUploadFile.value = null
   dataQualityReport.value = null
   cleaningSuggestions.value = []
+  fieldMappings.value = {}
   selectedCleaningActions.value = []
   cleaningStep.value = 'upload'
   fileMetadata.value = { name: '', description: '' }
+  userRequirements.value = ''
+  analysisResult.value = null
+  showAdvancedOptions.value = false
 }
 
 // 获取质量评分的颜色
 const getQualityScoreColor = (score: number) => {
-  if (score >= 0.8) return 'success'
-  if (score >= 0.6) return 'warning'
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
   return 'danger'
 }
 
 // 获取质量评分的文本
 const getQualityScoreText = (score: number) => {
-  if (score >= 0.9) return '优秀'
-  if (score >= 0.8) return '良好'
-  if (score >= 0.6) return '一般'
+  if (score >= 90) return '优秀'
+  if (score >= 80) return '良好'
+  if (score >= 60) return '一般'
   return '需要改进'
 }
 
@@ -355,9 +423,14 @@ const getIssueTypeIcon = (type: string) => {
     case 'outliers':
       return Warning
     case 'duplicates':
+    case 'duplicate_rows':
       return DocumentCopy
     case 'invalid_values':
       return CircleClose
+    case 'column_name':
+      return Edit
+    case 'data_type':
+      return DocumentChecked
     default:
       return InfoFilled
   }
@@ -371,9 +444,28 @@ const getIssueTypeColor = (type: string) => {
     case 'outliers':
       return 'danger'
     case 'duplicates':
+    case 'duplicate_rows':
       return 'info'
     case 'invalid_values':
       return 'danger'
+    case 'column_name':
+      return 'primary'
+    case 'data_type':
+      return 'success'
+    default:
+      return 'info'
+  }
+}
+
+// 获取优先级颜色
+const getPriorityColor = (priority: string) => {
+  switch (priority) {
+    case 'high':
+      return 'danger'
+    case 'medium':
+      return 'warning'
+    case 'low':
+      return 'success'
     default:
       return 'info'
   }
@@ -621,106 +713,277 @@ watch(pageSize, updatePaginatedDataSources)
       <div class="cleaning-content">
         <!-- 步骤指示器 -->
         <div class="cleaning-steps">
-          <div class="step" v-for="(step, index) in ['upload', 'analysis', 'cleaning', 'complete']" :key="step"
-            :class="{ active: cleaningStep === step }">
+          <div class="step" v-for="(step, index) in [
+            { key: 'upload', name: '文件上传' },
+            { key: 'analysis', name: '智能分析' },
+            { key: 'cleaning', name: '清洗建议' },
+            { key: 'complete', name: '完成上传' }
+          ]" :key="step.key" :class="{ active: cleaningStep === step.key }">
             <div class="step-icon">
               <el-icon>
-                <Check v-if="cleaningStep !== 'upload' && cleaningStep !== step" />
-                <CircleCheck v-else-if="cleaningStep === step" />
+                <Check v-if="cleaningStep !== 'upload' && cleaningStep !== step.key" />
+                <CircleCheck v-else-if="cleaningStep === step.key" />
                 <CircleClose v-else />
               </el-icon>
             </div>
-            <div class="step-title">{{ index === 3 ? '完成' : `步骤 ${index + 1}` }}</div>
+            <div class="step-title">{{ step.name }}</div>
           </div>
         </div>
 
         <!-- 上传文件信息 -->
         <div v-if="cleaningStep === 'upload'" class="upload-info">
           <div class="file-details">
-            <div class="file-name">{{ fileMetadata.name }}</div>
-            <div class="file-size">{{ currentUploadFile ? (currentUploadFile.size / 1024 / 1024).toFixed(2) : 0 }} MB
+            <div class="file-icon">
+              <el-icon size="48" color="#667eea">
+                <Document />
+              </el-icon>
+            </div>
+            <div class="file-meta">
+              <div class="file-name">{{ fileMetadata.name }}</div>
+              <div class="file-size">{{ currentUploadFile ? (currentUploadFile.size / 1024 / 1024).toFixed(2) : 0 }} MB
+              </div>
+              <div class="file-type">{{ currentUploadFile?.name.split('.').pop()?.toUpperCase() }} 文件</div>
             </div>
           </div>
 
           <!-- 文件元数据编辑 -->
           <div class="file-metadata">
-            <el-form :model="fileMetadata" label-width="80px">
-              <el-form-item label="文件名称">
-                <el-input v-model="fileMetadata.name" placeholder="请输入文件名称" prefix-icon="Document" />
-              </el-form-item>
-              <el-form-item label="文件描述">
-                <el-input v-model="fileMetadata.description" type="textarea" placeholder="请输入文件描述信息" :rows="3" />
-              </el-form-item>
+            <el-form :model="fileMetadata" label-width="80px" label-position="top">
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="文件名称">
+                    <el-input v-model="fileMetadata.name" placeholder="请输入文件名称" :prefix-icon="Document" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="文件描述">
+                    <el-input v-model="fileMetadata.description" placeholder="请输入文件描述信息" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
             </el-form>
           </div>
 
+          <!-- 智能分析选项 -->
+          <div class="smart-analysis-options">
+            <div class="options-header">
+              <h4>智能分析选项</h4>
+              <el-button type="text" @click="showAdvancedOptions = !showAdvancedOptions">
+                {{ showAdvancedOptions ? '收起高级选项' : '展开高级选项' }}
+                <el-icon>
+                  <ArrowRight v-if="!showAdvancedOptions" />
+                  <ArrowDown v-else />
+                </el-icon>
+              </el-button>
+            </div>
+
+            <div class="basic-options">
+              <el-form-item label="自定义清洗要求">
+                <el-input v-model="userRequirements" type="textarea"
+                  placeholder="例如：请重点关注数据标准化，确保所有列名都符合命名规范，处理缺失值，并验证邮箱格式..." :rows="3" show-word-limit
+                  maxlength="500" />
+                <div class="hint-text">
+                  <el-icon>
+                    <InfoFilled />
+                  </el-icon>
+                  描述您的具体清洗需求，AI将根据您的要求生成个性化的清洗建议
+                </div>
+              </el-form-item>
+            </div>
+
+            <el-collapse-transition>
+              <div v-show="showAdvancedOptions" class="advanced-options">
+                <el-form-item label="选择AI模型">
+                  <el-select v-model="selectedModel" placeholder="请选择AI模型">
+                    <el-option v-for="model in availableModels" :key="model.value" :label="model.label"
+                      :value="model.value" />
+                  </el-select>
+                  <div class="hint-text">
+                    <el-icon>
+                      <InfoFilled />
+                    </el-icon>
+                    不同模型在字段理解和建议生成方面各有特色
+                  </div>
+                </el-form-item>
+              </div>
+            </el-collapse-transition>
+          </div>
+
           <div class="file-actions">
-            <el-button @click="closeCleaningDialog" style="flex: 1">
+            <el-button @click="closeCleaningDialog" size="large">
               取消
             </el-button>
-            <el-button type="primary" @click="skipCleaningAndUpload" :loading="isLoading" style="flex: 1">
-              跳过清洗，直接上传
+            <el-button type="primary" @click="skipCleaningAndUpload" :loading="isLoading" size="large">
+              <el-icon>
+                <Upload />
+              </el-icon>
+              跳过分析，直接上传
             </el-button>
-            <el-button type="success" @click="analyzeDataQuality" :loading="isAnalyzing" style="flex: 1">
-              开始分析数据质量
+            <el-button type="success" @click="analyzeDataQualityWithAI" :loading="isSmartAnalyzing" size="large">
+              <el-icon>
+                <DataAnalysis />
+              </el-icon>
+              开始智能分析
             </el-button>
           </div>
         </div>
 
         <!-- 数据质量分析结果 -->
         <div v-if="cleaningStep === 'analysis'" class="analysis-results">
-          <div v-if="isAnalyzing" class="loading-status">
-            <el-empty description="正在分析数据质量，请稍候..." />
+          <div v-if="isSmartAnalyzing" class="loading-status">
+            <el-empty description="正在智能分析数据质量，请稍候...">
+              <template #image>
+                <el-icon size="60" color="#667eea">
+                  <DataAnalysis />
+                </el-icon>
+              </template>
+            </el-empty>
           </div>
           <div v-else>
-            <div class="quality-report">
-              <div class="report-header">
-                <div class="report-title">数据质量报告</div>
-                <div class="report-score">
-                  <el-tag :type="getQualityScoreColor(dataQualityReport?.quality_score || 0)" class="score-tag">
-                    {{ (dataQualityReport?.quality_score || 0).toFixed(2) }}
-                    {{ getQualityScoreText(dataQualityReport?.quality_score || 0) }}
-                  </el-tag>
-                </div>
+            <!-- 智能分析结果总览 -->
+            <div class="smart-analysis-summary">
+              <div class="summary-header">
+                <h3>智能分析结果</h3>
+                <el-tag :type="getQualityScoreColor(analysisResult?.quality_score || 0)" size="large">
+                  {{ analysisResult?.quality_score || 0 }}分 - {{ getQualityScoreText(analysisResult?.quality_score || 0)
+                  }}
+                </el-tag>
               </div>
-              <div class="report-content">
-                <div class="report-item" v-for="(value, key) in dataQualityReport?.data_info" :key="key">
-                  <div class="item-key">{{ key }}</div>
-                  <div class="item-value">
-                    <span v-if="key === 'rows'" class="value-row-count">
-                      {{ value }}
-                    </span>
-                    <span v-else-if="key === 'file_size'" class="value-file-size">
-                      {{ value }} bytes
-                    </span>
-                    <span v-else>{{ typeof value === 'number' ? value.toFixed(2) : value }}</span>
+
+              <el-row :gutter="16" class="summary-cards">
+                <el-col :span="6">
+                  <div class="summary-card">
+                    <div class="card-icon data-icon">
+                      <el-icon>
+                        <Document />
+                      </el-icon>
+                    </div>
+                    <div class="card-content">
+                      <div class="card-number">{{ dataQualityReport?.total_rows || 0 }}</div>
+                      <div class="card-label">数据行数</div>
+                    </div>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="summary-card">
+                    <div class="card-icon columns-icon">
+                      <el-icon>
+                        <Grid />
+                      </el-icon>
+                    </div>
+                    <div class="card-content">
+                      <div class="card-number">{{ dataQualityReport?.total_columns || 0 }}</div>
+                      <div class="card-label">数据列数</div>
+                    </div>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="summary-card">
+                    <div class="card-icon issues-icon">
+                      <el-icon>
+                        <Warning />
+                      </el-icon>
+                    </div>
+                    <div class="card-content">
+                      <div class="card-number">{{ cleaningSuggestions.length }}</div>
+                      <div class="card-label">发现问题</div>
+                    </div>
+                  </div>
+                </el-col>
+                <el-col :span="6">
+                  <div class="summary-card">
+                    <div class="card-icon mapping-icon">
+                      <el-icon>
+                        <Connection />
+                      </el-icon>
+                    </div>
+                    <div class="card-content">
+                      <div class="card-number">{{ Object.keys(fieldMappings).length }}</div>
+                      <div class="card-label">字段映射</div>
+                    </div>
+                  </div>
+                </el-col>
+              </el-row>
+            </div>
+
+            <!-- 字段映射结果 -->
+            <div v-if="Object.keys(fieldMappings).length > 0" class="field-mappings-section">
+              <div class="section-header">
+                <h4>字段理解与映射建议</h4>
+                <el-tag type="info">{{ Object.keys(fieldMappings).length }} 个字段</el-tag>
+              </div>
+
+              <div class="mappings-grid">
+                <div v-for="(suggestion, originalName) in fieldMappings" :key="originalName" class="mapping-card">
+                  <div class="mapping-header">
+                    <div class="original-field">
+                      <el-tag type="info" size="small">原始</el-tag>
+                      <span class="field-name">{{ originalName }}</span>
+                    </div>
+                    <el-icon class="arrow-icon">
+                      <ArrowRight />
+                    </el-icon>
+                    <div class="suggested-field">
+                      <el-tag type="success" size="small">建议</el-tag>
+                      <span class="field-name">{{ suggestion }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 继续按钮 --> <!-- 分析结果操作区域 -->
-            <div class="analysis-actions">
-              <div class="action-info">
-                <el-alert :title="dataQualityReport?.is_valid ? '数据质量良好' : '发现数据质量问题'"
-                  :type="dataQualityReport?.is_valid ? 'success' : 'warning'" :description="dataQualityReport?.is_valid ?
-                    '您的数据质量良好，可以直接上传或查看详细建议。' :
-                    `发现 ${cleaningSuggestions.length} 个可优化的问题，建议查看清洗建议以提升数据质量。`" show-icon :closable="false" />
+            <!-- 详细数据质量报告 -->
+            <div class="detailed-quality-report">
+              <div class="section-header">
+                <h4>详细质量报告</h4>
+                <el-button type="text" @click="showAdvancedOptions = !showAdvancedOptions">
+                  {{ showAdvancedOptions ? '收起详情' : '查看详情' }}
+                </el-button>
               </div>
 
-              <div class="action-buttons"> <el-button type="primary" @click="cleaningStep = 'cleaning'"
+              <el-collapse-transition>
+                <div v-show="showAdvancedOptions" class="report-details">
+                  <el-descriptions :column="2" border>
+                    <el-descriptions-item v-for="(value, key) in dataQualityReport" :key="key" :label="key">
+                      <span v-if="typeof value === 'number'">{{ value.toFixed(2) }}</span>
+                      <span v-else-if="typeof value === 'boolean'">{{ value ? '是' : '否' }}</span>
+                      <span v-else>{{ value }}</span>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </el-collapse-transition>
+            </div>
+
+            <!-- 分析结果操作区域 -->
+            <div class="analysis-actions">
+              <div class="action-info">
+                <el-alert :title="analysisResult?.summary || '分析完成'"
+                  :type="cleaningSuggestions.length > 0 ? 'warning' : 'success'" :description="cleaningSuggestions.length > 0 ?
+                    `发现 ${cleaningSuggestions.length} 个可优化的问题，建议查看清洗建议以提升数据质量。` :
+                    '您的数据质量良好，可以直接上传。'" show-icon :closable="false" />
+              </div>
+
+              <div class="action-buttons">
+                <el-button type="primary" @click="cleaningStep = 'cleaning'"
                   :disabled="cleaningSuggestions.length === 0" size="large">
                   <el-icon>
                     <ArrowRight />
                   </el-icon>
-                  下一步：选择清洗建议 ({{ cleaningSuggestions.length }})
+                  下一步：查看清洗建议 ({{ cleaningSuggestions.length }})
                 </el-button>
 
                 <el-button type="success" @click="skipCleaningAndUpload" size="large" :disabled="!dataQualityReport">
                   <el-icon>
                     <Upload />
                   </el-icon>
-                  {{ dataQualityReport?.is_valid ? '直接上传' : '忽略问题并上传' }}
+                  {{ cleaningSuggestions.length === 0 ? '直接上传' : '忽略问题并上传' }}
+                </el-button>
+
+                <el-button @click="cleaningStep = 'upload'" size="large">
+                  <el-icon>
+                    <Back />
+                  </el-icon>
+                  返回上传
                 </el-button>
               </div>
             </div>
@@ -735,7 +998,7 @@ watch(pageSize, updatePaginatedDataSources)
           <div v-else>
             <div class="suggestions-header">
               <div class="header-content">
-                <div class="title">步骤3：选择数据清洗建议</div>
+                <div class="title">选择数据清洗建议</div>
                 <div class="subtitle">
                   根据数据质量分析结果，我们为您提供了以下清洗建议。请选择您认为合适的建议，系统将记录您的选择。
                 </div>
@@ -776,27 +1039,45 @@ watch(pageSize, updatePaginatedDataSources)
 
             <div class="suggestions-list">
               <div class="suggestion-item" v-for="(suggestion, index) in cleaningSuggestions" :key="index">
-                <div class="item-icon">
+                <div class="item-checkbox">
+                  <el-checkbox :checked="isCleaningActionSelected(suggestion)"
+                    @change="toggleCleaningAction(suggestion)" size="large" />
+                </div>
+                <div class="item-icon" :class="`icon-${getIssueTypeColor(suggestion.type)}`">
                   <el-icon :component="getIssueTypeIcon(suggestion.type)" />
                 </div>
                 <div class="item-content">
-                  <div class="item-description">
-                    {{ suggestion.description }}
+                  <div class="item-header">
+                    <div class="item-title">{{ suggestion.description }}</div>
+                    <div class="item-badges">
+                      <el-tag :type="getIssueTypeColor(suggestion.type)" size="small">
+                        {{ suggestion.type }}
+                      </el-tag>
+                      <el-tag :type="getPriorityColor(suggestion.priority || 'medium')" size="small">
+                        {{ suggestion.priority || 'medium' }} 优先级
+                      </el-tag>
+                    </div>
                   </div>
                   <div class="item-details">
-                    <span class="detail-item">
-                      <strong>影响列:</strong> {{ suggestion.column }}
-                    </span>
-                    <span class="detail-item">
-                      <strong>严重程度:</strong> {{ suggestion.severity }}
-                    </span>
+                    <div class="detail-row">
+                      <span class="detail-label">影响列:</span>
+                      <el-tag type="info" size="small">{{ suggestion.column }}</el-tag>
+                    </div>
+                    <div class="detail-row" v-if="suggestion.impact">
+                      <span class="detail-label">影响程度:</span>
+                      <span class="detail-value">{{ suggestion.impact }}</span>
+                    </div>
+                    <div class="detail-row" v-if="suggestion.reason">
+                      <span class="detail-label">建议原因:</span>
+                      <span class="detail-value">{{ suggestion.reason }}</span>
+                    </div>
                   </div>
                 </div>
                 <div class="item-action">
-                  <el-checkbox :checked="isCleaningActionSelected(suggestion)"
-                    @change="toggleCleaningAction(suggestion)">
-                    应用此建议
-                  </el-checkbox>
+                  <el-button :type="isCleaningActionSelected(suggestion) ? 'success' : 'default'" size="small"
+                    @click="toggleCleaningAction(suggestion)">
+                    {{ isCleaningActionSelected(suggestion) ? '已选择' : '选择' }}
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -817,11 +1098,11 @@ watch(pageSize, updatePaginatedDataSources)
                   确认上传数据
                 </el-button>
 
-                <el-button @click="analyzeDataQuality" size="large">
+                <el-button @click="analyzeDataQualityWithAI" size="large">
                   <el-icon>
                     <RefreshRight />
                   </el-icon>
-                  重新分析数据质量
+                  重新智能分析数据质量
                 </el-button>
 
                 <el-button @click="cleaningStep = 'cleaning'" v-if="cleaningSuggestions.length > 0" size="large">
@@ -1314,58 +1595,87 @@ watch(pageSize, updatePaginatedDataSources)
 
     .file-details {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
-
-      .file-name {
-        font-size: 18px;
-        font-weight: 600;
-        color: #1f2937;
-      }
-
-      .file-size {
-        font-size: 14px;
-        color: #6b7280;
-        background: #e5e7eb;
-        padding: 4px 8px;
-        border-radius: 6px;
-      }
-    }
-
-    .file-metadata {
-      margin: 16px 0;
+      gap: 16px;
+      margin-bottom: 24px;
       padding: 16px;
       background: white;
       border-radius: 8px;
       border: 1px solid #e5e7eb;
 
-      .el-form-item {
+      .file-icon {
+        flex-shrink: 0;
+      }
+
+      .file-meta {
+        flex: 1;
+
+        .file-name {
+          font-size: 18px;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 4px;
+        }
+
+        .file-size {
+          font-size: 14px;
+          color: #6b7280;
+          margin-bottom: 2px;
+        }
+
+        .file-type {
+          font-size: 12px;
+          color: #9ca3af;
+        }
+      }
+    }
+
+    .file-metadata {
+      margin-bottom: 24px;
+    }
+
+    .smart-analysis-options {
+      margin-bottom: 24px;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+
+      .options-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         margin-bottom: 16px;
 
-        :deep(.el-form-item__label) {
-          font-weight: 500;
-          color: #374151;
+        h4 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 600;
+          color: #1f2937;
         }
+      }
 
-        :deep(.el-input__wrapper) {
-          border-radius: 6px;
-          transition: all 0.3s ease;
+      .basic-options {
+        margin-bottom: 16px;
 
-          &.is-focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-          }
+        .hint-text {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          color: #6b7280;
+          margin-top: 4px;
         }
+      }
 
-        :deep(.el-textarea__inner) {
-          border-radius: 6px;
-          transition: all 0.3s ease;
-
-          &:focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-          }
+      .advanced-options {
+        .hint-text {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 12px;
+          color: #6b7280;
+          margin-top: 4px;
         }
       }
     }
@@ -1373,50 +1683,372 @@ watch(pageSize, updatePaginatedDataSources)
     .file-actions {
       display: flex;
       gap: 12px;
+      justify-content: flex-end;
 
       .el-button {
-        border-radius: 8px;
         padding: 12px 24px;
+        border-radius: 8px;
         font-weight: 500;
-        transition: all 0.3s ease;
+      }
+    }
+  }
+
+  // 智能分析结果样式
+  .smart-analysis-summary {
+    margin-bottom: 24px;
+
+    .summary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+
+      h3 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+    }
+
+    .summary-cards {
+      .summary-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        transition: all 0.2s ease;
 
         &:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+
+          &.data-icon {
+            background: #eff6ff;
+            color: #3b82f6;
+          }
+
+          &.columns-icon {
+            background: #f0fdf4;
+            color: #22c55e;
+          }
+
+          &.issues-icon {
+            background: #fef3c7;
+            color: #f59e0b;
+          }
+
+          &.mapping-icon {
+            background: #fce7f3;
+            color: #ec4899;
+          }
+        }
+
+        .card-content {
+          .card-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+          }
+
+          .card-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+          }
         }
       }
     }
   }
 
-  .analysis-results {
-    .analysis-actions {
-      margin-top: 24px;
+  // 字段映射样式
+  .field-mappings-section {
+    margin-bottom: 24px;
 
-      .action-info {
-        margin-bottom: 16px;
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
 
-        .el-alert {
-          border-radius: 8px;
-        }
+      h4 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
       }
+    }
 
-      .action-buttons {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        flex-wrap: wrap;
+    .mappings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 12px;
 
-        .el-button {
-          border-radius: 8px;
-          padding: 12px 24px;
-          font-weight: 500;
-          min-width: 160px;
+      .mapping-card {
+        padding: 16px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        transition: all 0.2s ease;
 
-          .el-icon {
-            margin-right: 8px;
+        &:hover {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .mapping-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+
+          .original-field,
+          .suggested-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+
+            .field-name {
+              font-weight: 500;
+              color: #374151;
+            }
+          }
+
+          .arrow-icon {
+            color: #9ca3af;
+            font-size: 14px;
           }
         }
       }
+    }
+  }
+
+  // 详细报告样式
+  .detailed-quality-report {
+    margin-bottom: 24px;
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+
+      h4 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+    }
+
+    .report-details {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+  }
+
+  // 清洗建议样式
+  .suggestions-list {
+    .suggestion-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      margin-bottom: 16px;
+      transition: all 0.2s ease;
+
+      &:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .item-checkbox {
+        margin-top: 4px;
+      }
+
+      .item-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        margin-top: 4px;
+
+        &.icon-success {
+          background: #f0fdf4;
+          color: #22c55e;
+        }
+
+        &.icon-warning {
+          background: #fef3c7;
+          color: #f59e0b;
+        }
+
+        &.icon-danger {
+          background: #fef2f2;
+          color: #ef4444;
+        }
+
+        &.icon-info {
+          background: #eff6ff;
+          color: #3b82f6;
+        }
+
+        &.icon-primary {
+          background: #f3f4f6;
+          color: #6366f1;
+        }
+      }
+
+      .item-content {
+        flex: 1;
+
+        .item-header {
+          margin-bottom: 12px;
+
+          .item-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 8px;
+          }
+
+          .item-badges {
+            display: flex;
+            gap: 8px;
+          }
+        }
+
+        .item-details {
+          .detail-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+
+            &:last-child {
+              margin-bottom: 0;
+            }
+
+            .detail-label {
+              font-size: 14px;
+              color: #6b7280;
+              font-weight: 500;
+              min-width: 80px;
+            }
+
+            .detail-value {
+              font-size: 14px;
+              color: #374151;
+            }
+          }
+        }
+      }
+
+      .item-action {
+        margin-top: 4px;
+      }
+    }
+  }
+
+  // 分析操作区域样式
+  .analysis-actions {
+    margin-top: 24px;
+
+    .action-info {
+      margin-bottom: 16px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+
+      .el-button {
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 500;
+      }
+    }
+  }
+
+  .file-size {
+    font-size: 14px;
+    color: #6b7280;
+    background: #e5e7eb;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+}
+
+.file-metadata {
+  margin: 16px 0;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+
+  .el-form-item {
+    margin-bottom: 16px;
+
+    :deep(.el-form-item__label) {
+      font-weight: 500;
+      color: #374151;
+    }
+
+    :deep(.el-input__wrapper) {
+      border-radius: 6px;
+      transition: all 0.3s ease;
+
+      &.is-focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+      }
+    }
+
+    :deep(.el-textarea__inner) {
+      border-radius: 6px;
+      transition: all 0.3s ease;
+
+      &:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+      }
+    }
+  }
+}
+
+.file-actions {
+  display: flex;
+  gap: 12px;
+
+  .el-button {
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
   }
 
@@ -1536,154 +2168,154 @@ watch(pageSize, updatePaginatedDataSources)
       }
     }
   }
-}
 
-// 响应式设计
-@media (max-width: 768px) {
-  .data-management-container {
-    padding: 16px;
-  }
-
-  .header-section {
-    flex-direction: column;
-    text-align: center;
-    gap: 16px;
-
-    .header-title {
-      h1 {
-        font-size: 24px;
-      }
+  // 响应式设计
+  @media (max-width: 768px) {
+    .data-management-container {
+      padding: 16px;
     }
-  }
 
-  .upload-section {
-    .el-col {
-      margin-bottom: 16px;
-    }
-  }
-
-  .search-section {
-    .search-header {
+    .header-section {
       flex-direction: column;
+      text-align: center;
       gap: 16px;
 
-      .search-controls {
-        width: 100%;
-
-        .el-input {
-          width: 100% !important;
-        }
-      }
-    }
-  }
-
-  .data-list-section {
-    .action-buttons {
-      flex-direction: column;
-      gap: 4px;
-
-      .el-button {
-        width: 100%;
-        font-size: 12px;
-        padding: 4px 8px;
-      }
-    }
-  }
-
-  .cleaning-content {
-    .cleaning-steps {
-      flex-direction: column;
-
-      .step {
-        justify-content: center;
-        padding-left: 0;
-        padding-right: 0;
-
-        .step-icon {
-          left: auto;
-          right: 0;
-          top: 0;
-          transform: none;
-        }
-
-        .step-title {
-          font-size: 14px;
+      .header-title {
+        h1 {
+          font-size: 24px;
         }
       }
     }
 
-    .upload-info {
-      .file-details {
-        margin-bottom: 12px;
-
-        .file-name {
-          font-size: 16px;
-        }
-
-        .file-size {
-          font-size: 12px;
-        }
+    .upload-section {
+      .el-col {
+        margin-bottom: 16px;
       }
+    }
 
-      .file-actions {
+    .search-section {
+      .search-header {
         flex-direction: column;
-        gap: 8px;
+        gap: 16px;
+
+        .search-controls {
+          width: 100%;
+
+          .el-input {
+            width: 100% !important;
+          }
+        }
+      }
+    }
+
+    .data-list-section {
+      .action-buttons {
+        flex-direction: column;
+        gap: 4px;
 
         .el-button {
           width: 100%;
-          padding: 10px;
-          font-size: 14px;
+          font-size: 12px;
+          padding: 4px 8px;
         }
       }
     }
 
-    .analysis-results {
-      .quality-report {
-        margin-bottom: 16px;
+    .cleaning-content {
+      .cleaning-steps {
+        flex-direction: column;
 
-        .report-header {
-          flex-direction: column;
-          align-items: flex-start;
+        .step {
+          justify-content: center;
+          padding-left: 0;
+          padding-right: 0;
+
+          .step-icon {
+            left: auto;
+            right: 0;
+            top: 0;
+            transform: none;
+          }
+
+          .step-title {
+            font-size: 14px;
+          }
+        }
+      }
+
+      .upload-info {
+        .file-details {
           margin-bottom: 12px;
 
-          .report-title {
+          .file-name {
             font-size: 16px;
           }
 
-          .report-score {
-            .score-tag {
-              font-size: 14px;
-            }
+          .file-size {
+            font-size: 12px;
           }
         }
 
-        .report-content {
-          grid-template-columns: 1fr;
+        .file-actions {
+          flex-direction: column;
+          gap: 8px;
+
+          .el-button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+          }
         }
       }
 
-      .suggestions-header {
-        margin-bottom: 12px;
-      }
+      .analysis-results {
+        .quality-report {
+          margin-bottom: 16px;
 
-      .suggestions-list {
-        .suggestion-item {
-          flex-direction: column;
-          align-items: flex-start;
-          padding: 12px;
-          gap: 8px;
+          .report-header {
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 12px;
 
-          .item-content {
-            .item-description {
-              font-size: 14px;
+            .report-title {
+              font-size: 16px;
             }
 
-            .item-details {
-              flex-direction: column;
-              gap: 4px;
+            .report-score {
+              .score-tag {
+                font-size: 14px;
+              }
+            }
+          }
 
-              .detail-item {
-                font-size: 12px;
+          .report-content {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .suggestions-header {
+          margin-bottom: 12px;
+        }
+
+        .suggestions-list {
+          .suggestion-item {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 12px;
+            gap: 8px;
+
+            .item-content {
+              .item-description {
+                font-size: 14px;
+              }
+
+              .item-details {
+                flex-direction: column;
+                gap: 4px;
+
+                .detail-item {
+                  font-size: 12px;
+                }
               }
             }
           }
@@ -1691,42 +2323,42 @@ watch(pageSize, updatePaginatedDataSources)
       }
     }
   }
-}
 
-// 标签样式优化
-.el-tag {
-  border-radius: 12px;
-  font-weight: 500;
-  padding: 4px 12px;
+  // 标签样式优化
+  .el-tag {
+    border-radius: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
 
-  &.el-tag--success {
-    background: #ecfdf5;
-    border-color: #10b981;
-    color: #059669;
+    &.el-tag--success {
+      background: #ecfdf5;
+      border-color: #10b981;
+      color: #059669;
+    }
+
+    &.el-tag--warning {
+      background: #fffbeb;
+      border-color: #f59e0b;
+      color: #d97706;
+    }
+
+    &.el-tag--danger {
+      background: #fef2f2;
+      border-color: #ef4444;
+      color: #dc2626;
+    }
+
+    &.el-tag--info {
+      background: #f0f9ff;
+      border-color: #3b82f6;
+      color: #2563eb;
+    }
   }
 
-  &.el-tag--warning {
-    background: #fffbeb;
-    border-color: #f59e0b;
-    color: #d97706;
+  // 加载状态
+  .el-loading-mask {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(4px);
   }
-
-  &.el-tag--danger {
-    background: #fef2f2;
-    border-color: #ef4444;
-    color: #dc2626;
-  }
-
-  &.el-tag--info {
-    background: #f0f9ff;
-    border-color: #3b82f6;
-    color: #2563eb;
-  }
-}
-
-// 加载状态
-.el-loading-mask {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(4px);
 }
 </style>
