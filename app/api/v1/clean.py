@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
 from app.core.agent.clean_data_agent import smart_clean_agent
+from app.services.datasource import datasource_service
 from app.log import logger
 
 # 创建路由实例
@@ -32,6 +33,12 @@ class CleaningActionRequest(BaseModel):
     """清洗动作请求模型"""
     file_id: str
     actions: List[Dict[str, Any]]
+
+
+class FieldMappingRequest(BaseModel):
+    """字段映射请求模型"""
+    source_id: str
+    field_mappings: Dict[str, str]
 
 
 @router.post("/analyze")
@@ -517,3 +524,73 @@ async def health_check() -> Dict[str, Any]:
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
+
+
+@router.post("/save-field-mappings")
+async def save_field_mappings(request: FieldMappingRequest) -> Dict[str, Any]:
+    """
+    保存字段映射到数据源
+    
+    Args:
+        request: 包含数据源ID和字段映射的请求
+    
+    Returns:
+        保存结果
+    """
+    try:
+        # 获取数据源
+        source = datasource_service.get_source(request.source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        
+        # 更新字段映射
+        source.metadata.column_description = request.field_mappings
+        
+        # 这里可以添加持久化逻辑，比如保存到数据库
+        # 目前只是更新内存中的映射
+        
+        logger.info(f"已保存数据源 {request.source_id} 的字段映射: {request.field_mappings}")
+        
+        return {
+            "success": True,
+            "message": "字段映射保存成功",
+            "source_id": request.source_id,
+            "field_mappings": request.field_mappings
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存字段映射失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
+
+@router.get("/field-mappings/{source_id}")
+async def get_field_mappings(source_id: str) -> Dict[str, Any]:
+    """
+    获取数据源的字段映射
+    
+    Args:
+        source_id: 数据源ID
+    
+    Returns:
+        字段映射信息
+    """
+    try:
+        # 获取数据源
+        source = datasource_service.get_source(source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        
+        return {
+            "success": True,
+            "source_id": source_id,
+            "field_mappings": source.metadata.column_description or {},
+            "source_name": source.metadata.name
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取字段映射失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")

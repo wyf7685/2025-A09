@@ -269,4 +269,19 @@ export const cleaningAPI = {
     const response = await api.get('/clean/health');
     return response.data;
   },
+
+  // 保存字段映射到数据源
+  saveFieldMappings: async (sourceId: string, fieldMappings: Record<string, string>): Promise<ApiResponse> => {
+    const response = await api.post('/clean/save-field-mappings', {
+      source_id: sourceId,
+      field_mappings: fieldMappings
+    });
+    return response.data;
+  },
+
+  // 获取数据源的字段映射
+  getFieldMappings: async (sourceId: string): Promise<ApiResponse> => {
+    const response = await api.get(`/clean/field-mappings/${sourceId}`);
+    return response.data;
+  },
 };

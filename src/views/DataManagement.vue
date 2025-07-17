@@ -346,9 +346,22 @@ const completeCleaningAndUpload = async () => {
       lastModified: currentUploadFile.value.lastModified
     })
 
-    // 这里应该上传清洗后的文件，暂时使用原文件
-    await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
-    ElMessage.success('文件上传成功！')
+    // 上传文件
+    const uploadResult = await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
+
+    // 如果有字段映射，保存到数据源
+    if (Object.keys(fieldMappings.value).length > 0 && uploadResult?.source_id) {
+      try {
+        await cleaningAPI.saveFieldMappings(uploadResult.source_id, fieldMappings.value)
+        ElMessage.success('文件上传成功，字段映射已保存！')
+      } catch (mappingError) {
+        console.warn('字段映射保存失败:', mappingError)
+        ElMessage.success('文件上传成功，但字段映射保存失败')
+      }
+    } else {
+      ElMessage.success('文件上传成功！')
+    }
+
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
   } catch (error) {
