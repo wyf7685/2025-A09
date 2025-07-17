@@ -38,9 +38,14 @@ class InMemoryDataSource(DataSource):
         return self._data.head(n_rows)
 
     @override
+    def _shape(self) -> tuple[int, int]:
+        """获取数据源的形状"""
+        return self._data.shape
+
+    @override
     def copy(self) -> "InMemoryDataSource":
         """创建内存数据源的副本"""
-        return InMemoryDataSource(df=self._data.copy(), metadata=self.metadata.copy())
+        return InMemoryDataSource(df=self._data.copy(), metadata=self.metadata.model_copy())
 
     @property
     @override

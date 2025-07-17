@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 from typing import override
 
-import pandas as pd
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableEach
 
+from app.core.datasource import DataSource
 from app.core.executor import ExecuteResult
 from app.log import logger
-from app.utils import format_overview
 
 from ._base import BaseLLMRunnable
 from .llm import LLM
@@ -181,7 +180,7 @@ class GeneralSummary(
 
 @dataclass
 class GeneralDataAnalysisInput:
-    df: pd.DataFrame
+    source: DataSource
     focus_areas: list[str] | None = None
 
 
@@ -196,13 +195,13 @@ class GeneralDataAnalysis(
         self.analyzer = NL2DataAnalysis(llm)
 
     def _run(self, input: GeneralDataAnalysisInput) -> tuple[str, list[bytes]]:
-        overview = format_overview(input.df)
+        overview = input.source.format_overview()
         query_focus, summary_focus = format_focus(input.focus_areas)
 
         @RunnableLambda
         def worker(query: str) -> tuple[str, ExecuteResult]:
             logger.info(f"开始分析: {query}")
-            return query, self.analyzer.invoke((input.df, query))
+            return query, self.analyzer.invoke((input.source, query))
 
         chain = (
             QueryGenerator(self.llm)
@@ -211,22 +210,3 @@ class GeneralDataAnalysis(
             | GeneralSummary(self.llm)
         )
         return chain.invoke(QueryGeneratorInput(overview, query_focus))
-
-
-# def __demo__() -> None:
-#     """演示如何使用GeneralDataAnalysis类"""
-#     from .llm import get_llm
-
-#     data = {
-#         "A": [1, 2, 3, 4, 5],
-#         "B": [5, 4, 3, 2, 1],
-#         "C": [10, 20, 30, 40, 50],
-#     }
-#     df = pd.DataFrame(data)
-
-#     analyzer = GeneralDataAnalysis(get_llm().with_retry(), execute_mode="docker")
-#     report, figures = analyzer.invoke(GeneralDataAnalysisInput(df, ["趋势分析", "异常值检测"]))
-
-#     # 打印报告
-#     print(report)
-#     print(f"\n\n生成了 {len(figures)} 个图表")

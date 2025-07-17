@@ -13,8 +13,7 @@ from pydantic import BaseModel
 
 from app.const import UPLOAD_DIR
 from app.core.config import settings
-from app.core.datasource import create_dremio_source
-from app.core.datasource.source import DataSourceMetadata
+from app.core.datasource import DataSourceMetadata, create_dremio_source
 from app.core.dremio import get_dremio_client
 from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
@@ -52,7 +51,7 @@ async def upload_file(file: UploadFile = File(), source_name: str | None = Form(
         client = get_dremio_client()
         dremio_source = await run_sync(client.add_data_source_file)(file_path)
         source = create_dremio_source(dremio_source, source_name)
-        source_id = datasource_service.register(source)
+        source_id, source = datasource_service.register(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
         raise
@@ -77,7 +76,7 @@ async def add_data_source_database(request: AddDataSourceDatabaseRequest) -> Reg
         client = get_dremio_client()
         dremio_source = await run_sync(client.add_data_source_database)(request.database_type, request.connection)
         source = create_dremio_source(dremio_source)
-        source_id = datasource_service.register(source)
+        source_id, source = datasource_service.register(source)
         if request.name:
             source.metadata.name = request.name
         if request.description:
@@ -190,15 +189,11 @@ async def get_datasource_data(
             data = data.iloc[skip:]
 
         # 获取总行数
-        total_rows = source.metadata.row_count
-        if total_rows is None:
-            # 如果元数据中没有行数信息，可以选择加载完整数据获取行数
-            # 但这可能影响性能，所以这里只是返回已加载的数据行数
-            total_rows = len(data) + skip
+        rows, _ = source.get_shape()
 
         return {
             "data": data.to_dict(orient="records"),
-            "total": total_rows,
+            "total": rows,
             "skip": skip,
             "limit": limit,
         }

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.core.chain.llm import LLM
 from app.core.datasource import DataSource
 from app.log import logger
-from app.utils import escape_tag, format_overview
+from app.utils import escape_tag
 
 from .events import StreamEvent, fix_message_content, process_stream_event
 from .tools import analyzer_tool, dataframe_tools, scikit_tools
@@ -258,14 +258,14 @@ ensemble_eval = evaluate_model_tool(ensemble_id)
    - 提出3-5个明确的后续步骤建议
    - 指出哪些问题仍未解答以及如何进一步探索
 
-无论用户是否明确要求，在每次分析结束时，必须提供一个"下一步建议"部分
-包含3-5个具体、可操作的建议，帮助用户进一步提升分析质量或模型性能
-格式如下（只输出如下格式，便于前端提取）：
+无论用户是否明确要求，在每次分析结束时，你必须提供一个格式如下的"下一步建议"部分（便于前端提取）：
+
 **下一步建议**：
 1. 建议1内容
 2. 建议2内容
 3. 建议3内容
-4. 建议4内容
+4. [可选] 建议4内容
+5. [可选] 建议5内容
 
 ## 输出格式要求
 - 分析报告应该结构清晰，包含标题、小节和结论
@@ -504,7 +504,7 @@ class DataAnalyzerAgent:
         self.agent = create_react_agent(
             model=chat_model,
             tools=[analyzer, *df_tools, *sk_tools],
-            prompt=SYSTEM_PROMPT.format(overview=format_overview(data_source.get_preview())),
+            prompt=SYSTEM_PROMPT.format(overview=data_source.format_overview()),
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
         )

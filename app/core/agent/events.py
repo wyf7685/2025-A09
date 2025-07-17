@@ -1,3 +1,5 @@
+import contextlib
+import json
 from collections.abc import Iterable
 from typing import Any, Literal
 
@@ -64,6 +66,11 @@ def process_stream_event(event: Any) -> Iterable[StreamEvent]:
                     continue
                 yield ToolCallEvent(name=tool_call["name"], id=tool_call["id"], args=tool_call["args"])
         case ToolMessage() if message.status == "success":
+            with contextlib.suppress(Exception):
+                success = json.loads(fix_message_content(message.content))["success"]
+                if not success:
+                    yield ToolErrorEvent(id=message.tool_call_id, error=(str(message.content) or "Unknown error"))
+                    return
             yield ToolResultEvent(id=message.tool_call_id, result=message.content, artifact=message.artifact)
         case ToolMessage() if message.status == "error":
             yield ToolErrorEvent(id=message.tool_call_id, error=str(message.content))

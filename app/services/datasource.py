@@ -1,6 +1,7 @@
 import json
 import threading
 import uuid
+from pathlib import Path
 
 from app.const import DATASOURCE_DIR
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
@@ -29,16 +30,17 @@ class DataSourceService:
             if not (fp.is_file() and fp.suffix == ".json"):
                 continue
             try:
-                self.load_source(fp.stem)
+                self.load_source(fp)
             except Exception as e:
                 logger.opt(exception=True).warning(f"Failed to load data source from {fp}: {e}")
         self._check_unique()
 
-    def load_source(self, source_id: str) -> DataSource:
-        fp = DATASOURCE_DIR / f"{source_id}.json"
+    def load_source(self, source_id: str | Path) -> DataSource:
+        fp = DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
         if not fp.exists():
             raise FileNotFoundError(f"Data source file {fp} does not exist")
 
+        source_id = source_id.stem if isinstance(source_id, Path) else source_id
         try:
             data = json.loads(fp.read_text())
             source = deserialize_data_source(data["type"], data["data"])
@@ -67,9 +69,13 @@ class DataSourceService:
         with _dremio_sync_sem:
             dss = get_dremio_client().list_sources()
 
-        current_ds = {s.unique_id: i for i, s in self.sources.items() if s.unique_id.startswith("dremio:")}
-        for ds in dss:
-            source = create_dremio_source(ds)
+        current_ds = {
+            source.unique_id: source_id
+            for source_id, source in self.sources.items()
+            if source.unique_id.startswith("dremio:")
+        }
+        for dremio_source in dss:
+            source = create_dremio_source(dremio_source)
             if source.unique_id not in current_ds:
                 source_id = str(uuid.uuid4())
                 self.save_source(source_id, source)
@@ -87,7 +93,7 @@ class DataSourceService:
                 del self.sources[source_id]
             unique_ids.add(source.unique_id)
 
-    def register(self, source: DataSource) -> str:
+    def register(self, source: DataSource) -> tuple[str, DataSource]:
         """
         注册数据源
 
@@ -95,15 +101,15 @@ class DataSourceService:
             source: 数据源对象
 
         Returns:
-            str: 数据源ID
+            tuple[str, DataSource]: 数据源 ID 和数据源对象
         """
-        for source_id, existing_source in self.sources.items():
-            if existing_source.unique_id == source.unique_id:
-                return source_id
+        gen = (source_id for source_id, source in self.sources.items() if source.unique_id == source.unique_id)
+        if existing := next(gen, None):
+            return existing, self.sources[existing]
 
         source_id = str(uuid.uuid4())
         self.save_source(source_id, source)
-        return source_id
+        return source_id, source
 
 
 datasource_service = DataSourceService()

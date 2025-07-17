@@ -3,10 +3,9 @@ import re
 import pandas as pd
 from langchain.prompts import PromptTemplate
 
-from app.core import datasource
+from app.core.datasource import DataSource
 from app.core.executor import CodeExecutor, ExecuteResult
 from app.log import logger
-from app.utils import format_overview
 
 from ._base import BaseLLMRunnable
 from .llm import LLM
@@ -175,8 +174,7 @@ class FixCode(
 
 class NL2DataAnalysis(
     BaseLLMRunnable[
-        # overview | df, query
-        tuple[str | pd.DataFrame, str],
+        tuple[DataSource, str],
         ExecuteResult,
     ]
 ):
@@ -190,13 +188,11 @@ class NL2DataAnalysis(
         self.max_retry: int = max_retry
         self.executor = executor
 
-    def execute(self, df: str | pd.DataFrame, query: str) -> ExecuteResult:
+    def execute(self, source: DataSource, query: str) -> ExecuteResult:
         if self.executor is None:
-            if not isinstance(df, pd.DataFrame):
-                raise ValueError("Data must be a pandas DataFrame")
-            self.executor = CodeExecutor(datasource.create_df_source(df, f"executor_{id(self)}"))
+            self.executor = CodeExecutor(source)
 
-        overview = format_overview(df) if isinstance(df, pd.DataFrame) else df
+        overview = source.format_overview()
         code = NL2Code(self.llm).invoke((overview, query))
         result = self.executor.execute(code)
 
@@ -214,7 +210,7 @@ class NL2DataAnalysis(
         logger.warning(f"分析执行失败: \n{result['error']}")
         return result
 
-    def _run(self, input: tuple[str | pd.DataFrame, str]) -> ExecuteResult:
+    def _run(self, input: tuple[DataSource, str]) -> ExecuteResult:
         try:
             return self.execute(*input)
         except Exception as e:

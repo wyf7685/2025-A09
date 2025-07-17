@@ -13,14 +13,7 @@ import matplotlib as mpl
 mpl.use("Agg")  # 使用非交互式后端以避免GUI依赖
 
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib.font_manager import FontProperties
-
-
-def format_overview(df: pd.DataFrame) -> str:
-    return (
-        f"数据规模: {df.shape[0]} 行 × {df.shape[1]} 列\n列数据类型:\n{df.dtypes}\n数据预览:\n{df.head().to_string()}"
-    )
 
 
 def configure_matplotlib_fonts() -> None:
