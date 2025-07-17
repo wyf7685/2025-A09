@@ -144,7 +144,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
                              可使用NumPy或Pandas函数(如np.log(), np.sqrt())
                              示例: "df['age'] * 2" 或
                              "np.log(df['prices']) * 2 + ds1['weight'] / ds2['height']"
-            source_datasets (dict[str, str], optional): 引用的其他数据集 {变量名: 数据集ID}
+            source_datasets (dict[str, str], optional): 表达式引用的其他数据集 {变量名: 数据集ID}
                                                      例如 {"ds": "reference_dataset_id"}
                                                      在表达式中可通过ds['列名']引用
             target_dataset_id (str, optional): 保存结果的数据集ID，如果为None则使用主数据集
@@ -153,7 +153,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         Returns:
             dict: 包含操作结果的字典，包括新列的基本统计信息和样本值
         """
-        source_datasets = (source_datasets or {}) | {dataset_id: "df"}
+        source_datasets = (source_datasets or {}) | {"df": dataset_id}
         target_dataset_id = target_dataset_id or dataset_id
         return create_column(sources, source_datasets, target_dataset_id, column_name, expression, description)
 

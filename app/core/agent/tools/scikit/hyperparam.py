@@ -205,7 +205,7 @@ def optimize_hyperparameters(
 
 _MODEL_PARAM_GRID = {
     "regression": {
-        "random_forest": {
+        "random_forest_regressor": {
             "model": "sklearn.ensemble:RandomForestRegressor",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -215,7 +215,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "decision_tree": {
+        "decision_tree_regressor": {
             "model": "sklearn.tree:DecisionTreeRegressor",
             "grid": {
                 "max_depth": [None, 5, 10, 15, 20],
@@ -273,7 +273,7 @@ _MODEL_PARAM_GRID = {
         },
     },
     "classification": {
-        "random_forest": {
+        "random_forest_classifier": {
             "model": "sklearn.ensemble:RandomForestClassifier",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -283,7 +283,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "decision_tree": {
+        "decision_tree_classifier": {
             "model": "sklearn.tree:DecisionTreeClassifier",
             "grid": {
                 "max_depth": [None, 5, 10, 15, 20],

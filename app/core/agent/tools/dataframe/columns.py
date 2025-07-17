@@ -12,7 +12,7 @@ type SourceDatasets = dict[str, DatasetID]  # 变量名到数据集ID的映射
 
 
 def ensure_datasets(sources: Sources, source_datasets: SourceDatasets) -> dict[str, pd.DataFrame]:
-    for alias in source_datasets:
+    for alias in source_datasets.values():
         if not alias.isidentifier():
             raise ValueError(f"数据集别名 '{alias}' 不是有效的Python标识符。")
 

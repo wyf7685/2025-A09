@@ -157,7 +157,7 @@ class DataAnalyzerAgent:
         self.trained_models = models
         self.saved_models = saved_models
 
-        logger.info(f"创建数据分析 Agent: <y>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
+        logger.opt(colors=True).info(f"创建数据分析 Agent: <y>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
 
     def get_messages(self) -> list[AnyMessage]:
         """获取当前 agent 的对话记录"""
