@@ -16,10 +16,10 @@ from app.core.agent.schemas import (
     AgentValues,
     DataAnalyzerAgentState,
     DatasetID,
-    Sources,
+    SourcesDict,
     format_sources_overview,
-    sources_fn,
 )
+from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
 from app.core.agent.tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 from app.core.chain.llm import LLM
@@ -64,7 +64,7 @@ def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
             )
             try:
                 dataset_id = cast("DatasetID", call["args"]["dataset_id"])
-                result = tool(df=sources[dataset_id].get_full(), **call["args"])
+                result = tool(df=sources.read(dataset_id), **call["args"])
             except Exception as err:
                 logger.opt(colors=True, exception=True).warning(
                     f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(str(err))}"
@@ -125,7 +125,7 @@ def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, tup
 class DataAnalyzerAgent:
     def __init__(
         self,
-        sources: Sources,
+        sources_dict: SourcesDict,
         llm: LLM,
         chat_model: BaseChatModel,
         session_id: SessionID,
@@ -133,14 +133,13 @@ class DataAnalyzerAgent:
         # for rate limiting
         pre_model_hook: RunnableLambda | None = None,
     ) -> None:
-        self.sources = sources
+        self.sources = sources = Sources(sources_dict)
         self.llm = llm
         self.session_id = session_id
 
-        get_df, create_df, rename_df = sources_fn(sources)
         analyzer = analyzer_tool(sources, llm)
-        df_tools = dataframe_tools(get_df, create_df, rename_df)
-        sk_tools, models, saved_models = scikit_tools(get_df, create_df, session_id)
+        df_tools = dataframe_tools(sources)
+        sk_tools, models, saved_models = scikit_tools(sources, session_id)
         sc_tools = sources_tools(sources)
         all_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
 
@@ -148,7 +147,7 @@ class DataAnalyzerAgent:
             model=chat_model,
             tools=all_tools,
             prompt=SYSTEM_PROMPT.format(
-                overview=format_sources_overview(sources),
+                overview=format_sources_overview(sources_dict),
                 tool_intro=TOOL_INTRO,
             ),
             checkpointer=InMemorySaver(),

@@ -3,7 +3,8 @@ from typing import Any
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
-from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID, DatasetRenamer, OperationFailed
+from app.core.agent.schemas import DatasetID, OperationFailed
+from app.core.agent.sources import Sources
 from app.log import logger
 from app.utils import escape_tag
 
@@ -40,11 +41,7 @@ from .multi import (
 )
 
 
-def dataframe_tools(
-    get_df: DatasetGetter,
-    create_df: DatasetCreator,
-    rename_df: DatasetRenamer,
-) -> list[BaseTool]:
+def dataframe_tools(sources: Sources) -> list[BaseTool]:
     @tool
     def correlation_analysis_tool(
         dataset_id: DatasetID,
@@ -68,7 +65,7 @@ def dataframe_tools(
         logger.opt(colors=True).info(
             f"执行<g>相关性分析</>: <y>{escape_tag(col1)}</> 与 <y>{escape_tag(col2)}</>, 方法: {escape_tag(method)}"
         )
-        return corr_analys(get_df(dataset_id), col1, col2, method)
+        return corr_analys(sources.read(dataset_id), col1, col2, method)
 
     @tool
     def lag_analysis_tool(
@@ -90,7 +87,7 @@ def dataframe_tools(
         logger.opt(colors=True).info(
             f"执行<g>时滞分析</>: <y>{escape_tag(time_col1)}</> 与 <y>{escape_tag(time_col2)}</>"
         )
-        return lag_analys(get_df(dataset_id), time_col1, time_col2)
+        return lag_analys(sources.read(dataset_id), time_col1, time_col2)
 
     @tool
     def detect_outliers_tool(
@@ -118,34 +115,47 @@ def dataframe_tools(
             f"方法: <y>{escape_tag(method)}</>, "
             f"阈值: <y>{threshold}</>"
         )
-        return detect_outliers(get_df(dataset_id), column, method, threshold)
+        return detect_outliers(sources.read(dataset_id), column, method, threshold)
 
     @tool
     def create_column_tool(
         dataset_id: DatasetID,
         column_name: str,
         expression: str,
-        columns_used: list[str] | None = None,
+        source_datasets: dict[str, DatasetID] | None = None,
+        target_dataset_id: DatasetID | None = None,
         description: str | None = None,
     ) -> CreateColumnResult | OperationFailed:
         """
-        可以使用此工具修改现有列或创建新列（包括简单的数据清洗）
-        允许使用Python表达式对现有列进行操作，创建复合变量。
+        在数据集中创建新列或修改现有列，支持引用多个数据集的数据。
+
+        此工具极为灵活，可用于各种特征工程任务，包括但不限于：
+        - 数学转换（如对数、平方根、标准化）
+        - 逻辑条件处理（如基于条件的值映射）
+        - 文本处理（如字符串分割、拼接）
+        - 日期时间计算（如提取年月日、计算时间差）
+        - 跨数据集特征创建（如合并不同数据集的信息）
 
         Args:
-            dataset_id (str): 操作的数据集ID。
-            column_name (str): 新列的名称，如果已存在则会被替换。
-            expression (str): Python表达式，用于计算新列的值。
-                            可使用df['列名']或直接使用列名(如果不包含特殊字符)，
-                            并可使用NumPy函数(如np.log(), np.sqrt())。
-                            示例: "df['A'] + df['B']" 或 "np.log(A) * 2 + B / C"。
-            columns_used (list[str], optional): 表达式中使用的列名列表。
-            description (str, optional): 新列的描述和用途。
+            dataset_id (str): 主数据集ID，在表达式中使用变量名`df`引用
+            column_name (str): 新列的名称，如果已存在则会被替换
+            expression (str): Python表达式，用于计算新列的值
+                             可使用`{变量名}['{列名}']`引用指定数据集的列
+                             可使用NumPy或Pandas函数(如np.log(), np.sqrt())
+                             示例: "df['age'] * 2" 或
+                             "np.log(df['prices']) * 2 + ds1['weight'] / ds2['height']"
+            source_datasets (dict[str, str], optional): 引用的其他数据集 {变量名: 数据集ID}
+                                                     例如 {"ds": "reference_dataset_id"}
+                                                     在表达式中可通过ds['列名']引用
+            target_dataset_id (str, optional): 保存结果的数据集ID，如果为None则使用主数据集
+            description (str, optional): 新列的描述和用途
 
         Returns:
-            dict: 包含操作结果的字典，包括新列的基本统计信息和样本值。
+            dict: 包含操作结果的字典，包括新列的基本统计信息和样本值
         """
-        return create_column(get_df(dataset_id), column_name, expression, columns_used, description)
+        source_datasets = (source_datasets or {}) | {dataset_id: "df"}
+        target_dataset_id = target_dataset_id or dataset_id
+        return create_column(sources, source_datasets, target_dataset_id, column_name, expression, description)
 
     @tool
     def create_interaction_term_tool(
@@ -173,7 +183,9 @@ def dataframe_tools(
         Returns:
             dict: 包含操作结果的字典。
         """
-        return create_interaction_term(get_df(dataset_id), column_name, columns_to_interact, interaction_type, scale)
+        return create_interaction_term(
+            sources.read(dataset_id), column_name, columns_to_interact, interaction_type, scale
+        )
 
     @tool
     def create_aggregated_feature_tool(
@@ -203,7 +215,7 @@ def dataframe_tools(
             dict: 包含操作结果的字典。
         """
         return create_aggregated_feature(
-            get_df(dataset_id), column_name, group_by_column, target_column, aggregation, description
+            sources.read(dataset_id), column_name, group_by_column, target_column, aggregation, description
         )
 
     @tool
@@ -231,7 +243,7 @@ def dataframe_tools(
         Returns:
             dict: 包含数据框详细信息的结果
         """
-        return inspect_dataframe(get_df(dataset_id), options)
+        return inspect_dataframe(sources.read(dataset_id), options)
 
     @tool
     def infer_and_convert_dtypes_tool(
@@ -265,13 +277,13 @@ def dataframe_tools(
             dict: 包含转换结果的详细信息，包括成功和失败的列、转换前后的类型以及内存使用变化
         """
         result = infer_and_convert_dtypes(
-            get_df(dataset_id), columns, to_numeric, to_datetime, to_category, category_threshold, datetime_format
+            sources.read(dataset_id), columns, to_numeric, to_datetime, to_category, category_threshold, datetime_format
         )
 
         if result[0] is not None:
-            new_id = create_df(result[0])
+            new_id = sources.create(result[0])
             if in_place:
-                rename_df(new_id, dataset_id)
+                sources.rename(new_id, dataset_id)
                 new_id = dataset_id
             result[1]["new_dataset_id"] = new_id
 
@@ -299,12 +311,12 @@ def dataframe_tools(
         Returns:
             dict: 包含修复结果的详细信息，包括修复的行数、修复前后的样本对比
         """
-        result = fix_misaligned_data(get_df(dataset_id), suspected_columns, alignment_pattern)
+        result = fix_misaligned_data(sources.read(dataset_id), suspected_columns, alignment_pattern)
 
         if result[0] is not None:
-            new_id = create_df(result[0])
+            new_id = sources.create(result[0])
             if in_place:
-                rename_df(new_id, dataset_id)
+                sources.rename(new_id, dataset_id)
                 new_id = dataset_id
             if result[1]["success"]:
                 result[1]["new_dataset_id"] = new_id
@@ -329,7 +341,7 @@ def dataframe_tools(
         Returns:
             处理结果字典
         """
-        return handle_missing_values(get_df(dataset_id), column, method)
+        return handle_missing_values(sources.read(dataset_id), column, method)
 
     @tool
     def get_missing_values_summary_tool(dataset_id: DatasetID) -> MissingValuesSummary:
@@ -342,7 +354,7 @@ def dataframe_tools(
         Returns:
             缺失值摘要字典
         """
-        return get_missing_values_summary(get_df(dataset_id))
+        return get_missing_values_summary(sources.read(dataset_id))
 
     @tool
     def join_dataframes_tool(
@@ -365,12 +377,7 @@ def dataframe_tools(
         Returns:
             dict: 包含连接结果的字典。
         """
-        result = join_dataframes(get_df(left_dataset_id), get_df(right_dataset_id), join_type, left_on, right_on)
-        if result[0] is not None:
-            source_id = create_df(result[0])
-            result[1]["new_dataset_id"] = source_id
-
-        return result[1]
+        return join_dataframes(sources, left_dataset_id, right_dataset_id, join_type, left_on, right_on)
 
     @tool
     def combine_dataframes_tool(
@@ -394,13 +401,7 @@ def dataframe_tools(
         Returns:
             dict: 包含连接结果的字典。
         """
-        result = combine_dataframes([get_df(id) for id in dataset_ids], operation, match_columns, ignore_index)
-
-        if result[0] is not None:
-            source_id = create_df(result[0])
-            result[1]["new_dataset_id"] = source_id
-
-        return result[1]
+        return combine_dataframes(sources, dataset_ids, operation, match_columns, ignore_index)
 
     @tool
     def create_dataset_from_query_tool(
@@ -421,12 +422,7 @@ def dataframe_tools(
         Returns:
             dict: 包含新数据集ID和样本数据的结果字典。
         """
-        result = create_dataset_from_query(get_df(dataset_id), query, columns, reset_index)
-        if result[0] is not None:
-            source_id = create_df(result[0])
-            result[1]["new_dataset_id"] = source_id
-
-        return result[1]
+        return create_dataset_from_query(sources, dataset_id, query, columns, reset_index)
 
     @tool
     def create_dataset_by_sampling_tool(
@@ -449,12 +445,7 @@ def dataframe_tools(
         Returns:
             dict: 包含新数据集ID和样本数据的结果字典。
         """
-        result = create_dataset_by_sampling(get_df(dataset_id), n, frac, random_state, stratify_by)
-        if result[0] is not None:
-            source_id = create_df(result[0])
-            result[1]["new_dataset_id"] = source_id
-
-        return result[1]
+        return create_dataset_by_sampling(sources, dataset_id, n, frac, random_state, stratify_by)
 
     return [
         # 数据检查/探索工具（了解数据）

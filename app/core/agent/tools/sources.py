@@ -1,6 +1,6 @@
 from langchain_core.tools import BaseTool, tool
 
-from app.core.agent.schemas import Sources
+from app.core.agent.sources import Sources
 
 
 def sources_tools(sources: Sources) -> list[BaseTool]:
@@ -43,9 +43,9 @@ def sources_tools(sources: Sources) -> list[BaseTool]:
         Raises:
             ValueError: 如果指定的原始数据集ID不存在
         """
-        if dataset_id not in sources:
+        if not sources.exists(dataset_id):
             raise ValueError(f"数据集 {dataset_id} 不存在")
-        sources[new_dataset_id] = sources.pop(dataset_id)
+        sources.rename(dataset_id, new_dataset_id)
         return f"数据集 {dataset_id} 已重命名为 {new_dataset_id}"
 
     return [

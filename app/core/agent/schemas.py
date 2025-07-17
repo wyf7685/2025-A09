@@ -1,13 +1,11 @@
-import uuid
-from collections.abc import Callable, MutableMapping
+from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Literal, NotRequired, TypedDict
 
-import pandas as pd
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
 
-from app.core.datasource import DataSource, create_df_source
+from app.core.datasource import DataSource
 
 
 class AgentValues(TypedDict):
@@ -20,32 +18,9 @@ class DataAnalyzerAgentState(BaseModel):
 
 
 type DatasetID = str
-type Sources = MutableMapping[DatasetID, DataSource]
-type DatasetGetter = Callable[[DatasetID], pd.DataFrame]
-type DatasetCreator = Callable[[pd.DataFrame], DatasetID]
-type DatasetRenamer = Callable[[DatasetID, DatasetID], None]
+type SourcesDict = MutableMapping[DatasetID, DataSource]
 
-
-def sources_fn(sources: Sources) -> tuple[DatasetGetter, DatasetCreator, DatasetRenamer]:
-    def get_df(dataset_id: DatasetID) -> pd.DataFrame:
-        if dataset_id not in sources:
-            raise ValueError(f"数据源 {dataset_id} 不存在")
-        return sources[dataset_id].get_full()
-
-    def create_df(df: pd.DataFrame) -> DatasetID:
-        source_id = str(uuid.uuid4())
-        sources[source_id] = create_df_source(df, source_id)
-        return source_id
-
-    def rename_df(old_id: DatasetID, new_id: DatasetID) -> None:
-        if old_id not in sources:
-            raise ValueError(f"数据源 {old_id} 不存在")
-        sources[new_id] = sources.pop(old_id)
-
-    return get_df, create_df, rename_df
-
-
-def format_sources_overview(sources: Sources) -> str:
+def format_sources_overview(sources: SourcesDict) -> str:
     """
     格式化数据源的概览信息。
 

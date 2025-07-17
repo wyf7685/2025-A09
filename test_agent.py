@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
-from app.core.agent.schemas import Sources
+from app.core.agent.schemas import SourcesDict
 from app.core.chain import get_chat_model, get_llm, rate_limiter
 from app.core.datasource import create_file_source
 from app.log import logger
@@ -23,7 +23,7 @@ def log_event(event: StreamEvent) -> None:
             logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
 
 
-def prefetch_data(sources: Sources) -> None:
+def prefetch_data(sources: SourcesDict) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor() as executor:
@@ -42,14 +42,14 @@ def test_agent() -> None:
 
     # See 飞桨/碳中和—工业废气排放检测
     test_data_dir = Path("data/test")
-    sources: Sources = {
+    sources: SourcesDict = {
         "train": create_file_source(test_data_dir / "train.csv", sep="\t"),
         "test": create_file_source(test_data_dir / "test.csv", sep="\t"),
     }
     prefetch_data(sources)
 
     agent = DataAnalyzerAgent(
-        sources=sources,
+        sources_dict=sources,
         llm=llm,
         chat_model=get_chat_model(),
         session_id="TEST",

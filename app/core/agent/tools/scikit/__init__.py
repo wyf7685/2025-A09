@@ -9,7 +9,8 @@ from typing import Any, Literal, cast
 from langchain_core.tools import BaseTool, tool
 
 from app.const import MODEL_DIR
-from app.core.agent.schemas import DatasetCreator, DatasetGetter, DatasetID
+from app.core.agent.schemas import DatasetID
+from app.core.agent.sources import Sources
 from app.log import logger
 from app.schemas.session import SessionID
 from app.services.model_registry import model_registry
@@ -82,8 +83,7 @@ type ModelID = str
 
 
 def scikit_tools(
-    get_df: DatasetGetter,
-    create_df: DatasetCreator,
+    sources: Sources,
     session_id: SessionID,
 ) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
@@ -204,7 +204,7 @@ def scikit_tools(
                 f"目标: <e>{escape_tag(target)}</e>"
             )
             result = fit_model(
-                get_df(dataset_id), features, target, model, model_type, test_size, random_state, hyperparams
+                sources.read(dataset_id), features, target, model, model_type, test_size, random_state, hyperparams
             )
 
             train_model_cache[model_id] = result
@@ -400,7 +400,7 @@ def scikit_tools(
 
         file_path = saved_models[model_id]
         logger.opt(colors=True).info(f"<g>加载模型</>: <c>{escape_tag(str(file_path))}</>")
-        metadata, train_result = load_model(get_df(dataset_id), file_path)
+        metadata, train_result = load_model(sources.read(dataset_id), file_path)
         train_model_cache[model_id] = train_result
         return metadata
 
@@ -439,11 +439,11 @@ def scikit_tools(
             raise ValueError(f"未找到训练结果 ID '{model_id}'。请先调用 fit_model_tool 进行训练。")
 
         logger.opt(colors=True).info(f"<g>使用模型进行预测</>, ID = <c>{escape_tag(model_id)}</>")
-        prediction, result = predict_with_model(train_model_cache[model_id], get_df(dataset_id), input_features)
-        result["prediction_dataset_id"] = create_df(prediction)
+        prediction, result = predict_with_model(train_model_cache[model_id], sources.read(dataset_id), input_features)
+        result["prediction_dataset_id"] = sources.create(prediction)
         return result
 
-    @tool
+    @tool(response_format="content_and_artifact")
     def select_features_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -478,15 +478,15 @@ def scikit_tools(
         logger.opt(colors=True).info(
             f"<g>开始特征选择</>，方法: <y>{escape_tag(method)}</>, 候选特征数: <c>{len(features)}</>"
         )
-        result, figure = select_features(get_df(dataset_id), features, target, method, task_type, n_features, threshold)
+        result, figure = select_features(
+            sources.read(dataset_id), features, target, method, task_type, n_features, threshold
+        )
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
         return result, artifact
 
-    select_features_tool.response_format = "content_and_artifact"
-
-    @tool
+    @tool(response_format="content_and_artifact")
     def analyze_feature_importance_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -515,15 +515,13 @@ def scikit_tools(
         logger.opt(colors=True).info(
             f"<g>开始分析特征重要性</>，方法: <y>{escape_tag(method)}</>, 特征数: <c>{len(features)}</>"
         )
-        result, figure = analyze_feature_importance(get_df(dataset_id), features, target, method, task_type)
+        result, figure = analyze_feature_importance(sources.read(dataset_id), features, target, method, task_type)
         artifact = {}
         if figure is not None:
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
         return result, artifact
 
-    analyze_feature_importance_tool.response_format = "content_and_artifact"
-
-    @tool
+    @tool(response_format="content_and_artifact")
     def optimize_hyperparameters_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -564,7 +562,16 @@ def scikit_tools(
             f"<g>开始超参数优化</>，模型: <e>{escape_tag(model_type)}</>, 方法: <y>{escape_tag(method)}</>"
         )
         result, figure = optimize_hyperparameters(
-            get_df(dataset_id), features, target, model_type, task_type, method, cv_folds, scoring, param_grid, n_iter
+            sources.read(dataset_id),
+            features,
+            target,
+            model_type,
+            task_type,
+            method,
+            cv_folds,
+            scoring,
+            param_grid,
+            n_iter,
         )
 
         artifact = {}
@@ -573,9 +580,7 @@ def scikit_tools(
 
         return result, artifact
 
-    optimize_hyperparameters_tool.response_format = "content_and_artifact"
-
-    @tool
+    @tool(response_format="content_and_artifact")
     def plot_learning_curve_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -605,7 +610,7 @@ def scikit_tools(
         """
         logger.opt(colors=True).info(f"<g>开始生成学习曲线</>，模型: <e>{escape_tag(model_type)}</>")
         result, figure = plot_learning_curve(
-            get_df(dataset_id), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
+            sources.read(dataset_id), features, target, model_type, task_type, cv_folds, scoring, None, hyperparams
         )
 
         artifact = {}
@@ -613,8 +618,6 @@ def scikit_tools(
             artifact = {"type": "image", "base64_data": base64.b64encode(figure).decode()}
 
         return result, artifact
-
-    plot_learning_curve_tool.response_format = "content_and_artifact"
 
     tools = [
         # 特征选择和分析

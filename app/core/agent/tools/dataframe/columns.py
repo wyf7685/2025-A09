@@ -1,67 +1,79 @@
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 import numpy as np
 import pandas as pd
 
-from app.core.agent.schemas import OperationFailed
+from app.core.agent.schemas import DatasetID, OperationFailed
+from app.core.agent.sources import Sources
 from app.log import logger
 from app.utils import escape_tag
 
+type SourceDatasets = dict[str, DatasetID]  # 变量名到数据集ID的映射
+
+
+def ensure_datasets(sources: Sources, source_datasets: SourceDatasets) -> dict[str, pd.DataFrame]:
+    for alias in source_datasets:
+        if not alias.isidentifier():
+            raise ValueError(f"数据集别名 '{alias}' 不是有效的Python标识符。")
+
+    return {
+        alias: sources.read(dataset_id)  # 数据集不存在时抛出错误
+        for alias, dataset_id in source_datasets.items()
+    }
+
 
 class CreateColumnResult(TypedDict):
-    success: bool
+    success: Literal[True]
     message: str
+    target_dataset_id: DatasetID
     statistics: dict[str, Any]  # 包含新列的统计信息
     sample_values: list[Any]  # 新列的前5个样本值
     dtype: str  # 新列的数据类型
-    description: NotRequired[str]  # 可选的新列描述和用途
+    description: str | None  # 可选的新列描述和用途
 
 
 def create_column(
-    df: pd.DataFrame,
+    sources: Sources,
+    source_datasets: SourceDatasets,
+    target_dataset_id: DatasetID,
     column_name: str,
     expression: str,
-    columns_used: list[str] | None = None,
     description: str | None = None,
 ) -> CreateColumnResult | OperationFailed:
     """
-    在DataFrame中创建新列或修改现有列。
+    计算一个新列，但不修改原始DataFrame。
     允许使用Python表达式对现有列进行操作，创建复合变量。
 
     Args:
-        column_name (str): 新列的名称，如果已存在则会被替换。
+        sources (Sources): 数据源管理对象。
+        source_datasets (dict[DatasetID, str]): 数据集ID到变量名的映射。
+        target_dataset_id (DatasetID): 目标数据集ID，用于保存新列。
+        column_name (str): 新列的名称
         expression (str): Python表达式，用于计算新列的值。
-                         可使用df['列名']或直接使用列名(如果不包含特殊字符)，
-                         并可使用NumPy函数(如np.log(), np.sqrt())。
-                         示例: "df['A'] + df['B']" 或 "np.log(A) * 2 + B / C"。
-        columns_used (list[str], optional): 表达式中使用的列名列表。
         description (str, optional): 新列的描述和用途，提高可解释性。
 
     Returns:
-        dict: 包含操作结果的字典，包括新列的基本统计信息和样本值。
+        tuple: 包含计算的Series和结果信息的元组。如果失败则Series为None。
     """
     logger.opt(colors=True).info(
         f"创建新列: <e>{escape_tag(column_name)}</>, "
         f"基于表达式: <y>{escape_tag(expression)}</>, "
-        f"使用列: <c>{escape_tag(str(columns_used or '未指定'))}</>"
+        f"使用数据集: <c>{escape_tag(str(source_datasets))}</>, "
+        f"目标数据集: <c>{escape_tag(target_dataset_id)}</>"
     )
 
+    for alias in source_datasets:
+        if not alias.isidentifier():
+            raise ValueError(f"数据集别名 '{alias}' 不是有效的Python标识符。")
+
+    source_vars = {
+        alias: sources.read(dataset_id)  # 数据集不存在时抛出错误
+        for alias, dataset_id in source_datasets.items()
+    }
+
     try:
-        # 安全性检查：验证所有提到的列都存在
-        if columns_used:
-            missing_columns = [col for col in columns_used if col not in df.columns]
-            if missing_columns:
-                return {
-                    "success": False,
-                    "message": f"错误: 以下列不存在: {', '.join(missing_columns)}",
-                }
-
         # 准备本地变量环境
-        local_vars = {"df": df, "np": np, "pd": pd}
-
-        for column in columns_used or []:
-            if column.isidentifier() and column not in local_vars:
-                local_vars[column] = df[column]  # 将列添加到本地变量中
+        local_vars: dict[str, Any] = source_vars | {"np": np, "pd": pd}
 
         # 执行表达式计算新列值
         new_values = eval(  # noqa: S307
@@ -70,30 +82,35 @@ def create_column(
             local_vars,
         )
 
-        # 将结果添加到DataFrame中
-        df[column_name] = new_values
+        # 将结果转换为Series（如果不是）
+        new_series = pd.Series(new_values) if not isinstance(new_values, pd.Series) else new_values
+        new_series.name = column_name
+
+        # 保存新列到目标数据集
+        sources.read(target_dataset_id)[column_name] = new_series
 
         # 返回结果
-        result: CreateColumnResult = {
+        return {
             "success": True,
             "message": f"成功创建新列 '{column_name}'",
-            "statistics": df[column_name].describe().to_dict(),
-            "sample_values": df[column_name].head(5).tolist(),
-            "dtype": str(df[column_name].dtype),
+            "target_dataset_id": target_dataset_id,
+            "statistics": new_series.describe().to_dict(),
+            "sample_values": new_series.head(5).tolist(),
+            "dtype": str(new_series.dtype),
+            "description": description,
         }
-
-        if description:
-            result["description"] = description
-
-        return result
 
     except Exception as e:
         logger.opt(colors=True).exception(f"创建列 '<e>{escape_tag(column_name)}</>' 时出错")
-        return {"success": False, "message": f"错误: {e}"}
+        return {
+            "success": False,
+            "message": f"错误: {e}",
+            "error_type": type(e).__name__,
+        }
 
 
 class CreateInteractionTermResult(TypedDict):
-    success: bool
+    success: Literal[True]
     message: str
     statistics: dict[str, Any]  # 包含新列的统计信息
     sample_values: list[Any]  # 新列的前5个样本值
@@ -221,7 +238,7 @@ def create_interaction_term(
 
 
 class CreateAggregatedFeatureResult(TypedDict):
-    success: bool
+    success: Literal[True]
     message: str
     statistics: dict[str, Any]  # 包含新列的统计信息
     sample_values: list[Any]  # 新列的前5个样本值

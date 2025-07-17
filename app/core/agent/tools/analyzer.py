@@ -1,13 +1,17 @@
 import base64
+from typing import TYPE_CHECKING
 
 from langchain_core.tools import BaseTool, tool
 
-from app.core.agent.schemas import DatasetID, Sources
+from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.executor import CodeExecutor, format_result
 from app.log import logger
 from app.utils import escape_tag
+
+if TYPE_CHECKING:
+    from app.core.agent.schemas import DatasetID
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -49,10 +53,9 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
     """
     analyzers: dict[DatasetID, NL2DataAnalysis] = {}
 
-    @tool(description=TOOL_DESCRIPTION)
+    @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
     def analyze_data(dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
-        if not (source := sources.get(dataset_id)):
-            raise ValueError(f"数据集 {dataset_id} 不存在")
+        source = sources.get(dataset_id)
 
         if dataset_id not in analyzers:
             analyzers[dataset_id] = NL2DataAnalysis(llm, executor=CodeExecutor(source))
@@ -72,5 +75,4 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
 
         return format_result(result), artifact
 
-    analyze_data.response_format = "content_and_artifact"
     return analyze_data

@@ -3,7 +3,8 @@ from typing import Any, Literal, TypedDict, cast
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from app.core.agent.schemas import OperationFailed
+from app.core.agent.schemas import DatasetID, OperationFailed
+from app.core.agent.sources import Sources
 from app.log import logger
 from app.utils import escape_tag
 
@@ -23,31 +24,36 @@ class JoinDataframesResult(TypedDict):
 
 
 def join_dataframes(
-    df_left: pd.DataFrame,
-    df_right: pd.DataFrame,
+    sources: Sources,
+    left_dataset_id: DatasetID,
+    right_dataset_id: DatasetID,
     join_type: JoinType = "inner",
     left_on: str | list[str] | None = None,
     right_on: str | list[str] | None = None,
-) -> tuple[pd.DataFrame, JoinDataframesResult] | tuple[None, OperationFailed]:
+) -> JoinDataframesResult | OperationFailed:
     """
     连接两个数据框，创建新的数据集
 
     Args:
-        df_left (pd.DataFrame): 左侧数据框
-        df_right (pd.DataFrame): 右侧数据框
+        sources (Sources): 数据源管理对象
+        left_dataset_id (str): 左侧数据集ID
+        right_dataset_id (str): 右侧数据集ID
         join_type (str): 连接类型，可选值：'inner', 'left', 'right', 'outer', 'cross'
         left_on (str | List[str], optional): 左侧数据框用于连接的列名(单个或列表)
         right_on (str | List[str], optional): 右侧数据框用于连接的列名(单个或列表)
 
     Returns:
-        Tuple[Optional[pd.DataFrame], JoinDataframesResult | OperationFailed]:
+        tuple[pd.DataFrame, JoinDataframesResult] | tuple[None, OperationFailed]:
             包含新数据框和操作结果的元组，如果操作失败则数据框为None
     """
+    df_left = sources.read(left_dataset_id)
+    df_right = sources.read(right_dataset_id)
+
     try:
         # 验证连接类型
         valid_join_types = ["inner", "left", "right", "outer", "cross"]
         if join_type not in valid_join_types:
-            return None, {
+            return {
                 "success": False,
                 "message": f"不支持的连接类型: {join_type}，有效的连接类型有: {', '.join(valid_join_types)}",
                 "error_type": "InvalidJoinType",
@@ -55,28 +61,27 @@ def join_dataframes(
 
         # 验证连接键
         if join_type != "cross" and (left_on is None or right_on is None):
-            return None, {
+            return {
                 "success": False,
                 "message": f"连接类型 '{join_type}' 需要指定 left_on 和 right_on 参数",
                 "error_type": "MissingJoinKeys",
             }
 
-        # 验证连接列存在
+        # 验证左侧连接列存在
         if left_on is not None:
-            left_cols = [left_on] if isinstance(left_on, str) else left_on
-            for col in left_cols:
+            for col in [left_on] if isinstance(left_on, str) else left_on:
                 if col not in df_left.columns:
-                    return None, {
+                    return {
                         "success": False,
                         "message": f"左侧数据框中不存在列: {col}",
                         "error_type": "ColumnNotFound",
                     }
 
+        # 验证右侧连接列存在
         if right_on is not None:
-            right_cols = [right_on] if isinstance(right_on, str) else right_on
-            for col in right_cols:
+            for col in [right_on] if isinstance(right_on, str) else right_on:
                 if col not in df_right.columns:
-                    return None, {
+                    return {
                         "success": False,
                         "message": f"右侧数据框中不存在列: {col}",
                         "error_type": "ColumnNotFound",
@@ -89,7 +94,7 @@ def join_dataframes(
         # 执行连接操作
         logger.opt(colors=True).info(
             f"<g>连接数据框</>: "
-            f"类型 <y>{escape_tag(join_type)}</>, "
+            f"类型 <y>{join_type}</>, "
             f"左键 <y>{escape_tag(str(left_on))}</>, "
             f"右键 <y>{escape_tag(str(right_on))}</>"
         )
@@ -98,6 +103,9 @@ def join_dataframes(
             result_df = df_left.merge(df_right, how=join_type)
         else:
             result_df = df_left.merge(df_right, how=join_type, left_on=left_on, right_on=right_on)
+
+        # 保存结果数据集
+        dataset_id = sources.create(result_df)
 
         # 生成结果
         join_details = {
@@ -114,10 +122,10 @@ def join_dataframes(
             },
         }
 
-        return result_df, {
+        return {
             "success": True,
             "message": f"成功创建连接数据集，包含 {result_df.shape[0]} 行和 {result_df.shape[1]} 列",
-            "new_dataset_id": "{{UNSET}}",
+            "new_dataset_id": dataset_id,
             "shape": result_df.shape,
             "columns": result_df.columns.tolist(),
             "preview": result_df.head(5).to_string(),
@@ -126,7 +134,7 @@ def join_dataframes(
 
     except Exception as e:
         logger.exception("连接数据框时发生错误")
-        return None, {
+        return {
             "success": False,
             "message": f"连接数据框时发生错误: {e}",
             "error_type": type(e).__name__,
@@ -149,16 +157,18 @@ class CombineDataframesResult(TypedDict):
 
 
 def combine_dataframes(
-    dfs: list[pd.DataFrame],
+    sources: Sources,
+    dataset_ids: list[DatasetID],
     operation: CombineDataframesOperation = "union",
     match_columns: bool = True,
     ignore_index: bool = True,
-) -> tuple[pd.DataFrame, CombineDataframesResult] | tuple[None, OperationFailed]:
+) -> CombineDataframesResult | OperationFailed:
     """
     执行多个数据框之间的集合操作，创建新的数据集
 
     Args:
-        dfs (list[pd.DataFrame]): 要合并的数据框列表（至少需要1个）
+        sources (Sources): 数据源管理对象
+        dataset_ids (list[str]): 数据集ID列表（至少需要1个）
         operation (str): 集合操作类型，可选值：
             - 'union': 合并所有数据框的行（保留所有行，类似SQL的UNION ALL）
             - 'intersection': 只保留在所有数据框中都出现的行
@@ -167,46 +177,46 @@ def combine_dataframes(
         ignore_index (bool): 是否重置结果数据框的索引，默认为True
 
     Returns:
-        tuple[pd.DataFrame, CombineDataframesResult] | tuple[None, OperationFailed]:
+        CombineDataframesResult | OperationFailed:
             包含新数据框和操作结果的元组，如果操作失败则数据框为None
     """
+    dfs = [sources.read(id) for id in dataset_ids]
+
+    # 基本验证
+    if not dfs:
+        return {
+            "success": False,
+            "message": "至少需要提供一个数据框",
+            "error_type": "InvalidInput",
+        }
+
+    valid_operations = ["union", "intersection", "difference"]
+    if operation not in valid_operations:
+        return {
+            "success": False,
+            "message": f"不支持的操作类型: {operation}，有效的操作类型有: {', '.join(valid_operations)}",
+            "error_type": "InvalidOperation",
+        }
+
+    # 检查列的一致性（如果要求匹配列）
+    if match_columns and len(dfs) > 1:
+        first_df_columns = set(dfs[0].columns)
+        for i, df in enumerate(dfs[1:], 1):
+            if set(df.columns) != first_df_columns:
+                return {
+                    "success": False,
+                    "message": f"数据框 #{i} 的列与第一个数据框不匹配。"
+                    "如果要合并具有不同列的数据框，请将match_columns参数设置为False",
+                    "error_type": "ColumnMismatch",
+                }
+
+    # 记录合并前的信息，用于结果报告
+    input_shapes = [df.shape for df in dfs]
+
+    # 执行集合操作
+    logger.opt(colors=True).info(f"<g>合并数据框</>: 操作 <y>{escape_tag(operation)}</>, 数据框数量 <y>{len(dfs)}</>")
+
     try:
-        # 基本验证
-        if not dfs:
-            return None, {
-                "success": False,
-                "message": "至少需要提供一个数据框",
-                "error_type": "InvalidInput",
-            }
-
-        valid_operations = ["union", "intersection", "difference"]
-        if operation not in valid_operations:
-            return None, {
-                "success": False,
-                "message": f"不支持的操作类型: {operation}，有效的操作类型有: {', '.join(valid_operations)}",
-                "error_type": "InvalidOperation",
-            }
-
-        # 检查列的一致性（如果要求匹配列）
-        if match_columns and len(dfs) > 1:
-            first_df_columns = set(dfs[0].columns)
-            for i, df in enumerate(dfs[1:], 1):
-                if set(df.columns) != first_df_columns:
-                    return None, {
-                        "success": False,
-                        "message": f"数据框 #{i} 的列与第一个数据框不匹配。"
-                        "如果要合并具有不同列的数据框，请将match_columns参数设置为False",
-                        "error_type": "ColumnMismatch",
-                    }
-
-        # 记录合并前的信息，用于结果报告
-        input_shapes = [df.shape for df in dfs]
-
-        # 执行集合操作
-        logger.opt(colors=True).info(
-            f"<g>合并数据框</>: 操作 <y>{escape_tag(operation)}</>, 数据框数量 <y>{len(dfs)}</>"
-        )
-
         result_df = None
         if operation == "union":
             # 合并所有数据框（保留所有行）
@@ -251,12 +261,8 @@ def combine_dataframes(
                 else:
                     result_df = pd.DataFrame(columns=dfs[0].columns)  # 空DataFrame，保持列名
 
-        if result_df is None:
-            return None, {
-                "success": False,
-                "message": f"执行 {operation} 操作时发生未知错误",
-                "error_type": "OperationError",
-            }
+        # 保存结果数据集
+        dataset_id = sources.create(result_df)
 
         # 生成结果
         combine_details = {
@@ -270,10 +276,10 @@ def combine_dataframes(
             else len(dfs[0].columns),
         }
 
-        return result_df, {
+        return {
             "success": True,
             "message": f"成功执行{operation}操作，结果数据集包含 {result_df.shape[0]} 行和 {result_df.shape[1]} 列",
-            "new_dataset_id": "{{UNSET}}",
+            "new_dataset_id": dataset_id,
             "shape": result_df.shape,
             "columns": result_df.columns.tolist(),
             "preview": result_df.head(5).to_string(),
@@ -282,7 +288,7 @@ def combine_dataframes(
 
     except Exception as e:
         logger.exception(f"执行数据框{operation}操作时发生错误")
-        return None, {
+        return {
             "success": False,
             "message": f"执行数据框{operation}操作时发生错误: {e}",
             "error_type": type(e).__name__,
@@ -302,16 +308,18 @@ class CreateDatasetResult(TypedDict):
 
 
 def create_dataset_from_query(
-    source_df: pd.DataFrame,
+    sources: Sources,
+    dataset_id: DatasetID,
     query: str,
     columns: list[str] | None = None,
     reset_index: bool = True,
-) -> tuple[pd.DataFrame, CreateDatasetResult] | tuple[None, OperationFailed]:
+) -> CreateDatasetResult | OperationFailed:
     """
     通过查询条件从现有数据集创建新数据集
 
     Args:
-        source_df (pd.DataFrame): 源数据框
+        sources (Sources): 数据源管理对象
+        dataset_id (str): 源数据集ID
         query (str): 筛选条件，使用pandas query语法，如 "age > 30 and gender == 'F'"
         columns (list[str], optional): 要包含的列名列表，如果为None则包含所有列
         reset_index (bool): 是否重置结果数据集的索引，默认为True
@@ -320,23 +328,25 @@ def create_dataset_from_query(
         Tuple[Optional[pd.DataFrame], CreateDatasetResult | OperationFailed]:
             包含新数据框和操作结果的元组，如果操作失败则数据框为None
     """
+    source_df = sources.read(dataset_id)
+
+    # 验证列名
+    if columns is not None:
+        missing_columns = [col for col in columns if col not in source_df.columns]
+        if missing_columns:
+            return {
+                "success": False,
+                "message": f"源数据框中不存在以下列: {', '.join(missing_columns)}",
+                "error_type": "ColumnNotFound",
+            }
+
+    # 记录源数据框信息
+    source_shape = source_df.shape
+
+    # 执行查询
+    logger.opt(colors=True).info(f"<g>通过查询创建数据集</>: 查询 <y>{escape_tag(query)}</>")
+
     try:
-        # 验证列名
-        if columns is not None:
-            missing_columns = [col for col in columns if col not in source_df.columns]
-            if missing_columns:
-                return None, {
-                    "success": False,
-                    "message": f"源数据框中不存在以下列: {', '.join(missing_columns)}",
-                    "error_type": "ColumnNotFound",
-                }
-
-        # 记录源数据框信息
-        source_shape = source_df.shape
-
-        # 执行查询
-        logger.opt(colors=True).info(f"<g>通过查询创建数据集</>: 查询 <y>{escape_tag(query)}</>")
-
         try:
             # 应用查询条件
             filtered_df = source_df.query(query)
@@ -350,11 +360,14 @@ def create_dataset_from_query(
                 filtered_df = filtered_df.reset_index(drop=True)
 
         except Exception as e:
-            return None, {
+            return {
                 "success": False,
                 "message": f"查询时出现错误: {e}",
                 "error_type": type(e).__name__,
             }
+
+        # 保存结果数据集
+        dataset_id = sources.create(filtered_df)
 
         # 生成结果
         creation_details = {
@@ -366,10 +379,10 @@ def create_dataset_from_query(
             "rows_filtered_out": source_shape[0] - filtered_df.shape[0],
         }
 
-        return filtered_df, {
+        return {
             "success": True,
             "message": f"成功创建查询数据集，包含 {filtered_df.shape[0]} 行和 {filtered_df.shape[1]} 列",
-            "new_dataset_id": "{{UNSET}}",
+            "new_dataset_id": dataset_id,
             "shape": filtered_df.shape,
             "columns": filtered_df.columns.tolist(),
             "preview": filtered_df.head(5).to_string(),
@@ -378,7 +391,7 @@ def create_dataset_from_query(
 
     except Exception as e:
         logger.exception("通过查询创建数据集时发生错误")
-        return None, {
+        return {
             "success": False,
             "message": f"通过查询创建数据集时发生错误: {e}",
             "error_type": type(e).__name__,
@@ -386,17 +399,19 @@ def create_dataset_from_query(
 
 
 def create_dataset_by_sampling(
-    source_df: pd.DataFrame,
+    sources: Sources,
+    dataset_id: DatasetID,
     n: int | None = None,
     frac: float | None = None,
     random_state: int | None = None,
     stratify_by: str | None = None,
-) -> tuple[pd.DataFrame, CreateDatasetResult] | tuple[None, OperationFailed]:
+) -> CreateDatasetResult | OperationFailed:
     """
     通过采样从现有数据集创建新数据集
 
     Args:
-        source_df (pd.DataFrame): 源数据框
+        sources (Sources): 数据源管理对象
+        dataset_id (str): 源数据集ID
         n (int, optional): 要采样的行数，与frac二选一
         frac (float, optional): 要采样的比例，如0.3表示采样30%的数据，与n二选一
         random_state (int, optional): 随机种子，用于可重现的结果
@@ -406,53 +421,55 @@ def create_dataset_by_sampling(
         Tuple[Optional[pd.DataFrame], CreateDatasetResult | OperationFailed]:
             包含新数据框和操作结果的元组，如果操作失败则数据框为None
     """
+    source_df = sources.read(dataset_id)
+
+    # 参数验证
+    if n is None and frac is None:
+        return {
+            "success": False,
+            "message": "必须指定n或frac参数之一",
+            "error_type": "MissingParameter",
+        }
+    if n is not None and frac is not None:
+        return {
+            "success": False,
+            "message": "n和frac参数不能同时指定",
+            "error_type": "ConflictingParameters",
+        }
+
+    if frac is not None and (frac <= 0 or frac > 1):
+        return {
+            "success": False,
+            "message": "frac参数必须在(0, 1]范围内",
+            "error_type": "InvalidParameter",
+        }
+
+    if n is not None and (n <= 0 or n > len(source_df)):
+        return {
+            "success": False,
+            "message": f"n参数必须在(0, {len(source_df)}]范围内",
+            "error_type": "InvalidParameter",
+        }
+
+    # 验证分层采样列
+    if stratify_by is not None and stratify_by not in source_df.columns:
+        return {
+            "success": False,
+            "message": f"分层采样列 '{stratify_by}' 不存在",
+            "error_type": "ColumnNotFound",
+        }
+
+    # 记录源数据框信息
+    source_shape = source_df.shape
+
+    # 执行采样
+    sample_desc = f"{n}行" if n is not None or frac is None else f"{frac * 100:.1f}%"
+    logger.opt(colors=True).info(
+        f"<g>通过采样创建数据集</>: 采样 <y>{sample_desc}</>"
+        + (f", 分层列 <y>{escape_tag(stratify_by)}</>" if stratify_by else "")
+    )
+
     try:
-        # 参数验证
-        if n is None and frac is None:
-            return None, {
-                "success": False,
-                "message": "必须指定n或frac参数之一",
-                "error_type": "MissingParameter",
-            }
-        if n is not None and frac is not None:
-            return None, {
-                "success": False,
-                "message": "n和frac参数不能同时指定",
-                "error_type": "ConflictingParameters",
-            }
-
-        if frac is not None and (frac <= 0 or frac > 1):
-            return None, {
-                "success": False,
-                "message": "frac参数必须在(0, 1]范围内",
-                "error_type": "InvalidParameter",
-            }
-
-        if n is not None and (n <= 0 or n > len(source_df)):
-            return None, {
-                "success": False,
-                "message": f"n参数必须在(0, {len(source_df)}]范围内",
-                "error_type": "InvalidParameter",
-            }
-
-        # 验证分层采样列
-        if stratify_by is not None and stratify_by not in source_df.columns:
-            return None, {
-                "success": False,
-                "message": f"分层采样列 '{stratify_by}' 不存在",
-                "error_type": "ColumnNotFound",
-            }
-
-        # 记录源数据框信息
-        source_shape = source_df.shape
-
-        # 执行采样
-        sample_desc = f"{n}行" if n is not None or frac is None else f"{frac * 100:.1f}%"
-        logger.opt(colors=True).info(
-            f"<g>通过采样创建数据集</>: 采样 <y>{sample_desc}</>"
-            + (f", 分层列 <y>{escape_tag(stratify_by)}</>" if stratify_by else "")
-        )
-
         if stratify_by:
             # 分层采样
             y = source_df[stratify_by]
@@ -475,6 +492,9 @@ def create_dataset_by_sampling(
 
             sampled_df = source_df.sample(**sample_kwargs).reset_index(drop=True)
 
+        # 保存结果数据集
+        dataset_id = sources.create(sampled_df)
+
         # 生成结果
         creation_details = {
             "source_shape": source_shape,
@@ -486,10 +506,10 @@ def create_dataset_by_sampling(
             "random_state": random_state,
         }
 
-        return sampled_df, {
+        return {
             "success": True,
             "message": f"成功创建采样数据集，包含 {sampled_df.shape[0]} 行和 {sampled_df.shape[1]} 列",
-            "new_dataset_id": "{{UNSET}}",
+            "new_dataset_id": dataset_id,
             "shape": sampled_df.shape,
             "columns": sampled_df.columns.tolist(),
             "preview": sampled_df.head(5).to_string(),
@@ -498,7 +518,7 @@ def create_dataset_by_sampling(
 
     except Exception as e:
         logger.exception("通过采样创建数据集时发生错误")
-        return None, {
+        return {
             "success": False,
             "message": f"通过采样创建数据集时发生错误: {e}",
             "error_type": type(e).__name__,
