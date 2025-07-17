@@ -79,6 +79,19 @@ def _fix_hyperparams(params: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
+def _safe_parse_json_or_dict(data: str) -> dict[str, Any] | None:
+    """
+    尝试解析字符串或直接返回字典。
+    如果是字符串，尝试解析为 JSON 或 Python 字典。
+    如果解析失败，返回 None。
+    """
+    with contextlib.suppress(json.JSONDecodeError):
+        return json.loads(data)
+    with contextlib.suppress(ValueError, SyntaxError):
+        return ast.literal_eval(data)
+    return None
+
+
 type ModelID = str
 
 
@@ -133,11 +146,7 @@ def scikit_tools(
         parsed_hyperparams = None
 
         if isinstance(hyperparams, str):
-            with contextlib.suppress(Exception):
-                parsed_hyperparams = json.loads(hyperparams)
-            if parsed_hyperparams is None:
-                with contextlib.suppress(Exception):
-                    parsed_hyperparams = ast.literal_eval(hyperparams)
+            parsed_hyperparams = _safe_parse_json_or_dict(hyperparams)
             if parsed_hyperparams is None:
                 logger.opt(colors=True).warning(
                     f"<y>超参数解析错误</y>: {escape_tag(repr(hyperparams))}，将使用默认参数"
@@ -531,7 +540,7 @@ def scikit_tools(
         method: str = "grid",
         cv_folds: int = 5,
         scoring: str | None = None,
-        param_grid: dict[str, list[Any]] | None = None,
+        param_grid: dict[str, list[Any]] | str | None = None,
         n_iter: int = 20,
     ) -> tuple[HyperparamOptResult, dict]:
         """
@@ -552,7 +561,7 @@ def scikit_tools(
             method: 优化方法，"grid"(网格搜索)或"random"(随机搜索)
             cv_folds: 交叉验证折数
             scoring: 评分指标，如"r2"(回归)、"accuracy"(分类)等
-            param_grid: 超参数网格，为None时使用预定义的网格
+            param_grid: 超参数网格(字典或JSON字符串)，为None时使用预定义的网格
             n_iter: 随机搜索的迭代次数(仅当method="random"时有效)
 
         Returns:
@@ -561,6 +570,12 @@ def scikit_tools(
         logger.opt(colors=True).info(
             f"<g>开始超参数优化</>，模型: <e>{escape_tag(model_type)}</>, 方法: <y>{escape_tag(method)}</>"
         )
+        if isinstance(param_grid, str):
+            parsed_param_grid = _safe_parse_json_or_dict(param_grid)
+            if parsed_param_grid is None:
+                raise ValueError(f"无法解析超参数网格: {param_grid}")
+            param_grid = parsed_param_grid
+
         result, figure = optimize_hyperparameters(
             sources.read(dataset_id),
             features,
