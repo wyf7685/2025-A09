@@ -6,7 +6,8 @@ from typing import Any, Literal, NotRequired, TypedDict, cast
 import numpy as np
 import pandas as pd
 
-from app.core.agent.schemas import OperationFailed
+from app.core.agent.schemas import DatasetID, OperationFailed
+from app.core.agent.sources import Sources
 from app.log import logger
 from app.utils import escape_tag
 
@@ -25,19 +26,22 @@ class ConvertDtypesResult(TypedDict):
 
 
 def infer_and_convert_dtypes(
-    df: pd.DataFrame,
+    sources: Sources,
+    dataset_id: DatasetID,
     columns: list[str] | None = None,
     to_numeric: bool = True,
     to_datetime: bool = True,
     to_category: bool = True,
     category_threshold: float = 0.05,
     datetime_format: str | None = None,
-) -> tuple[pd.DataFrame, ConvertDtypesResult]:
+    in_place: bool = False,
+) -> ConvertDtypesResult:
     """
     自动推断并转换数据框中的列类型，修复常见的类型错误。
 
     Args:
-        df (pd.DataFrame): 要处理的数据框
+        sources (Sources): 数据源管理对象
+        dataset_id (str): 操作的数据集ID
         columns (list[str], optional): 要转换的列名列表。如果为None，则尝试转换所有可能的列。
         to_numeric (bool): 是否尝试将列转换为数值型，默认为True
         to_datetime (bool): 是否尝试将列转换为日期时间类型，默认为True
@@ -45,9 +49,10 @@ def infer_and_convert_dtypes(
         category_threshold (float): 将列转换为分类类型的唯一值比例阈值，默认为0.05
                                   当唯一值数量/总行数 < category_threshold时，将转换为分类类型
         datetime_format (str, optional): 日期时间格式字符串，如'%Y-%m-%d'。如果为None，则尝试自动推断。
+        in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
 
     Returns:
-        tuple[pd.DataFrame, ConvertDtypesResult]: 修改后的数据框和转换结果信息
+        ConvertDtypesResult: 转换结果信息
     """
     logger.opt(colors=True).info(
         f"<g>推断并转换数据类型</>: "
@@ -56,6 +61,7 @@ def infer_and_convert_dtypes(
     )
 
     # 创建DataFrame的副本以避免修改原始数据
+    df = sources.read(dataset_id)
     df_copy = df.copy()
 
     # 如果未指定列，则处理所有列
@@ -147,19 +153,21 @@ def infer_and_convert_dtypes(
         "null_counts": {col: int(df_copy[col].isna().sum()) for col in columns},
     }
 
-    # 生成结果
-    result: ConvertDtypesResult = {
+    new_dataset_id = sources.create(df_copy)
+    if in_place:
+        sources.rename(new_dataset_id, dataset_id)
+        new_dataset_id = dataset_id
+
+    return {
         "success": True,
         "message": f"完成数据类型转换。成功转换{len(converted_columns)}列，失败{len(failed_columns)}列。",
-        "new_dataset_id": "{{UNSET}}",
+        "new_dataset_id": new_dataset_id,
         "converted_columns": converted_columns,
         "conversion_details": conversion_details,
         "failed_columns": failed_columns,
         "failed_reasons": failed_reasons,
         "statistics": statistics,
     }
-
-    return df_copy, result
 
 
 class CleanMisalignedDataResult(TypedDict):
@@ -174,22 +182,27 @@ class CleanMisalignedDataResult(TypedDict):
 
 
 def fix_misaligned_data(
-    df: pd.DataFrame,
+    sources: Sources,
+    dataset_id: DatasetID,
     suspected_columns: list[str] | None = None,
     alignment_pattern: str | None = None,
-) -> tuple[pd.DataFrame, CleanMisalignedDataResult] | tuple[None, OperationFailed]:
+    in_place: bool = False,
+) -> CleanMisalignedDataResult | OperationFailed:
     """
     修复数据错位问题，常见于导入CSV文件时分隔符识别错误。
 
     Args:
-        df (pd.DataFrame): 要处理的数据框
+        sources (Sources): 数据源管理对象
+        dataset_id (str): 操作的数据集ID
         suspected_columns (list[str], optional): 疑似包含错位数据的列
         alignment_pattern (str, optional): 用于检测错位的正则表达式模式
 
     Returns:
-        tuple[pd.DataFrame, CleanMisalignedDataResult | OperationFailed]: 修复后的数据框和操作结果
+        CleanMisalignedDataResult | OperationFailed: 修复后的数据框和操作结果
     """
     logger.opt(colors=True).info(f"<g>修复数据错位</>: 分析 <y>{escape_tag(str(suspected_columns or '所有列'))}</>")
+
+    df = sources.read(dataset_id)
 
     try:
         # 创建数据框副本
@@ -200,7 +213,7 @@ def fix_misaligned_data(
             suspected_columns = cast("list[str]", df_copy.select_dtypes(include=["object"]).columns.tolist())
         # 验证指定的列是否存在
         elif missing_columns := [col for col in suspected_columns if col not in df_copy.columns]:
-            return None, {
+            return {
                 "success": False,
                 "message": f"错误: 以下列不存在: {', '.join(missing_columns)}",
                 "error_type": "ColumnNotFound",
@@ -251,21 +264,23 @@ def fix_misaligned_data(
         # 保存修复后的样本
         sample_after = df_copy.head(3).to_dict()
 
-        # 生成结果
-        result: CleanMisalignedDataResult = {
+        new_dataset_id = sources.create(df_copy)
+        if in_place:
+            sources.rename(new_dataset_id, dataset_id)
+            new_dataset_id = dataset_id
+
+        return {
             "success": True,
             "message": f"完成数据错位修复，共处理{fixed_rows}行数据。",
-            "new_dataset_id": "{{UNSET}}",
+            "new_dataset_id": new_dataset_id,
             "fixed_rows": fixed_rows,
             "sample_before": sample_before,
             "sample_after": sample_after,
         }
 
-        return df_copy, result
-
     except Exception as e:
         logger.opt(colors=True).exception("<r>修复数据错位时出错</r>")
-        return None, {
+        return {
             "success": False,
             "message": f"修复数据错位时出错: {e}",
             "error_type": type(e).__name__,
@@ -283,7 +298,8 @@ class HandleMissingValuesResult(TypedDict):
 
 
 def handle_missing_values(
-    df: pd.DataFrame,
+    sources: Sources,
+    dataset_id: DatasetID,
     column: str | None = None,
     method: str = "drop",
 ) -> HandleMissingValuesResult:
@@ -291,7 +307,8 @@ def handle_missing_values(
     处理数据框中的缺失值
 
     Args:
-        df: 数据框
+        sources (Sources): 数据源管理对象
+        dataset_id (str): 操作的数据集ID
         column: 目标列名，如果为 None 则处理所有列
         method: 处理方法 ('drop', 'fill_mean', 'fill_median',
         'fill_mode', 'fill_forward', 'fill_backward', 'interpolate')
@@ -299,6 +316,7 @@ def handle_missing_values(
     Returns:
         处理结果字典
     """
+    df = sources.read(dataset_id)
     try:
         return _handle_missing_values_column(df, column, method) if column else _handle_missing_values_all(df, method)
     except Exception as e:

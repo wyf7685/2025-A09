@@ -1,5 +1,6 @@
 from langchain_core.tools import BaseTool, tool
 
+from app.core.agent.resume import resumable
 from app.core.agent.sources import Sources
 
 
@@ -52,3 +53,10 @@ def sources_tools(sources: Sources) -> list[BaseTool]:
         list_dataset_tool,
         rename_dataset_tool,
     ]
+
+
+@resumable("rename_dataset_tool")
+def _(sources: Sources, dataset_id: str, new_dataset_id: str) -> None:
+    if not sources.exists(dataset_id):
+        raise ValueError(f"数据集 {dataset_id} 不存在")
+    sources.rename(dataset_id, new_dataset_id)

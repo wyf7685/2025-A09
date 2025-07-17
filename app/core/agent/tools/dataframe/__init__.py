@@ -3,6 +3,7 @@ from typing import Any
 import pandas as pd
 from langchain_core.tools import BaseTool, tool
 
+from app.core.agent.resume import resumable
 from app.core.agent.schemas import DatasetID, OperationFailed
 from app.core.agent.sources import Sources
 from app.log import logger
@@ -276,18 +277,17 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         Returns:
             dict: 包含转换结果的详细信息，包括成功和失败的列、转换前后的类型以及内存使用变化
         """
-        result = infer_and_convert_dtypes(
-            sources.read(dataset_id), columns, to_numeric, to_datetime, to_category, category_threshold, datetime_format
+        return infer_and_convert_dtypes(
+            sources,
+            dataset_id,
+            columns,
+            to_numeric,
+            to_datetime,
+            to_category,
+            category_threshold,
+            datetime_format,
+            in_place,
         )
-
-        if result[0] is not None:
-            new_id = sources.create(result[0])
-            if in_place:
-                sources.rename(new_id, dataset_id)
-                new_id = dataset_id
-            result[1]["new_dataset_id"] = new_id
-
-        return result[1]
 
     @tool
     def fix_misaligned_data_tool(
@@ -311,17 +311,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         Returns:
             dict: 包含修复结果的详细信息，包括修复的行数、修复前后的样本对比
         """
-        result = fix_misaligned_data(sources.read(dataset_id), suspected_columns, alignment_pattern)
-
-        if result[0] is not None:
-            new_id = sources.create(result[0])
-            if in_place:
-                sources.rename(new_id, dataset_id)
-                new_id = dataset_id
-            if result[1]["success"]:
-                result[1]["new_dataset_id"] = new_id
-
-        return result[1]
+        return fix_misaligned_data(sources, dataset_id, suspected_columns, alignment_pattern, in_place)
 
     @tool
     def handle_missing_values_tool(
@@ -341,7 +331,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         Returns:
             处理结果字典
         """
-        return handle_missing_values(sources.read(dataset_id), column, method)
+        return handle_missing_values(sources, dataset_id, column, method)
 
     @tool
     def get_missing_values_summary_tool(dataset_id: DatasetID) -> MissingValuesSummary:
@@ -469,6 +459,60 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         create_dataset_from_query_tool,
         create_dataset_by_sampling_tool,
     ]
+
+
+@resumable("create_column_tool")
+def _(
+    sources: Sources,
+    dataset_id: DatasetID,
+    column_name: str,
+    expression: str,
+    source_datasets: dict[str, DatasetID] | None = None,
+    target_dataset_id: DatasetID | None = None,
+    description: str | None = None,
+    **_: object,
+) -> None:
+    source_datasets = (source_datasets or {}) | {"df": dataset_id}
+    target_dataset_id = target_dataset_id or dataset_id
+    create_column(sources, source_datasets, target_dataset_id, column_name, expression, description)
+
+
+@resumable("create_interaction_term_tool")
+def _(
+    sources: Sources,
+    dataset_id: DatasetID,
+    column_name: str,
+    columns_to_interact: list[str],
+    interaction_type: str = "multiply",
+    scale: bool = False,
+    **_: object,
+) -> None:
+    create_interaction_term(sources.read(dataset_id), column_name, columns_to_interact, interaction_type, scale)
+
+
+@resumable("create_aggregated_feature_tool")
+def _(
+    sources: Sources,
+    dataset_id: DatasetID,
+    column_name: str,
+    group_by_column: str,
+    target_column: str,
+    aggregation: str = "mean",
+    description: str | None = None,
+    **_: object,
+) -> None:
+    create_aggregated_feature(
+        sources.read(dataset_id), column_name, group_by_column, target_column, aggregation, description
+    )
+
+
+resumable("infer_and_convert_dtypes_tool", infer_and_convert_dtypes)
+resumable("fix_misaligned_data_tool", fix_misaligned_data)
+resumable("handle_missing_values_tool", handle_missing_values)
+resumable("join_dataframes_tool", join_dataframes)
+resumable("combine_dataframes_tool", combine_dataframes)
+resumable("create_dataset_from_query_tool", create_dataset_from_query)
+resumable("create_dataset_by_sampling_tool", create_dataset_by_sampling)
 
 
 __all__ = ["dataframe_tools"]

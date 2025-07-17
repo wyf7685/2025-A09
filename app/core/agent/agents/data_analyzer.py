@@ -1,4 +1,4 @@
-import functools
+import itertools
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -12,22 +12,21 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from app.core.agent.events import StreamEvent, fix_message_content, process_stream_event
+from app.core.agent.resume import resume_tool_call
 from app.core.agent.schemas import (
     AgentValues,
     DataAnalyzerAgentState,
-    DatasetID,
     SourcesDict,
     format_sources_overview,
 )
 from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
-from app.core.agent.tools.dataframe.columns import create_aggregated_feature, create_column, create_interaction_term
 from app.core.chain.llm import LLM
 from app.log import logger
 from app.schemas.session import SessionID
 from app.utils import escape_tag
 
-PROMPT_DIR = Path(__file__).parent / "prompts" / "data_analyzer"
+PROMPT_DIR = Path(__file__).parent.parent / "prompts" / "data_analyzer"
 
 
 def _read_prompt_file(filename: str) -> str:
@@ -41,39 +40,14 @@ CREATE_TITLE_PROMPT = _read_prompt_file("create_title.md")
 SUMMARY_PROMPT = _read_prompt_file("summary.md")
 
 
-TOOLS_TO_RESUME = {
-    "create_column_tool": create_column,
-    "create_interaction_term_tool": create_interaction_term,
-    "create_aggregated_feature_tool": create_aggregated_feature,
-}
-
-
 def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
-    all_tool_calls = functools.reduce(
-        (lambda a, b: a + b),
-        (m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls),
-    )
-
-    if not all_tool_calls:
-        return
-
-    for call in all_tool_calls:
-        if tool := next((tool for name, tool in TOOLS_TO_RESUME.items() if name in call["name"]), None):
-            logger.opt(colors=True).info(
-                f"恢复工具调用: <y>{escape_tag(call['name'])}</> - {escape_tag(str(call['args']))}"
+    for tool_call in itertools.chain(*(m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls)):
+        try:
+            resume_tool_call(tool_call, {"sources": sources})
+        except Exception as e:
+            logger.opt(colors=True, exception=True).warning(
+                f"恢复工具调用时出错: <y>{escape_tag(tool_call['name'])}</> - {escape_tag(str(e))}"
             )
-            try:
-                dataset_id = cast("DatasetID", call["args"]["dataset_id"])
-                result = tool(df=sources.read(dataset_id), **call["args"])
-            except Exception as err:
-                logger.opt(colors=True, exception=True).warning(
-                    f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(str(err))}"
-                )
-                continue
-            if not result["success"]:
-                logger.opt(colors=True).warning(
-                    f"工具调用恢复失败: <y>{escape_tag(call['name'])}</> - {escape_tag(result['message'])}"
-                )
 
 
 def format_conversation(messages: list[AnyMessage], *, include_figures: bool) -> tuple[str, list[str]]:
