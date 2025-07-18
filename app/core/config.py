@@ -22,11 +22,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     OPENAI_API_BASE: str | None = None
-    OLLAMA_API_URL: str | None = None
-
-    # Dremio REST API config
+    OLLAMA_API_URL: str | None = None    # Dremio REST API config
     DREMIO_BASE_URL: str = "http://localhost"
     DREMIO_REST_PORT: int = 9047
+    DREMIO_FLIGHT_PORT: int = 32010
     DREMIO_USERNAME: str
     DREMIO_PASSWORD: SecretStr
     DREMIO_EXTERNAL_DIR: Path
@@ -35,6 +34,10 @@ class Settings(BaseSettings):
     @property
     def DREMIO_REST_URL(self) -> URL:  # noqa: N802
         return URL(self.DREMIO_BASE_URL).with_port(self.DREMIO_REST_PORT)
+
+    @property
+    def DREMIO_FLIGHT_URL(self) -> URL:  # noqa: N802
+        return URL(self.DREMIO_BASE_URL).with_port(self.DREMIO_FLIGHT_PORT)
 
 
 load_dotenv()

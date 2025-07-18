@@ -3,7 +3,7 @@ import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue'
 import { useDataSourceStore } from '@/stores/datasource'
 import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
-import { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
+import api, { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
 import {
   ArrowDown, ArrowRight, Back, Check, CircleCheck, CircleClose, Connection, DataAnalysis, Delete, Document, DocumentChecked, DocumentCopy, Edit,
   EditPen, Grid, InfoFilled, QuestionFilled, Refresh, RefreshRight, Search, Upload, UploadFilled, View, Warning
@@ -75,9 +75,11 @@ const availableModels = ref([
 const fetchDatasets = async () => {
   isLoading.value = true
   try {
-    datasources.value = await dataSourceStore.listDataSources()
+    const sources = await dataSourceStore.listDataSources()
+    datasources.value = sources
+    updateFilteredDataSources()
   } catch (error) {
-    ElMessage.error('加载数据集列表失败')
+    ElMessage.error('获取数据源列表失败')
     console.error(error)
   } finally {
     isLoading.value = false
@@ -316,13 +318,12 @@ const skipCleaningAndUpload = async () => {
 
   isLoading.value = true
   try {
-    // 创建一个新的文件对象，保留用户修改的文件名
-    const modifiedFile = new File([currentUploadFile.value], fileMetadata.value.name + '.' + currentUploadFile.value.name.split('.').pop(), {
-      type: currentUploadFile.value.type,
-      lastModified: currentUploadFile.value.lastModified
-    })
-
-    await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
+    // 直接使用原始文件，通过参数传递用户修改的文件名
+    await dataSourceStore.uploadFileSource(
+      currentUploadFile.value, 
+      fileMetadata.value.description,
+      fileMetadata.value.name
+    )
     ElMessage.success('文件上传成功！')
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
@@ -340,14 +341,12 @@ const completeCleaningAndUpload = async () => {
 
   isLoading.value = true
   try {
-    // 创建一个新的文件对象，保留用户修改的文件名
-    const modifiedFile = new File([currentUploadFile.value], fileMetadata.value.name + '.' + currentUploadFile.value.name.split('.').pop(), {
-      type: currentUploadFile.value.type,
-      lastModified: currentUploadFile.value.lastModified
-    })
-
-    // 上传文件
-    const uploadResult = await dataSourceStore.uploadFileSource(modifiedFile, fileMetadata.value.description)
+    // 直接使用原始文件，通过参数传递用户修改的文件名
+    const uploadResult = await dataSourceStore.uploadFileSource(
+      currentUploadFile.value, 
+      fileMetadata.value.description,
+      fileMetadata.value.name
+    )
 
     // 如果有字段映射，保存到数据源
     if (Object.keys(fieldMappings.value).length > 0 && uploadResult?.source_id) {

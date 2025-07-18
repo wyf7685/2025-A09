@@ -31,7 +31,11 @@ class RegisterDataSourceResponse(BaseModel):
 
 
 @router.post("/upload", response_model=RegisterDataSourceResponse)
-async def upload_file(file: UploadFile = File(), source_name: str | None = Form(None)) -> dict[str, Any]:
+async def upload_file(
+    file: UploadFile = File(), 
+    source_name: str | None = Form(None),
+    description: str | None = Form(None)
+) -> dict[str, Any]:
     """
     上传CSV/Excel文件并创建数据源
     """
@@ -50,7 +54,7 @@ async def upload_file(file: UploadFile = File(), source_name: str | None = Form(
 
         client = get_dremio_client()
         dremio_source = await run_sync(client.add_data_source_file)(file_path)
-        source = create_dremio_source(dremio_source, source_name)
+        source = create_dremio_source(dremio_source, source_name, description)
         source_id, source = datasource_service.register(source)
         return {"source_id": source_id, "metadata": source.metadata}
     except HTTPException:
@@ -182,21 +186,64 @@ async def get_datasource_data(
             raise HTTPException(status_code=404, detail="Datasource not found")
 
         source = datasource_service.get_source(source_id)
+        logger.info(f"获取数据源数据: {source_id}, 类型: {source.metadata.source_type}")
 
-        # 获取数据
-        data = source.get_data(limit + skip)
-        if skip > 0:
-            data = data.iloc[skip:]
+        # 检查数据源是否可用
+        try:
+            # 如果是Dremio数据源，先检查文件是否存在
+            if source.metadata.source_type.startswith("dremio"):
+                from app.core.datasource.dremio import DremioDataSource
+                if isinstance(source, DremioDataSource):
+                    dremio_source = source.get_source()
+                    if (
+                        len(dremio_source.path) == 2 
+                        and dremio_source.path[0] == settings.DREMIO_EXTERNAL_NAME
+                        and dremio_source.type == "FILE"
+                    ):
+                        file_name = dremio_source.path[1]
+                        file_path = settings.DREMIO_EXTERNAL_DIR / file_name
+                        if not file_path.exists():
+                            logger.error(f"数据源文件不存在: {file_path}")
+                            # 立即清理这个数据源
+                            datasource_service.delete_source(source_id)
+                            raise HTTPException(
+                                status_code=404, 
+                                detail=f"数据源文件已被删除: {file_name}"
+                            )
+            
+            # 获取形状信息
+            rows, cols = source.get_shape()
+            logger.info(f"数据源形状: {rows} 行 × {cols} 列")
+                    
+            if rows == 0:
+                logger.warning(f"数据源 {source_id} 没有数据")
+                return {
+                    "data": [],
+                    "total": 0,
+                    "skip": skip,
+                    "limit": limit,
+                }
 
-        # 获取总行数
-        rows, _ = source.get_shape()
+            # 获取数据
+            data = source.get_data(limit + skip)
+            logger.info(f"成功获取数据: {len(data)} 行")
+            
+            if skip > 0:
+                data = data.iloc[skip:]
+                logger.info(f"跳过 {skip} 行后剩余: {len(data)} 行")
 
-        return {
-            "data": data.to_dict(orient="records"),
-            "total": rows,
-            "skip": skip,
-            "limit": limit,
-        }
+            return {
+                "data": data.to_dict(orient="records"),
+                "total": rows,
+                "skip": skip,
+                "limit": limit,
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"获取数据源数据失败: {e}")
+            raise HTTPException(status_code=500, detail=f"数据源不可用: {e}")
 
     except HTTPException:
         raise
@@ -219,18 +266,50 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
         # 如果是Dremio数据源，尝试从Dremio中删除
         if source.metadata.source_type.startswith("dremio"):
             try:
-                # 这里需要根据实际情况实现Dremio数据源的删除
-                # 目前Dremio REST API没有直接删除数据源的接口，但可以根据实际情况处理
-                # 例如，如果是上传的文件，可以从external目录中删除
-                if (
-                    source.metadata.id.startswith("external.")
-                    # 从路径中提取文件名
-                    and (file_name := source.metadata.id.removeprefix("external."))
-                    and (fp := settings.DREMIO_EXTERNAL_DIR / file_name).exists()
-                ):
-                    # 删除external目录中的文件
-                    fp.unlink()
-                    logger.info(f"已从Dremio external目录删除文件: {file_name}")
+                # 获取DremioDataSource对象
+                from app.core.datasource.dremio import DremioDataSource
+                if isinstance(source, DremioDataSource):
+                    dremio_source = source.get_source()
+                    # 检查是否是external目录中的文件
+                    if (
+                        len(dremio_source.path) == 2 
+                        and dremio_source.path[0] == settings.DREMIO_EXTERNAL_NAME
+                        and dremio_source.type == "FILE"
+                    ):
+                        # 从external目录中删除文件
+                        file_name = dremio_source.path[1]
+                        file_path = settings.DREMIO_EXTERNAL_DIR / file_name
+                        if file_path.exists():
+                            file_path.unlink()
+                            logger.info(f"已从external目录删除文件: {file_name}")
+                        else:
+                            logger.warning(f"文件不存在: {file_path}")
+                        
+                        # 使用新的Dremio客户端方法删除数据源
+                        client = get_dremio_client()
+                        
+                        # 方法1：尝试直接删除数据源
+                        delete_success = client.delete_data_source(dremio_source.path)
+                        if delete_success:
+                            logger.info(f"成功从Dremio中删除数据源: {dremio_source.path}")
+                        else:
+                            logger.warning(f"从Dremio中删除数据源失败: {dremio_source.path}")
+                        
+                        # 方法2：刷新external数据源，让Dremio重新扫描
+                        refresh_success = client.refresh_external_source()
+                        if refresh_success:
+                            logger.info("成功刷新external数据源")
+                        else:
+                            logger.warning("刷新external数据源失败")
+                        
+                        # 无论是否成功，都等待一段时间让Dremio处理
+                        import time
+                        time.sleep(2)
+                        
+                    else:
+                        logger.info(f"跳过删除非external文件类型的数据源: {dremio_source.type}")
+                else:
+                    logger.warning(f"数据源不是DremioDataSource类型: {type(source)}")
             except Exception as e:
                 logger.warning(f"从Dremio中删除数据源失败: {e}")
 

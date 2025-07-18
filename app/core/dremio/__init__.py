@@ -6,16 +6,12 @@ _client: AbstractDremioClient | None = None
 def get_dremio_client() -> AbstractDremioClient:
     from app.log import logger
 
-    from .flight import DremioFlightClient
     from .rest import DremioRestClient
 
     global _client
     if _client is None:
-        try:
-            _client = DremioFlightClient()
-        except Exception:
-            logger.warning("使用Flight客户端连接Dremio失败，尝试使用REST客户端")
-            _client = DremioRestClient()
+        _client = DremioRestClient()
+        logger.info("使用 REST 客户端连接 Dremio")
     return _client
 
 

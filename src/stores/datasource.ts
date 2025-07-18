@@ -43,11 +43,14 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
-  const uploadFileSource = async (file: File, description?: string) => {
+  const uploadFileSource = async (file: File, description?: string, fileName?: string) => {
     const formData = new FormData();
     formData.append('file', file);
     if (description) {
       formData.append('description', description);
+    }
+    if (fileName) {
+      formData.append('source_name', fileName);
     }
 
     try {

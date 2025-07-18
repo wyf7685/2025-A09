@@ -133,7 +133,7 @@ class DremioRestClient(AbstractDremioClient):
             Exception: 任务失败时抛出异常
         """
         while True:
-            response = self._request("GET", f"/api/v3/job/{job_id}", with_auth=False)
+            response = self._request("GET", f"/api/v3/job/{job_id}", with_auth=True)
             response.raise_for_status()
             job_status = response.json()
             if job_status["jobState"] == "COMPLETED":
@@ -153,7 +153,7 @@ class DremioRestClient(AbstractDremioClient):
         Returns:
             dict[str, Any]: 查询结果
         """
-        return self._request("GET", f"/api/v3/job/{job_id}/results").json()
+        return self._request("GET", f"/api/v3/job/{job_id}/results", with_auth=True).json()
 
     def execute_sql_query(self, sql_query: str) -> dict[str, Any]:
         """
@@ -367,6 +367,58 @@ class DremioRestClient(AbstractDremioClient):
         col_count = len(first_line.columns) if not first_line.empty else 0
 
         return row_count, col_count
+
+    def delete_data_source(self, source_path: list[str]) -> bool:
+        """
+        删除Dremio中的数据源
+        
+        Args:
+            source_path: 数据源路径，例如 ["external", "filename.csv"]
+            
+        Returns:
+            bool: 是否删除成功
+        """
+        try:
+            # 尝试通过API删除数据源
+            path_str = "/".join(source_path)
+            response = self._request("DELETE", f"/api/v3/catalog/by-path/{path_str}")
+            logger.info(f"成功从Dremio中删除数据源: {source_path}")
+            
+            # 清除缓存
+            _source_cache.expire()
+            _container_cache.expire()
+            
+            return True
+        except Exception as e:
+            logger.warning(f"从Dremio中删除数据源失败: {source_path}, 错误: {e}")
+            # 即使API删除失败，也清除缓存，强制重新获取
+            _source_cache.expire()
+            _container_cache.expire()
+            return False
+
+    def refresh_external_source(self) -> bool:
+        """
+        刷新external数据源，让Dremio重新扫描external目录
+        
+        Returns:
+            bool: 是否刷新成功
+        """
+        try:
+            # 刷新external数据源
+            response = self._request("POST", f"/api/v3/source/{self.external_name}/refresh")
+            logger.info(f"成功刷新external数据源: {self.external_name}")
+            
+            # 清除缓存
+            _source_cache.expire()
+            _container_cache.expire()
+            
+            return True
+        except Exception as e:
+            logger.warning(f"刷新external数据源失败: {e}")
+            # 即使刷新失败，也清除缓存
+            _source_cache.expire()
+            _container_cache.expire()
+            return False
 
     def _list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")

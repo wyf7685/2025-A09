@@ -124,3 +124,26 @@ class AbstractDremioClient(abc.ABC):
             list[DremioSource]: DremioSource 对象列表
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
+
+    def delete_data_source(self, source_path: list[str]) -> bool:
+        """
+        删除Dremio中的数据源
+        
+        Args:
+            source_path: 数据源路径，例如 ["external", "filename.csv"]
+            
+        Returns:
+            bool: 是否删除成功
+        """
+        # 默认实现，子类可以重写
+        return False
+
+    def refresh_external_source(self) -> bool:
+        """
+        刷新external数据源，让Dremio重新扫描external目录
+        
+        Returns:
+            bool: 是否刷新成功
+        """
+        # 默认实现，子类可以重写
+        return False

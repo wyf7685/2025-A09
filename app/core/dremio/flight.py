@@ -112,16 +112,42 @@ class DremioFlightClient(AbstractDremioClient):
         Returns:
             tuple[int, int]: (行数, 列数)
         """
+        try:
+            formatted = path_to_dotted(source_name)
+            sql_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
+            result = self.execute_sql_to_dataframe(sql_query)
+            row_count = int(result.iloc[0]["row_count"])
 
-        sql_query = f"SELECT COUNT(*) as row_count FROM {path_to_dotted(source_name)}"
-        result = self.execute_sql_to_dataframe(sql_query)
-        row_count = int(result.iloc[0]["row_count"])
+            first_line = self.read_source(source_name, limit=1)
+            col_count = len(first_line.columns) if not first_line.empty else 0
 
-        first_line = self.read_source(source_name, limit=1)
-        col_count = len(first_line.columns) if not first_line.empty else 0
-
-        return row_count, col_count
+            return row_count, col_count
+        except Exception as e:
+            logger.warning(f"Flight客户端获取形状失败: {e}")
+            logger.info("回退到使用REST API获取形状")
+            return self._rest.shape(source_name)
 
     @override
     def list_sources(self) -> list[DremioSource]:
         return self._rest.list_sources()
+
+    def delete_data_source(self, source_path: list[str]) -> bool:
+        """
+        删除Dremio中的数据源，委托给REST客户端
+        
+        Args:
+            source_path: 数据源路径，例如 ["external", "filename.csv"]
+            
+        Returns:
+            bool: 是否删除成功
+        """
+        return self._rest.delete_data_source(source_path)
+
+    def refresh_external_source(self) -> bool:
+        """
+        刷新external数据源，委托给REST客户端
+        
+        Returns:
+            bool: 是否刷新成功
+        """
+        return self._rest.refresh_external_source()
