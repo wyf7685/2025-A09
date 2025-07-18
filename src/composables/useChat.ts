@@ -9,59 +9,61 @@ import type { FlowPanel } from '@/types/flow';
 import { ElMessage } from 'element-plus';
 import { nextTick, reactive, ref } from 'vue';
 
-type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean; suggestions?: string[] };
+type MessageExtraState = { loading?: boolean; suggestions?: string[] };
+type ChatMessageWithSuggestions = ChatMessage & MessageExtraState;
+type AssistantChatMessageWithSuggestions = AssistantChatMessage & MessageExtraState;
+
+/**
+ * 合并文本部分，将连续的文本消息合并为一个
+ */
+const mergeTextPart = (parts: AssistantChatMessageContent[]): AssistantChatMessageContent[] => {
+  const merged: AssistantChatMessageContent[] = [];
+  for (const part of parts) {
+    if (part.type !== 'text' || !merged.length || merged[merged.length - 1].type !== 'text') {
+      merged.push(part);
+    } else {
+      const lastText = merged[merged.length - 1] as AssistantChatMessageText;
+      lastText.content += part.content;
+    }
+  }
+  return merged;
+};
+
+/**
+ * 从文本中提取建议
+ */
+const extractSuggestions = (content: string): string[] => {
+  // 兼容"**下一步建议**"或"**下一步行动建议**"后有冒号、空行，提取后续所有内容直到下一个空行或结尾
+  const match = content.match(
+    /\*?\*?(下一步建议|下一步行动建议)\*?\*?[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/,
+  );
+  if (!match) return [];
+
+  // 只提取第一个有序列表（1. ...）开始的所有有序条目
+  const lines = match[2].split('\n');
+  const suggestions: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    if (/^\d+\.\s+/.test(line)) {
+      inList = true;
+      suggestions.push(line.replace(/^\d+\.\s+/, '').trim());
+    } else if (inList && !line.trim()) {
+      // 有序列表后遇到空行则停止
+      break;
+    } else if (inList && !/^\d+\.\s+/.test(line)) {
+      // 有序列表中遇到非有序项也停止
+      break;
+    }
+  }
+
+  return suggestions;
+};
 
 export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
   const sessionStore = useSessionStore();
   const messages = ref<ChatMessageWithSuggestions[]>([]);
   const isProcessingChat = ref<boolean>(false);
-
-  /**
-   * 合并文本部分，将连续的文本消息合并为一个
-   */
-  const mergeTextPart = (parts: AssistantChatMessageContent[]): AssistantChatMessageContent[] => {
-    const merged: AssistantChatMessageContent[] = [];
-    for (const part of parts) {
-      if (part.type !== 'text' || !merged.length || merged[merged.length - 1].type !== 'text') {
-        merged.push(part);
-      } else {
-        const lastText = merged[merged.length - 1] as AssistantChatMessageText;
-        lastText.content += part.content;
-      }
-    }
-    return merged;
-  };
-
-  /**
-   * 从文本中提取建议
-   */
-  const extractSuggestions = (content: string): string[] => {
-    // 兼容"**下一步建议**"或"**下一步行动建议**"后有冒号、空行，提取后续所有内容直到下一个空行或结尾
-    const match = content.match(
-      /\*?\*?(下一步建议|下一步行动建议)\*?\*?[:：]?\s*\n*([\s\S]*?)(?=\n{2,}|$)/,
-    );
-    if (!match) return [];
-
-    // 只提取第一个有序列表（1. ...）开始的所有有序条目
-    const lines = match[2].split('\n');
-    const suggestions: string[] = [];
-    let inList = false;
-
-    for (const line of lines) {
-      if (/^\d+\.\s+/.test(line)) {
-        inList = true;
-        suggestions.push(line.replace(/^\d+\.\s+/, '').trim());
-      } else if (inList && !line.trim()) {
-        // 有序列表后遇到空行则停止
-        break;
-      } else if (inList && !/^\d+\.\s+/.test(line)) {
-        // 有序列表中遇到非有序项也停止
-        break;
-      }
-    }
-
-    return suggestions;
-  };
 
   /**
    * 刷新聊天历史
@@ -104,12 +106,12 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
   const sendMessage = async (
     userMessage: string,
     currentSessionId?: string,
-    currentDataset?: any,
+    currentDatasets?: any[] | null,
     scrollToBottom?: () => void,
   ): Promise<void> => {
     if (!userMessage.trim()) return;
 
-    if (!currentDataset) {
+    if (!currentDatasets) {
       ElMessage.warning('请先选择或上传一个数据集。');
       return;
     }
@@ -169,7 +171,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
         tool_calls: {},
         loading: true,
         suggestions: [],
-      } as AssistantChatMessage & { loading?: boolean; suggestions?: string[] });
+      } as AssistantChatMessageWithSuggestions);
 
       messages.value.push(assistantMessage);
 
@@ -406,8 +408,6 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
   return {
     messages,
     isProcessingChat,
-    mergeTextPart,
-    extractSuggestions,
     refreshChatHistory,
     sendMessage,
   };

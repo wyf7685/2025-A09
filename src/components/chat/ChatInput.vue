@@ -5,7 +5,7 @@ import type { DataSourceMetadata } from '@/types';
 
 const props = defineProps<{
   isProcessingChat: boolean;
-  currentDataset?: DataSourceMetadata | null;
+  currentDatasets?: DataSourceMetadata[] | null;
 }>();
 
 const input = defineModel<string>('input', { required: true });
@@ -54,11 +54,18 @@ const handleKeydown = (e: KeyboardEvent) => {
     </div>
     <div class="quick-actions">
       <div class="dataset-indicator">
-        <template v-if="currentDataset">
+        <template v-if="currentDatasets && currentDatasets.length > 0">
           <el-icon>
             <DocumentCopy />
           </el-icon>
-          当前数据集: <strong>{{ turncateString(currentDataset.name || currentDataset.id, 12) }}</strong>
+          当前数据集:
+          <strong v-if="currentDatasets.length === 1">
+            {{ turncateString(currentDatasets[0].name || currentDatasets[0].id, 12) }}
+          </strong>
+          <strong v-else>
+            <!-- TODO: 优化数据集显示 -->
+            {{ currentDatasets.length }} 个
+          </strong>
           <el-link type="primary" @click="goToAddData" :underline="false">
             <el-icon>
               <Edit />

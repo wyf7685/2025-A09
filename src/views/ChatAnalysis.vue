@@ -9,7 +9,7 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
 import { DArrowRight, Monitor } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -19,7 +19,6 @@ const dataSourceStore = useDataSourceStore();
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true)
-
 const userInput = ref<string>('')
 const selectDatasetDialogVisible = ref<boolean>(false)
 const isFlowPanelOpen = ref<boolean>(true) // 控制流程图面板的显示/隐藏
@@ -27,13 +26,13 @@ const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>()
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>()
 
 const sessions = computed(() => sessionStore.sessions)
-const currentSessionId = computed(() => sessionStore.currentSession?.id)
-const currentDataset = computed(() =>
+const currentSessionId = computed(() => sessionStore.currentSessionId)
+const currentDatasets = computed(() =>
   sessionStore.currentSession
-    ? dataSourceStore.dataSources[sessionStore.currentSession.dataset_id]
+    ? sessionStore.currentSession.dataset_ids
+      .map(id => dataSourceStore.dataSources[id] || null).filter(ds => ds)
     : null
 );
-const flowPanel = computed(() => flowPanelRef.value?.flowPanel);
 
 // 会话编辑相关
 const editSessionDialogVisible = ref(false)
@@ -44,7 +43,7 @@ const {
   messages,
   isProcessingChat,
   ...chat
-} = useChat(() => flowPanel.value);
+} = useChat(() => flowPanelRef.value?.flowPanel);
 
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {
@@ -78,16 +77,30 @@ const loadSessions = async () => {
   }
 }
 
-const createNewSession = async (sourceId: string) => {
+const createNewSession = async (sourceIds: string[]) => {
   try {
-    const session = await sessionStore.createSession(sourceId)
-    sessionStore.setCurrentSession(session)
-    await refreshChatHistory()
-    selectDatasetDialogVisible.value = false // Close the dialog
-    ElMessage.success('新对话创建成功')
+    // 确保 sourceIds 是数组
+    const datasetIds = Array.isArray(sourceIds) ? sourceIds : [sourceIds];
+
+    // 如果数组为空，显示错误信息并退出
+    if (datasetIds.length === 0) {
+      ElMessage.warning('请至少选择一个数据集');
+      return;
+    }
+
+    const session = await sessionStore.createSession(datasetIds);
+    sessionStore.setCurrentSession(session);
+    await refreshChatHistory();
+    selectDatasetDialogVisible.value = false; // Close the dialog
+
+    const message = datasetIds.length === 1
+      ? '新对话创建成功'
+      : `成功创建包含 ${datasetIds.length} 个数据集的对话`;
+
+    ElMessage.success(message);
   } catch (error) {
-    console.error('创建新会话失败:', error)
-    ElMessage.error('创建新会话失败')
+    console.error('创建新会话失败:', error);
+    ElMessage.error('创建新会话失败');
   }
 }
 
@@ -126,7 +139,7 @@ const deleteSession = async (sessionId: string) => {
     // 如果删除的是当前会话
     if (sessionId === currentSessionId.value) {
       messages.value = []
-      flowPanel.value?.clearFlowSteps()
+      flowPanelRef.value?.flowPanel?.clearFlowSteps()
 
       // 如果还有其他会话，切换到第一个会话
       if (sessions.value.length > 0) {
@@ -167,7 +180,7 @@ const sendMessage = async (): Promise<void> => {
   await chat.sendMessage(
     userMessage,
     currentSessionId.value,
-    currentDataset.value,
+    currentDatasets.value,
     scrollToBottom
   );
 };
@@ -207,12 +220,13 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Chat Messages -->
-      <ChatMessages :messages="messages" :currentSessionId="currentSessionId" :currentDatasetName="currentDataset?.name"
-        @add-sample-question="userInput = $event" ref="chatMessagesRef" />
+      <!-- Chat Messages Area -->
+      <ChatMessages :messages="messages" :currentSessionId="currentSessionId"
+        :currentDatasetExists="(currentDatasets?.length || 0) > 0" @add-sample-question="userInput = $event"
+        ref="chatMessagesRef" />
 
-      <!-- 使用ChatInput组件替换原有输入区域 -->
-      <ChatInput v-model:input="userInput" :isProcessingChat="isProcessingChat" :currentDataset="currentDataset"
+      <!-- Chat Input Area -->
+      <ChatInput v-model:input="userInput" :isProcessingChat="isProcessingChat" :currentDatasets="currentDatasets"
         @send="sendMessage" @go-to-data="goToAddData" />
     </div>
 

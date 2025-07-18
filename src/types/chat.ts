@@ -1,5 +1,3 @@
-import type { Ref } from 'vue';
-
 /**
  * 聊天条目
  */

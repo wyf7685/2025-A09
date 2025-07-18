@@ -11,8 +11,8 @@ export const useSessionStore = defineStore('session', () => {
   const isDeleting = ref<Record<string, boolean>>({});
 
   // 会话管理
-  const createSession = async (dataset_id: string) => {
-    const response = await api.post<Session>('/sessions', { dataset_id });
+  const createSession = async (dataset_ids: string[]) => {
+    const response = await api.post<Session>('/sessions', { dataset_ids });
     await listSessions();
     return response.data;
   };
@@ -34,11 +34,11 @@ export const useSessionStore = defineStore('session', () => {
   // 更新会话名称
   const updateSessionName = async (sessionId: string, name: string | null) => {
     if (!name) return;
-    
+
     try {
       // 调用后端API更新会话名称
       const response = await api.put<Session>(`/sessions/${sessionId}`, { name });
-      
+
       // 更新本地会话列表中的会话名称
       const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
       if (sessionIndex !== -1) {
@@ -49,7 +49,7 @@ export const useSessionStore = defineStore('session', () => {
       if (currentSession.value?.id === sessionId) {
         currentSession.value.name = name;
       }
-      
+
       return response.data;
     } catch (error) {
       console.error('更新会话名称失败:', error);
@@ -84,28 +84,28 @@ export const useSessionStore = defineStore('session', () => {
     if (isDeleting.value[sessionId]) {
       return;
     }
-    
+
     isDeleting.value[sessionId] = true;
-    
+
     try {
       // 先更新本地状态，提供更好的用户体验
       if (currentSession.value?.id === sessionId) {
         currentSession.value = null;
       }
-      
+
       // 从本地列表中移除
-      const sessionIndex = sessions.value.findIndex(s => s.id === sessionId);
+      const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
       if (sessionIndex !== -1) {
         sessions.value.splice(sessionIndex, 1);
       }
-      
+
       // 调用后端API删除
       await api.delete(`/sessions/${sessionId}`);
-      
+
       console.log(`会话 ${sessionId} 删除成功`);
     } catch (error) {
       console.error(`删除会话 ${sessionId} 失败:`, error);
-      
+
       // 最多重试2次
       if (retryCount < 2) {
         console.log(`尝试重新删除会话 ${sessionId}，第 ${retryCount + 1} 次重试`);
@@ -215,6 +215,7 @@ export const useSessionStore = defineStore('session', () => {
 
   return {
     currentSession: computed(() => currentSession.value),
+    currentSessionId: computed(() => currentSession.value?.id),
     sessions,
     chatHistory,
     createSession,

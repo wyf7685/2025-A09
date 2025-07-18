@@ -4,12 +4,13 @@ import { useDataSourceStore } from '@/stores/datasource'
 import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
 import { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
+import { turncateString } from '@/utils/tools'
 import {
   ArrowRight, Back, Check, CircleCheck, CircleClose, Connection, Delete, DocumentChecked, DocumentCopy, Edit,
   EditPen, InfoFilled, QuestionFilled, Refresh, RefreshRight, Search, Upload, UploadFilled, View, Warning
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
-import { onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -58,10 +59,16 @@ const fileMetadata = ref({
 const selectedCleaningActions = ref<CleaningAction[]>([])
 const cleaningStep = ref<'upload' | 'analysis' | 'cleaning' | 'complete'>('upload')
 
+// 添加多选相关状态
+const selectedSources = ref<string[]>([]); // 存储选中的数据源ID
+const tableRef = ref<InstanceType<typeof ElTable>>();
+
+// 刷新数据集列表
 const fetchDatasets = async () => {
   isLoading.value = true
   try {
-    datasources.value = await dataSourceStore.listDataSources()
+    const sources = await dataSourceStore.listDataSources()
+    datasources.value = sources
   } catch (error) {
     ElMessage.error('加载数据集列表失败')
     console.error(error)
@@ -70,6 +77,7 @@ const fetchDatasets = async () => {
   }
 }
 
+// 数据源类型人类可读表示
 const sourceTypeHumanRepr = (metadata: DataSourceMetadataWithID) => {
   if (!metadata.source_type.startsWith('dremio:')) {
     return metadata.source_type
@@ -87,6 +95,7 @@ const sourceTypeHumanRepr = (metadata: DataSourceMetadataWithID) => {
   return type
 }
 
+// 处理文件上传
 const handleFileUpload = async (options: any) => {
   const file = options.file
   if (!file) return
@@ -106,24 +115,30 @@ const handleFileUpload = async (options: any) => {
   fileMetadata.value.description = ''
   dataCleaningDialogVisible.value = true
   cleaningStep.value = 'upload'
-
-  // 不再自动分析数据质量，让用户自己选择
 }
 
+// 打开添加数据库对话框
 const openAddDatabase = () => {
   addDatabaseDialogVisible.value = true
 }
 
+// 添加数据库成功回调
 const onDatabaseAddSuccess = async () => {
   ElMessage.success('数据库连接添加成功')
   await fetchDatasets() // 刷新数据源列表
 }
 
+// 选择数据集进行分析
 const selectForAnalysis = async (metadata: DataSourceMetadataWithID) => {
-  const session = await sessionStore.createSession(metadata.source_id)
-  sessionStore.setCurrentSession(session)
-  ElMessage.success(`已选择数据集 "${metadata.name.slice(0, 8)}..." 进行分析`)
-  router.push('/chat-analysis')
+  try {
+    const session = await sessionStore.createSession([metadata.source_id]);
+    sessionStore.setCurrentSession(session);
+    ElMessage.success(`已选择数据集 "${metadata.name.slice(0, 8)}..." 进行分析`)
+    router.push('/chat-analysis')
+  } catch (error) {
+    console.error('创建会话失败:', error)
+    ElMessage.error('创建会话失败')
+  }
 }
 
 // 编辑数据源
@@ -136,6 +151,7 @@ const openEditDialog = (source: DataSourceMetadataWithID) => {
   editDialogVisible.value = true
 }
 
+// 保存编辑
 const saveEdit = async () => {
   if (!currentEditSource.value) return
 
@@ -184,6 +200,7 @@ const openPreviewDialog = async (source: DataSourceMetadataWithID) => {
   await loadPreviewData(1)
 }
 
+// 加载预览数据
 const loadPreviewData = async (page: number = 1) => {
   if (!currentEditSource.value) return
 
@@ -379,6 +396,7 @@ const getIssueTypeColor = (type: string) => {
   }
 }
 
+// 更新过滤后的数据源
 const updateFilteredDataSources = () => {
   let filtered = datasources.value
 
@@ -423,6 +441,82 @@ watch(datasources, updateDisplayData, { deep: true })
 watch(searchQuery, updateDisplayData)
 watch(currentPage, updatePaginatedDataSources)
 watch(pageSize, updatePaginatedDataSources)
+
+const getDatasourceName = (sourceId: string): string => {
+  const source = datasources.value.find(ds => ds.source_id === sourceId);
+  if (!source) return sourceId.slice(0, 8) + '...';
+  return source.name || `数据集 ${sourceId.slice(0, 8)}...`;
+};
+
+// 选择/取消选择数据源
+const toggleSourceSelection = (sourceId: string) => {
+  const index = selectedSources.value.indexOf(sourceId);
+  if (index === -1) {
+    // 未选中，添加到选择列表
+    selectedSources.value.push(sourceId);
+  } else {
+    // 已选中，从选择列表移除
+    selectedSources.value.splice(index, 1);
+  }
+
+  // 更新表格选择状态
+  nextTick(() => {
+    setRowSelection();
+  });
+};
+
+// 处理表格选择变化
+const handleSelectionChange = (selection: DataSourceMetadataWithID[]) => {
+  selectedSources.value = selection.map(item => item.source_id);
+};
+
+// 根据当前选择状态设置行的选中状态
+const setRowSelection = () => {
+  if (!tableRef.value) return;
+
+  // 清除现有选择
+  tableRef.value.clearSelection();
+
+  // 根据 selectedSources 重新设置选中状态
+  paginatedDataSources.value.forEach(row => {
+    if (selectedSources.value.includes(row.source_id)) {
+      tableRef.value?.toggleRowSelection(row, true);
+    }
+  });
+};
+
+// 使用选中的数据源创建会话
+const createSessionWithSelectedSources = async () => {
+  if (selectedSources.value.length === 0) {
+    ElMessage.warning('请至少选择一个数据集');
+    return;
+  }
+
+  try {
+    const session = await sessionStore.createSession(selectedSources.value);
+    sessionStore.setCurrentSession(session);
+
+    const message = selectedSources.value.length === 1
+      ? '新对话创建成功'
+      : `成功创建包含 ${selectedSources.value.length} 个数据集的对话`;
+
+    ElMessage.success(message);
+
+    // 导航到分析页面
+    router.push('/chat-analysis');
+  } catch (error) {
+    console.error('创建会话失败:', error);
+    ElMessage.error('创建会话失败');
+  }
+};
+
+// 监听分页变化，保持选择状态
+watch([currentPage, pageSize], () => {
+  nextTick(() => {
+    setRowSelection();
+  });
+});
+
 </script>
 
 <template>
@@ -474,19 +568,69 @@ watch(pageSize, updatePaginatedDataSources)
     <div class="search-section">
       <el-card shadow="never">
         <div class="search-header">
-          <h3>数据源列表</h3>
+          <div class="header-left">
+            <h3>数据源列表</h3>
+            <el-tooltip
+              :content="selectedSources.length === 0 ? '请至少选择一个数据集' : `使用选定的 ${selectedSources.length} 个数据集开始分析`"
+              placement="top">
+              <el-button type="primary" @click="createSessionWithSelectedSources"
+                :disabled="selectedSources.length === 0" class="analysis-button">
+                开始分析
+                <el-icon class="el-icon--right">
+                  <ArrowRight />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
+          </div>
           <div class="search-controls">
             <el-input v-model="searchQuery" placeholder="搜索数据源名称或描述..." :prefix-icon="Search" clearable
-              @input="updateDisplayData" style="width: 300px" />
+              @input="updateDisplayData" style="width: 300px;" />
           </div>
         </div>
+
+        <!-- 已选择数据集 -->
+        <div class="selection-actions">
+          <div class="selection-info">
+
+            <el-tag :type="selectedSources.length > 0 ? 'success' : 'info'" class="selection-tag">
+              <template v-if="selectedSources.length > 0">
+                <el-icon>
+                  <DocumentChecked />
+                </el-icon>
+                已选择 {{ selectedSources.length }} 个数据集
+              </template>
+              <template v-else>
+                <el-icon>
+                  <EditPen />
+                </el-icon>
+                选择数据集进行分析...
+              </template>
+            </el-tag>
+
+            <div class="selected-datasets" v-if="selectedSources.length > 0">
+              <el-tag v-for="sourceId in selectedSources.slice(0, 3)" :key="sourceId" class="dataset-tag">
+                {{ turncateString(getDatasourceName(sourceId), 20) }}
+              </el-tag>
+              <el-tag v-if="selectedSources.length > 3" type="info">
+                +{{ selectedSources.length - 3 }} 个
+              </el-tag>
+            </div>
+
+          </div>
+        </div>
+
       </el-card>
     </div>
 
     <!-- 数据源列表 -->
     <div class="data-list-section">
       <el-card shadow="never">
-        <el-table :data="paginatedDataSources" v-loading="isLoading" stripe class="data-table">
+        <el-table ref="tableRef" :data="paginatedDataSources" v-loading="isLoading" stripe class="data-table"
+          @selection-change="handleSelectionChange" row-key="source_id">
+
+          <!-- 多选列 -->
+          <el-table-column type="selection" width="55" :reserve-selection="true" />
+
           <el-table-column prop="source_id" label="ID" width="120" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag size="small" type="info">{{ row.source_id.slice(0, 8) }}...</el-tag>
@@ -1728,5 +1872,121 @@ watch(pageSize, updatePaginatedDataSources)
 .el-loading-mask {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(4px);
+}
+
+/* 添加新的选择模式样式 */
+.search-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    h3 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .analysis-button {
+      border-radius: 20px;
+      font-weight: 500;
+    }
+  }
+
+  .search-controls {
+    .el-input {
+      :deep(.el-input__wrapper) {
+        border-radius: 25px;
+        padding: 8px 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+    }
+  }
+}
+
+.selection-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f0f9ff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-top: 16px;
+  border: 1px solid #bae6fd;
+
+  .selection-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+
+    .selection-tag {
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      .el-icon {
+        margin-right: 4px;
+      }
+    }
+
+    .selected-datasets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      .dataset-tag {
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background: white;
+        border: 1px solid #bae6fd;
+        color: #0284c7;
+      }
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .search-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+
+    .header-left {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .search-controls {
+      width: 100%;
+
+      .el-input {
+        width: 100% !important;
+      }
+    }
+  }
+
+  .selection-actions {
+    flex-direction: column;
+    gap: 12px;
+
+    .selection-info {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+  }
 }
 </style>

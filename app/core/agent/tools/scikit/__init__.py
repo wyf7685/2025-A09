@@ -252,7 +252,7 @@ def scikit_tools(
             meta_model_hyperparams (dict, optional): 元模型的超参数，仅用于stacking或blending
 
         Returns:
-            str: 集成模型ID，可用于后续的evaluate_model_tool或save_model_tool调用
+            str: 集成模型ID，可用于后续的fit_model_tool调用
         """
         # 验证模型ID是否存在
         models = []

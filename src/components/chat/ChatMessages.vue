@@ -8,7 +8,7 @@ type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions
 const props = defineProps<{
   messages: ChatMessageWithSuggestions[];
   currentSessionId?: string;
-  currentDatasetName?: string;
+  currentDatasetExists: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -62,7 +62,7 @@ onMounted(() => {
   <div class="chat-messages" ref="messagesContainer">
 
     <!-- 空状态：无会话或无数据集 -->
-    <div v-if="!currentSessionId || !currentDatasetName" class="empty-state">
+    <div v-if="!currentSessionId || !currentDatasetExists" class="empty-state">
       <div class="empty-message">
         <p>选择一个数据集，开始您的数据分析对话</p>
       </div>

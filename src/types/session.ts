@@ -5,7 +5,7 @@ import type { ChatEntry } from './chat';
  */
 export interface Session {
   id: string;
-  dataset_id: string;
+  dataset_ids: string[];
   name: string | null;
   chat_history: ChatEntry[];
   created_at: string;

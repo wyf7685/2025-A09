@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 class CreateSessionRequest(BaseModel):
-    dataset_id: str
+    dataset_ids: list[str]
 
 
 @router.post("/sessions")
@@ -30,12 +30,15 @@ async def create_session(request: CreateSessionRequest) -> Session:
     必须指定一个数据集用于分析
     """
     try:
+        if not request.dataset_ids:
+            raise HTTPException(status_code=400, detail="At least one dataset ID is required")
+
         # 检查数据集是否存在
+        for dataset_id in request.dataset_ids:
+            if not datasource_service.source_exists(dataset_id):
+                raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
-        if not datasource_service.source_exists(request.dataset_id):
-            raise HTTPException(status_code=404, detail="Dataset not found")
-
-        return session_service.create_session(request.dataset_id)
+        return session_service.create_session(request.dataset_ids)
 
     except HTTPException:
         raise
