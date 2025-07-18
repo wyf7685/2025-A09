@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
-import type { FlowStep } from '@/types';
+import type { FlowStep, FlowRoute, FlowPanel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Edit, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
@@ -14,27 +14,21 @@ const isFlowPanelOpen = defineModel<boolean>("isFlowPanelOpen", { required: true
 const selectedRoute = ref<string>('route1') // 当前选中的路线
 const currentRouteReason = ref<string>('') // 当前路线选择的原因
 
-interface Route {
-  title: string;
-  description: string;
-  status: 'pending' | 'active' | 'completed' | 'error';
-}
-
 // 路线1：生成总体报告的步骤
-const route1Steps = ref([
+const route1Steps = ref<FlowRoute[]>([
   { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
   { title: 'AI分析处理', description: '智能分析用户需求和数据', status: 'pending' },
   { title: '生成报告', description: '生成完整的数据分析报告', status: 'pending' }
-] as Route[])
+])
 
 // 路线2：其他处理的步骤
-const route2Steps = ref([
+const route2Steps = ref<FlowRoute[]>([
   { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
   { title: 'AI分析处理', description: '智能分析用户需求', status: 'pending' },
   { title: '判断执行工具', description: '分析并选择合适的处理工具', status: 'pending' },
   { title: '调用执行工具', description: '执行相应的数据处理工具', status: 'pending' },
   { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending' }
-] as Route[])
+])
 
 // 流程图相关状态 (保留原有的flowSteps以兼容现有代码)
 const flowSteps = ref<FlowStep[]>([])
@@ -437,26 +431,15 @@ const forceCompleteFlow = () => {
 }
 
 defineExpose({
-  selectedRoute,
-  currentRouteReason,
-  route1Steps,
-  route2Steps,
-  flowSteps,
-  storeAvailableModels,
-  selectedModel,
-  getCurrentModelInfo,
-  addFlowStep,
-  updateFlowStep,
-  clearFlowSteps,
-  changeModel,
-  handleRouteChange,
-  resetAllSteps,
-  updateRouteStep,
-  autoSelectRoute,
-  toggleRouteManually,
-  hasActiveSteps,
-  forceCompleteFlow,
-  logRouteStatus,
+  flowPanel: {
+    route1Steps,
+    route2Steps,
+    selectedModel,
+    clearFlowSteps,
+    updateRouteStep,
+    autoSelectRoute,
+    logRouteStatus,
+  } as FlowPanel,
 })
 
 // --- Lifecycle Hooks ---

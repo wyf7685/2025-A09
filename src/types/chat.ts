@@ -1,3 +1,5 @@
+import type { Ref } from 'vue';
+
 /**
  * 聊天条目
  */
@@ -52,14 +54,3 @@ export interface AssistantChatMessage {
  * 聊天消息
  */
 export type ChatMessage = UserChatMessage | AssistantChatMessage;
-
-// 流程图步骤类型定义
-export interface FlowStep {
-  id: string
-  title: string
-  description?: string
-  status: 'pending' | 'running' | 'completed' | 'error'
-  timestamp: Date
-  details?: string[]
-  error?: string
-}

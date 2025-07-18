@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AssistantMessageText from '@/components/AssistantMessageText.vue';
+import AssistantMessageText from '@/components/chat/AssistantMessageText.vue';
 import type { AssistantChatMessage } from '@/types';
 import { ref } from 'vue';
 
