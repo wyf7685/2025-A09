@@ -429,6 +429,7 @@ def scikit_tools(
         dataset_id: DatasetID,
         model_id: ModelID,
         input_features: list[str] | None = None,
+        prediction_dataset_id: DatasetID | None = None,
     ) -> PredictionResult:
         """
         使用训练好的模型进行预测，并将预测结果保存到新的DataFrame中。
@@ -440,7 +441,8 @@ def scikit_tools(
             dataset_id (str): 要进行预测的输入数据集ID。
             model_id (str): 模型ID，由 `fit_model_tool` 返回。
             input_features (list[str], optional): 输入数据的特征列名列表。如果不提供，将使用训练时使用的特征列。
-
+            prediction_dataset_id (DatasetID | None): 可选参数。指定存储预测结果的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
         Returns:
             dict: 包含预测结果的字典
         """
@@ -449,7 +451,7 @@ def scikit_tools(
 
         logger.opt(colors=True).info(f"<g>使用模型进行预测</>, ID = <c>{escape_tag(model_id)}</>")
         prediction, result = predict_with_model(train_model_cache[model_id], sources.read(dataset_id), input_features)
-        result["prediction_dataset_id"] = sources.create(prediction)
+        result["prediction_dataset_id"] = sources.create(prediction, prediction_dataset_id)
         return result
 
     @tool(response_format="content_and_artifact")

@@ -35,6 +35,7 @@ def infer_and_convert_dtypes(
     category_threshold: float = 0.05,
     datetime_format: str | None = None,
     in_place: bool = False,
+    new_dataset_id: DatasetID | None = None,
 ) -> ConvertDtypesResult:
     """
     自动推断并转换数据框中的列类型，修复常见的类型错误。
@@ -50,6 +51,7 @@ def infer_and_convert_dtypes(
                                   当唯一值数量/总行数 < category_threshold时，将转换为分类类型
         datetime_format (str, optional): 日期时间格式字符串，如'%Y-%m-%d'。如果为None，则尝试自动推断。
         in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
         ConvertDtypesResult: 转换结果信息
@@ -153,7 +155,7 @@ def infer_and_convert_dtypes(
         "null_counts": {col: int(df_copy[col].isna().sum()) for col in columns},
     }
 
-    new_dataset_id = sources.create(df_copy)
+    new_dataset_id = sources.create(df_copy, new_dataset_id)
     if in_place:
         sources.rename(new_dataset_id, dataset_id)
         new_dataset_id = dataset_id
@@ -187,6 +189,7 @@ def fix_misaligned_data(
     suspected_columns: list[str] | None = None,
     alignment_pattern: str | None = None,
     in_place: bool = False,
+    new_dataset_id: DatasetID | None = None,
 ) -> CleanMisalignedDataResult | OperationFailed:
     """
     修复数据错位问题，常见于导入CSV文件时分隔符识别错误。
@@ -196,6 +199,7 @@ def fix_misaligned_data(
         dataset_id (str): 操作的数据集ID
         suspected_columns (list[str], optional): 疑似包含错位数据的列
         alignment_pattern (str, optional): 用于检测错位的正则表达式模式
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
         CleanMisalignedDataResult | OperationFailed: 修复后的数据框和操作结果
@@ -264,7 +268,7 @@ def fix_misaligned_data(
         # 保存修复后的样本
         sample_after = df_copy.head(3).to_dict()
 
-        new_dataset_id = sources.create(df_copy)
+        new_dataset_id = sources.create(df_copy, new_dataset_id)
         if in_place:
             sources.rename(new_dataset_id, dataset_id)
             new_dataset_id = dataset_id

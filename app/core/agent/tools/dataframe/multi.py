@@ -30,6 +30,7 @@ def join_dataframes(
     join_type: JoinType = "inner",
     left_on: str | list[str] | None = None,
     right_on: str | list[str] | None = None,
+    new_dataset_id: DatasetID | None = None,
 ) -> JoinDataframesResult | OperationFailed:
     """
     连接两个数据框，创建新的数据集
@@ -41,10 +42,10 @@ def join_dataframes(
         join_type (str): 连接类型，可选值：'inner', 'left', 'right', 'outer', 'cross'
         left_on (str | List[str], optional): 左侧数据框用于连接的列名(单个或列表)
         right_on (str | List[str], optional): 右侧数据框用于连接的列名(单个或列表)
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
-        tuple[pd.DataFrame, JoinDataframesResult] | tuple[None, OperationFailed]:
-            包含新数据框和操作结果的元组，如果操作失败则数据框为None
+        JoinDataframesResult | OperationFailed: 操作结果
     """
     df_left = sources.read(left_dataset_id)
     df_right = sources.read(right_dataset_id)
@@ -105,7 +106,7 @@ def join_dataframes(
             result_df = df_left.merge(df_right, how=join_type, left_on=left_on, right_on=right_on)
 
         # 保存结果数据集
-        dataset_id = sources.create(result_df)
+        dataset_id = sources.create(result_df, new_dataset_id)
 
         # 生成结果
         join_details = {
@@ -162,6 +163,7 @@ def combine_dataframes(
     operation: CombineDataframesOperation = "union",
     match_columns: bool = True,
     ignore_index: bool = True,
+    new_dataset_id: DatasetID | None = None,
 ) -> CombineDataframesResult | OperationFailed:
     """
     执行多个数据框之间的集合操作，创建新的数据集
@@ -175,10 +177,10 @@ def combine_dataframes(
             - 'difference': 保留第一个数据框中不在其他数据框中出现的行
         match_columns (bool): 是否要求所有数据框的列完全匹配，默认为True
         ignore_index (bool): 是否重置结果数据框的索引，默认为True
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
-        CombineDataframesResult | OperationFailed:
-            包含新数据框和操作结果的元组，如果操作失败则数据框为None
+        CombineDataframesResult | OperationFailed: 操作结果
     """
     dfs = [sources.read(id) for id in dataset_ids]
 
@@ -262,7 +264,7 @@ def combine_dataframes(
                     result_df = pd.DataFrame(columns=dfs[0].columns)  # 空DataFrame，保持列名
 
         # 保存结果数据集
-        dataset_id = sources.create(result_df)
+        dataset_id = sources.create(result_df, new_dataset_id)
 
         # 生成结果
         combine_details = {
@@ -313,6 +315,7 @@ def create_dataset_from_query(
     query: str,
     columns: list[str] | None = None,
     reset_index: bool = True,
+    new_dataset_id: DatasetID | None = None,
 ) -> CreateDatasetResult | OperationFailed:
     """
     通过查询条件从现有数据集创建新数据集
@@ -323,10 +326,10 @@ def create_dataset_from_query(
         query (str): 筛选条件，使用pandas query语法，如 "age > 30 and gender == 'F'"
         columns (list[str], optional): 要包含的列名列表，如果为None则包含所有列
         reset_index (bool): 是否重置结果数据集的索引，默认为True
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
-        Tuple[Optional[pd.DataFrame], CreateDatasetResult | OperationFailed]:
-            包含新数据框和操作结果的元组，如果操作失败则数据框为None
+        CreateDatasetResult | OperationFailed: 操作结果
     """
     source_df = sources.read(dataset_id)
 
@@ -367,7 +370,7 @@ def create_dataset_from_query(
             }
 
         # 保存结果数据集
-        dataset_id = sources.create(filtered_df)
+        dataset_id = sources.create(filtered_df, new_dataset_id)
 
         # 生成结果
         creation_details = {
@@ -405,6 +408,7 @@ def create_dataset_by_sampling(
     frac: float | None = None,
     random_state: int | None = None,
     stratify_by: str | None = None,
+    new_dataset_id: DatasetID | None = None,
 ) -> CreateDatasetResult | OperationFailed:
     """
     通过采样从现有数据集创建新数据集
@@ -416,10 +420,10 @@ def create_dataset_by_sampling(
         frac (float, optional): 要采样的比例，如0.3表示采样30%的数据，与n二选一
         random_state (int, optional): 随机种子，用于可重现的结果
         stratify_by (str, optional): 分层采样的列名，确保采样结果保持该列的分布
+        new_dataset_id (DatasetID | None): 可选参数，指定存储新数据框的数据集ID
 
     Returns:
-        Tuple[Optional[pd.DataFrame], CreateDatasetResult | OperationFailed]:
-            包含新数据框和操作结果的元组，如果操作失败则数据框为None
+        CreateDatasetResult | OperationFailed: 操作结果
     """
     source_df = sources.read(dataset_id)
 
@@ -493,7 +497,7 @@ def create_dataset_by_sampling(
             sampled_df = source_df.sample(**sample_kwargs).reset_index(drop=True)
 
         # 保存结果数据集
-        dataset_id = sources.create(sampled_df)
+        dataset_id = sources.create(sampled_df, new_dataset_id)
 
         # 生成结果
         creation_details = {

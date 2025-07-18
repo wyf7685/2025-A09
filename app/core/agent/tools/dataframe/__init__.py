@@ -256,6 +256,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         category_threshold: float = 0.05,
         datetime_format: str | None = None,
         in_place: bool = False,
+        new_dataset_id: DatasetID | None = None,
     ) -> ConvertDtypesResult:
         """
         自动推断并转换数据集中的列类型，修复常见的类型错误。
@@ -273,6 +274,8 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
                                       当唯一值数量/总行数 < category_threshold时，将转换为分类类型
             datetime_format (str, optional): 日期时间格式字符串，如'%Y-%m-%d'。如果为None，则尝试自动推断
             in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
+            new_dataset_id (str | None): 可选参数，in_place为False时可用。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含转换结果的详细信息，包括成功和失败的列、转换前后的类型以及内存使用变化
@@ -287,6 +290,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
             category_threshold,
             datetime_format,
             in_place,
+            new_dataset_id,
         )
 
     @tool
@@ -295,6 +299,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         suspected_columns: list[str] | None = None,
         alignment_pattern: str | None = None,
         in_place: bool = False,
+        new_dataset_id: DatasetID | None = None,
     ) -> CleanMisalignedDataResult | OperationFailed:
         """
         修复数据错位问题，常见于导入CSV文件时分隔符识别错误。
@@ -307,11 +312,13 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
             suspected_columns (list[str], optional): 疑似包含错位数据的列。如果为None，将检查所有对象类型的列
             alignment_pattern (str, optional): 用于检测错位的正则表达式模式。默认检测常见分隔符如逗号、分号和制表符
             in_place (bool): 是否直接在原数据集上修复。如果为False，将创建一个新的数据集
+            new_dataset_id (str | None): 可选参数，in_place为False时可用。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含修复结果的详细信息，包括修复的行数、修复前后的样本对比
         """
-        return fix_misaligned_data(sources, dataset_id, suspected_columns, alignment_pattern, in_place)
+        return fix_misaligned_data(sources, dataset_id, suspected_columns, alignment_pattern, in_place, new_dataset_id)
 
     @tool
     def handle_missing_values_tool(
@@ -353,6 +360,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         join_type: JoinType = "inner",
         left_on: str | list[str] | None = None,
         right_on: str | list[str] | None = None,
+        new_dataset_id: DatasetID | None = None,
     ) -> JoinDataframesResult | OperationFailed:
         """
         将两个数据框按指定列进行连接。
@@ -363,11 +371,13 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
             join_type (str): 连接类型，可选值：'inner', 'left', 'right', 'outer', 'cross'
             left_on (str | List[str], optional): 左侧数据框用于连接的列名(单个或列表)
             right_on (str | List[str], optional): 右侧数据框用于连接的列名(单个或列表)
+            new_dataset_id (str | None): 可选参数。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含连接结果的字典。
         """
-        return join_dataframes(sources, left_dataset_id, right_dataset_id, join_type, left_on, right_on)
+        return join_dataframes(sources, left_dataset_id, right_dataset_id, join_type, left_on, right_on, new_dataset_id)
 
     @tool
     def combine_dataframes_tool(
@@ -375,6 +385,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         operation: CombineDataframesOperation = "union",
         match_columns: bool = True,
         ignore_index: bool = True,
+        new_dataset_id: DatasetID | None = None,
     ) -> CombineDataframesResult | OperationFailed:
         """
         将多个数据框按指定列进行连接。
@@ -387,11 +398,13 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
                 - 'difference': 保留第一个数据框中不在其他数据框中出现的行
             match_columns (bool): 是否要求所有数据框的列完全匹配，默认为True
             ignore_index (bool): 是否重置结果数据框的索引，默认为True
+            new_dataset_id (str | None): 可选参数。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含连接结果的字典。
         """
-        return combine_dataframes(sources, dataset_ids, operation, match_columns, ignore_index)
+        return combine_dataframes(sources, dataset_ids, operation, match_columns, ignore_index, new_dataset_id)
 
     @tool
     def create_dataset_from_query_tool(
@@ -399,6 +412,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         query: str,
         columns: list[str] | None = None,
         reset_index: bool = True,
+        new_dataset_id: DatasetID | None = None,
     ) -> CreateDatasetResult | OperationFailed:
         """
         从现有数据集中创建一个新的数据集，基于指定的查询条件。
@@ -408,11 +422,13 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
             query (str): 筛选条件，使用pandas query语法，如 "age > 30 and gender == 'F'"
             columns (list[str], optional): 要包含的列名列表，如果为None则包含所有列
             reset_index (bool): 是否重置结果数据集的索引，默认为True
+            new_dataset_id (str | None): 可选参数。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含新数据集ID和样本数据的结果字典。
         """
-        return create_dataset_from_query(sources, dataset_id, query, columns, reset_index)
+        return create_dataset_from_query(sources, dataset_id, query, columns, reset_index, new_dataset_id)
 
     @tool
     def create_dataset_by_sampling_tool(
@@ -421,6 +437,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         frac: float | None = None,
         random_state: int | None = None,
         stratify_by: str | None = None,
+        new_dataset_id: DatasetID | None = None,
     ) -> CreateDatasetResult | OperationFailed:
         """
         从现有数据集中创建一个新的数据集，基于随机采样。
@@ -431,11 +448,13 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
             frac (float, optional): 要采样的比例，如0.3表示采样30%的数据，与n二选一
             random_state (int, optional): 随机种子，用于可重现的结果
             stratify_by (str, optional): 分层采样的列名，确保采样结果保持该列的分布
+            new_dataset_id (str | None): 可选参数。指定存储新数据框的数据集ID。
+                                                      如果不提供，系统将自动生成一个新的数据集ID。
 
         Returns:
             dict: 包含新数据集ID和样本数据的结果字典。
         """
-        return create_dataset_by_sampling(sources, dataset_id, n, frac, random_state, stratify_by)
+        return create_dataset_by_sampling(sources, dataset_id, n, frac, random_state, stratify_by, new_dataset_id)
 
     return [
         # 数据检查/探索工具（了解数据）
