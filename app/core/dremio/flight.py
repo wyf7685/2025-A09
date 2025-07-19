@@ -115,13 +115,13 @@ class DremioFlightClient(AbstractDremioClient):
         try:
             formatted = path_to_dotted(source_name)
             sql_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
-        result = self.execute_sql_to_dataframe(sql_query)
-        row_count = int(result.iloc[0]["row_count"])
+            result = self.execute_sql_to_dataframe(sql_query)
+            row_count = int(result.iloc[0]["row_count"])
 
-        first_line = self.read_source(source_name, limit=1)
-        col_count = len(first_line.columns) if not first_line.empty else 0
+            first_line = self.read_source(source_name, limit=1)
+            col_count = len(first_line.columns) if not first_line.empty else 0
 
-        return row_count, col_count
+            return row_count, col_count
         except Exception as e:
             logger.warning(f"Flight客户端获取形状失败: {e}")
             logger.info("回退到使用REST API获取形状")

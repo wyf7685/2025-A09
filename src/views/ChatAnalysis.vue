@@ -9,7 +9,7 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
 import { DArrowRight, Monitor, Document, Download, Upload } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox, ElDialog, ElButton, ElSelect, ElOption, ElInput, ElTextarea } from 'element-plus';
+import { ElMessage, ElMessageBox, ElDialog, ElButton, ElSelect, ElOption, ElInput } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { reportAPI } from '@/utils/api';
@@ -501,7 +501,7 @@ onMounted(async () => {
           <el-input v-model="templateDescription" type="textarea" placeholder="请输入模板描述"></el-input>
         </el-form-item>
         <el-form-item label="模板内容">
-          <el-input v-model="templateContent" type="textarea" placeholder="请输入模板内容，使用 {conversation} 作为对话内容的占位符" rows="10"></el-input>
+          <el-input v-model="templateContent" type="textarea" placeholder="请输入模板内容，使用 {conversation} 作为对话内容的占位符" :rows="10"></el-input>
         </el-form-item>
       </el-form>
       <template #footer>

@@ -83,6 +83,10 @@ async def analyze_data_quality(
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
         
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
+        
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -196,6 +200,10 @@ async def check_data_quality(
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
         
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
+        
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -302,6 +310,10 @@ async def apply_cleaning_action(
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}{file_extension}"
         
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
+        
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -374,6 +386,10 @@ async def get_cleaning_suggestions(
         # 生成唯一文件名
         temp_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_extension}"
         
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
+        
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -440,6 +456,10 @@ async def get_quality_report(
         temp_filename = f"{file_id}_{original_filename}"
         temp_path = UPLOAD_DIR / temp_filename
         
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
+        
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -504,6 +524,10 @@ async def get_field_mapping(
         
         # 生成唯一文件名
         temp_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_extension}"
+        
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
         
         try:
             # 保存上传的文件
@@ -577,6 +601,10 @@ async def execute_cleaning(
         # 生成唯一文件名
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
         
         try:
             # 保存上传的文件
@@ -682,6 +710,10 @@ async def analyze_and_clean(
         # 生成唯一文件名
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        
+        # 初始化变量
+        field_mappings = {}
+        cleaned_file_path = None
         
         try:
             # 保存上传的文件
