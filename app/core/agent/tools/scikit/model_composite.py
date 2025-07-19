@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from app.log import logger
 from app.utils import escape_tag
 
-from .model import ModelInstanceInfo, TrainModelResult, create_model
+from .model import BASE_MODEL_TASK_TYPE, EstimatorLike, ModelInstanceInfo, TrainModelResult, create_model
 
 
 # 通用选项 - 所有集成模型都可能使用的选项
@@ -160,7 +160,7 @@ def _create_voting_model(
     hyperparams = {"weights": weights, "voting": voting if is_classification else None}
 
     return {
-        "model": composite_model,
+        "model": cast("EstimatorLike", composite_model),
         "model_type": model_type,
         "hyperparams": hyperparams,
     }
@@ -174,6 +174,8 @@ def _create_stacking_model(
     meta_model_type = options.get("meta_model_type")
     if not meta_model_type:
         raise ValueError("Stacking集成模型需要指定meta_model_type参数")
+    if meta_model_type not in BASE_MODEL_TASK_TYPE:
+        raise ValueError(f"不支持的元模型类型: {meta_model_type}")
 
     # 获取交叉验证折数
     cv_folds = options.get("cv_folds", 5)
@@ -219,7 +221,7 @@ def _create_stacking_model(
     }
 
     return {
-        "model": composite_model,
+        "model": cast("EstimatorLike", composite_model),
         "model_type": model_type,
         "hyperparams": hyperparams,
     }
@@ -310,6 +312,8 @@ def _create_blending_model(
     meta_model_type = options.get("meta_model_type")
     if not meta_model_type:
         raise ValueError("Blending集成模型需要指定meta_model_type参数")
+    if meta_model_type not in BASE_MODEL_TASK_TYPE:
+        raise ValueError(f"不支持的元模型类型: {meta_model_type}")
 
     # 获取验证集比例
     validation_split = options.get("validation_split", 0.2)
@@ -349,7 +353,7 @@ def _create_blending_model(
     }
 
     return {
-        "model": composite_model,
+        "model": cast("EstimatorLike", composite_model),
         "model_type": model_type,
         "hyperparams": hyperparams,
     }

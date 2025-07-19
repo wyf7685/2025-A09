@@ -1,7 +1,7 @@
 import inspect
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, cast
 
 import joblib
 import numpy as np
@@ -22,20 +22,30 @@ from sklearn.preprocessing import LabelEncoder
 from app.log import logger
 from app.utils import escape_tag, resolve_dot_notation
 
+type TaskType = Literal["regression", "classification"]
+type SupportedBaseModelType = Literal[
+    "linear_regression",
+    "decision_tree_regressor",
+    "random_forest_regressor",
+    "gradient_boosting_regressor",
+    "xgboost_regressor",
+    "decision_tree_classifier",
+    "random_forest_classifier",
+    "gradient_boosting_classifier",
+    "xgboost_classifier",
+    "logistic_regression",
+]
+type SupportedCompositeModelType = Literal[
+    "voting_classifier",
+    "voting_regressor",
+    "stacking_classifier",
+    "stacking_regressor",
+    "blending_classifier",
+    "blending_regressor",
+]
+type SupportedModelType = SupportedBaseModelType | SupportedCompositeModelType
 
-class TrainModelResult(TypedDict):
-    model: Any
-    X_test: Any
-    Y_test: Any
-    model_type: str
-    message: str
-    feature_columns: list[str]
-    target_column: str
-    label_encoder: Any | None  # 可选的标签编码器，用于分类任务
-    hyperparams: NotRequired[dict[str, Any] | None]  # 存储使用的超参数
-
-
-_MODEL_CONFIG = {
+MODEL_CONFIG: dict[TaskType, dict[SupportedBaseModelType, str]] = {
     "regression": {
         "linear_regression": "sklearn.linear_model:LinearRegression",
         "decision_tree_regressor": "sklearn.tree:DecisionTreeRegressor",
@@ -51,7 +61,7 @@ _MODEL_CONFIG = {
         "logistic_regression": "sklearn.linear_model:LogisticRegression",
     },
 }
-_MODEL_TASK_TYPE: dict[str, Literal["regression", "classification"]] = {
+BASE_MODEL_TASK_TYPE: dict[SupportedBaseModelType, TaskType] = {
     "linear_regression": "regression",
     "decision_tree_regressor": "regression",
     "random_forest_regressor": "regression",
@@ -63,17 +73,36 @@ _MODEL_TASK_TYPE: dict[str, Literal["regression", "classification"]] = {
     "xgboost_classifier": "classification",
     "logistic_regression": "classification",
 }
+COMPOSITE_MODEL_TASK_TYPE: dict[SupportedCompositeModelType, TaskType] = {
+    "voting_classifier": "classification",
+    "voting_regressor": "regression",
+    "stacking_classifier": "classification",
+    "stacking_regressor": "regression",
+    "blending_classifier": "classification",
+    "blending_regressor": "regression",
+}
+MODEL_TASK_TYPE: dict[SupportedModelType, TaskType] = BASE_MODEL_TASK_TYPE | COMPOSITE_MODEL_TASK_TYPE
 
 
-def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
+class EstimatorLike(Protocol):
+    classes_: list[str]
+
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "EstimatorLike": ...
+    def predict(self, X: pd.DataFrame) -> np.ndarray: ...
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray: ...
+    def predict_classes(self, X: pd.DataFrame) -> np.ndarray: ...
+    def set_params(self, **params: Any) -> "EstimatorLike": ...
+
+
+def _get_model_instance(model_type: SupportedBaseModelType, random_state: int = 42) -> EstimatorLike:
     """根据模型类型获取模型实例"""
     # 验证模型类型
-    if model_type not in _MODEL_TASK_TYPE:
+    if model_type not in MODEL_TASK_TYPE:
         raise ValueError(f"不支持的模型类型: {model_type}")
 
     # 确定任务类型
-    task_type = _MODEL_TASK_TYPE[model_type]
-    model_path = _MODEL_CONFIG[task_type][model_type]
+    task_type = MODEL_TASK_TYPE[model_type]
+    model_path = MODEL_CONFIG[task_type][model_type]
 
     # 尝试导入模型
     try:
@@ -113,8 +142,8 @@ def _get_model_instance(model_type: str, random_state: int = 42) -> Any:
 
 
 class ModelInstanceInfo(TypedDict):
-    model: Any
-    model_type: str
+    model: EstimatorLike
+    model_type: SupportedModelType
     hyperparams: dict[str, Any] | None
 
 
@@ -148,6 +177,9 @@ def create_model(
     Returns:
         tuple: (模型实例, 模型类型描述信息)
     """
+    if model_type not in BASE_MODEL_TASK_TYPE:
+        raise ValueError(f"不支持的模型类型: {model_type}")
+
     try:
         model = _get_model_instance(model_type, random_state)
     except ImportError as e:
@@ -168,12 +200,24 @@ def create_model(
     }
 
 
+class TrainModelResult(TypedDict):
+    model: EstimatorLike
+    X_test: Any
+    Y_test: Any
+    model_type: SupportedModelType
+    message: str
+    feature_columns: list[str]
+    target_column: str
+    label_encoder: LabelEncoder | None  # 可选的标签编码器，用于分类任务
+    hyperparams: NotRequired[dict[str, Any] | None]  # 存储使用的超参数
+
+
 def fit_model(
     df: pd.DataFrame,
     features: list[str],
     target: str,
-    model: Any,
-    model_type: str,
+    model: EstimatorLike,
+    model_type: SupportedModelType,
     test_size: float = 0.2,
     random_state: int = 42,
     hyperparams: dict[str, Any] | None = None,
@@ -263,14 +307,13 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     message = ""
 
     # 根据模型类型选择评估指标
-    task_type = _MODEL_TASK_TYPE.get(model_type)
+    task_type = MODEL_TASK_TYPE.get(model_type)
     if task_type == "regression":  # 回归任务
         metrics["mean_squared_error"] = mean_squared_error(y_test, y_pred)
         metrics["r2_score"] = r2_score(y_test, y_pred)
         message = "模型评估完成 (回归任务)。"
     elif task_type == "classification":  # 分类任务
-        # 如果目标变量被编码过，需要将预测结果也转换为整数
-        if le := trained_model_info.get("label_encoder"):
+        if le := trained_model_info.get("label_encoder"):  # 如果目标变量被编码过，需要将预测结果也转换为整数
             # 对于分类模型，y_pred通常是类别索引，但如果模型输出是概率，可能需要argmax
             if hasattr(model, "predict_classes"):  # scikit-learn的旧版本API
                 y_pred_classes = model.predict_classes(X_test)
@@ -283,26 +326,11 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
             y_test_classes = y_test.astype(int)
 
             metrics["accuracy"] = accuracy_score(y_test_classes, y_pred_classes)
-            metrics["precision"] = precision_score(
-                y_test_classes,
-                y_pred_classes,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            metrics["recall"] = recall_score(
-                y_test_classes,
-                y_pred_classes,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            metrics["f1_score"] = f1_score(
-                y_test_classes,
-                y_pred_classes,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            cm = confusion_matrix(y_test_classes, y_pred_classes)
-            metrics["confusion_matrix"] = cm.tolist()
+            kwds = {"y_true": y_test_classes, "y_pred": y_pred_classes, "average": "weighted", "zero_division": 0}
+            metrics["precision"] = precision_score(**kwds)
+            metrics["recall"] = recall_score(**kwds)
+            metrics["f1_score"] = f1_score(**kwds)
+            metrics["confusion_matrix"] = confusion_matrix(y_test_classes, y_pred_classes).tolist()
             message = "模型评估完成 (分类任务)。"
 
             y_pred_decoded = le.inverse_transform(y_pred_classes)
@@ -311,26 +339,11 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
             message += f"\n真实类别示例 (解码后): {y_test_decoded[:5].tolist()}"
         else:  # 没有编码器，直接评估（假设y_test和y_pred已经是可比较的）
             metrics["accuracy"] = accuracy_score(y_test, y_pred)
-            metrics["precision"] = precision_score(
-                y_test,
-                y_pred,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            metrics["recall"] = recall_score(
-                y_test,
-                y_pred,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            metrics["f1_score"] = f1_score(
-                y_test,
-                y_pred,
-                average="weighted",
-                zero_division=0,  # type:ignore
-            )
-            cm = confusion_matrix(y_test, y_pred)
-            metrics["confusion_matrix"] = cm.tolist()
+            kwds = {"y_true": y_test, "y_pred": y_pred, "average": "weighted", "zero_division": 0}
+            metrics["precision"] = precision_score(**kwds)
+            metrics["recall"] = recall_score(**kwds)
+            metrics["f1_score"] = f1_score(**kwds)
+            metrics["confusion_matrix"] = confusion_matrix(y_test, y_pred).tolist()
             message = "模型评估完成 (分类任务)。"
     else:
         message = f"不支持对模型类型 '{model_type}' 进行评估。"
@@ -338,12 +351,12 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     return {
         "metrics": metrics,
         "message": message,
-        "predictions_summary": pd.Series(y_pred).describe().to_dict(),  # 预测结果的描述性统计
+        "predictions_summary": pd.Series(y_pred).describe().to_dict(),
     }
 
 
 class ModelMetadata(TypedDict):
-    model_type: str
+    model_type: SupportedModelType
     feature_columns: list[str]
     target_column: str
     hyperparams: dict[str, Any] | None
@@ -389,7 +402,7 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
         return {"message": f"保存模型失败: {e}"}
 
 
-def resume_train_result(df: pd.DataFrame, metadata: ModelMetadata, model: Any) -> TrainModelResult:
+def resume_train_result(df: pd.DataFrame, metadata: ModelMetadata, model: EstimatorLike) -> TrainModelResult:
     """
     从元数据恢复训练结果。
 
@@ -431,7 +444,7 @@ def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainM
         tuple: 包含加载的模型和元数据的元组。
     """
     try:
-        model = joblib.load(file_path.with_suffix(".joblib"))
+        model: EstimatorLike = joblib.load(file_path.with_suffix(".joblib"))
         metadata = load_model_metadata(file_path)
         return metadata, resume_train_result(df, metadata, model)
     except Exception:
@@ -464,7 +477,7 @@ class PredictionResult(TypedDict):
     message: str  # 预测操作的结果消息
     prediction_dataset_id: str
     predictions_summary: dict[str, float]  # 预测结果的描述性统计
-    model_type: str  # 模型类型
+    model_type: SupportedModelType  # 模型类型
     task_type: Literal["regression", "classification"]  # 任务类型
 
 
@@ -486,7 +499,7 @@ def predict_with_model(
     """
     model = model_info["model"]
     model_type = model_info["model_type"]
-    task_type = _MODEL_TASK_TYPE.get(model_type)
+    task_type = MODEL_TASK_TYPE.get(model_type)
 
     if task_type is None:
         raise ValueError(f"不支持的模型类型: {model_type}")
@@ -501,7 +514,7 @@ def predict_with_model(
         raise ValueError(f"输入数据中缺少以下特征列: {', '.join(missing_features)}")
 
     # 提取特征数据
-    X = input_data[input_features].copy()
+    X = cast("pd.DataFrame", input_data[input_features].copy())
 
     # 进行预测
     logger.opt(colors=True).info(f"使用模型 <e>{escape_tag(model_type)}</e> 进行预测")
@@ -515,8 +528,7 @@ def predict_with_model(
 
     # 处理分类模型的解码
     decoded: np.ndarray | None = None
-    le: LabelEncoder | None = model_info.get("label_encoder")
-    if task_type == "classification" and le is not None:
+    if task_type == "classification" and (le := model_info.get("label_encoder")):
         try:
             decoded = cast("np.ndarray", le.inverse_transform(predictions.astype(int)))
         except Exception as e:
