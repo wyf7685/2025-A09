@@ -49,30 +49,10 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
 
   // 防止重复操作
   if (isDeletingSession.value) return;
-
-  const session = sessions.value.find(s => s.id === sessionId);
-  const sessionName = session?.name || sessionId.slice(0, 8) + '...';
+  isDeletingSession.value = true;
 
   try {
-    await ElMessageBox.confirm(
-      `确定要删除会话 "${sessionName}" 吗？删除后无法恢复。`,
-      '删除会话',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-        confirmButtonClass: 'el-button--danger'
-      }
-    );
-
-    isDeletingSession.value = true;
-
     emit('delete-session', sessionId);
-  } catch (error) {
-    // 取消删除操作
-    if (error !== 'cancel') {
-      console.error('删除会话对话框错误:', error);
-    }
   } finally {
     isDeletingSession.value = false;
   }
