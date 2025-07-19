@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
-export const API_BASE_URL = 'http://127.0.0.1:8081/api';
+export const API_BASE_URL = 'http://127.0.0.1:8082/api';
 
 // 创建 axios 实例
 const api = axios.create({
@@ -143,6 +143,10 @@ export interface ApiResponse {
   error?: string;
   summary?: string;
   quality_score?: number;
+  field_mappings_applied?: boolean;
+  cleaned_file_path?: string;
+  data_uploaded?: boolean;
+  upload_result?: any;
 }
 
 export const cleaningAPI = {
@@ -161,6 +165,83 @@ export const cleaningAPI = {
       formData.append('model_name', modelName);
     }
     const response = await api.post('/clean/analyze', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 执行用户选择的清洗操作
+  executeCleaning: async (
+    file: File,
+    selectedSuggestions: CleaningSuggestion[],
+    fieldMappings?: Record<string, string>,
+    userRequirements?: string,
+    modelName?: string
+  ): Promise<{
+    success: boolean;
+    file_info: any;
+    cleaning_summary: any;
+    applied_operations: any[];
+    final_columns: string[];
+    field_mappings_applied: Record<string, string>;
+    cleaned_data_info: any;
+    cleaned_file_path: string;
+    error?: string;
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const cleaningData = {
+      selected_suggestions: selectedSuggestions,
+      field_mappings: fieldMappings || {},
+      user_requirements: userRequirements,
+      model_name: modelName
+    };
+    
+    formData.append('cleaning_data', JSON.stringify(cleaningData));
+    
+    const response = await api.post('/clean/execute-cleaning', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 完整的分析和清洗流程
+  analyzeAndClean: async (
+    file: File,
+    selectedSuggestions: CleaningSuggestion[],
+    fieldMappings?: Record<string, string>,
+    userRequirements?: string,
+    modelName?: string
+  ): Promise<{
+    success: boolean;
+    file_info: any;
+    analysis_result: any;
+    cleaning_result: any;
+    field_mappings: Record<string, string>;
+    applied_operations: any[];
+    summary: any;
+    cleaned_file_path?: string;
+    cleaned_data_info?: any;
+    error?: string;
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const cleaningData = {
+      selected_suggestions: selectedSuggestions,
+      field_mappings: fieldMappings || {},
+      user_requirements: userRequirements,
+      model_name: modelName
+    };
+    
+    formData.append('cleaning_data', JSON.stringify(cleaningData));
+    
+    const response = await api.post('/clean/analyze-and-clean', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -198,7 +279,7 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 应用清洗动作
+  // 应用清洗动作（保持向后兼容）
   applyCleaningActions: async (
     file: File,
     actions: CleaningAction[],
@@ -282,6 +363,135 @@ export const cleaningAPI = {
   // 获取数据源的字段映射
   getFieldMappings: async (sourceId: string): Promise<ApiResponse> => {
     const response = await api.get(`/clean/field-mappings/${sourceId}`);
+    return response.data;
+  },
+};
+
+// 数据源管理相关 API
+export interface DataSourceMetadata {
+  id: string;
+  name: string;
+  source_type: string;
+  created_at: string;
+  description?: string;
+  row_count?: number;
+  column_count?: number;
+  columns?: string[];
+}
+
+export interface UploadDataSourceResponse {
+  source_id: string;
+  metadata: DataSourceMetadata;
+}
+
+export const dataSourceAPI = {
+  // 上传文件数据源（支持清洗后的数据）
+  uploadFile: async (
+    file: File,
+    sourceName?: string,
+    description?: string,
+    cleanedFilePath?: string,
+    fieldMappings?: Record<string, string>,
+    isCleaned?: boolean
+  ): Promise<UploadDataSourceResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    if (sourceName) {
+      formData.append('source_name', sourceName);
+    }
+    if (description) {
+      formData.append('description', description);
+    }
+    if (cleanedFilePath) {
+      formData.append('cleaned_file_path', cleanedFilePath);
+    }
+    if (fieldMappings) {
+      formData.append('field_mappings', JSON.stringify(fieldMappings));
+    }
+    if (isCleaned !== undefined) {
+      formData.append('is_cleaned', isCleaned.toString());
+    }
+    
+    const response = await api.post('/datasources/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 上传清洗后的数据文件
+  uploadCleanedFile: async (
+    file: File,
+    sourceName: string,
+    description?: string,
+    fieldMappings?: Record<string, string>,
+    cleaningSummary?: string
+  ): Promise<UploadDataSourceResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('source_name', sourceName);
+    
+    if (description) {
+      formData.append('description', description);
+    }
+    if (fieldMappings) {
+      formData.append('field_mappings', JSON.stringify(fieldMappings));
+    }
+    if (cleaningSummary) {
+      formData.append('cleaning_summary', cleaningSummary);
+    }
+    
+    const response = await api.post('/datasources/upload-cleaned', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // 获取数据源列表
+  listDataSources: async (): Promise<string[]> => {
+    const response = await api.get('/datasources');
+    return response.data;
+  },
+
+  // 获取数据源详情
+  getDataSource: async (sourceId: string): Promise<DataSourceMetadata> => {
+    const response = await api.get(`/datasources/${sourceId}`);
+    return response.data;
+  },
+
+  // 更新数据源信息
+  updateDataSource: async (
+    sourceId: string,
+    updates: { name?: string; description?: string }
+  ): Promise<DataSourceMetadata> => {
+    const response = await api.put(`/datasources/${sourceId}`, updates);
+    return response.data;
+  },
+
+  // 删除数据源
+  deleteDataSource: async (sourceId: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/datasources/${sourceId}`);
+    return response.data;
+  },
+
+  // 获取数据源数据
+  getDataSourceData: async (
+    sourceId: string,
+    limit: number = 100,
+    skip: number = 0
+  ): Promise<{
+    data: any[];
+    total: number;
+    skip: number;
+    limit: number;
+  }> => {
+    const response = await api.get(`/datasources/${sourceId}/data`, {
+      params: { limit, skip }
+    });
     return response.data;
   },
 };

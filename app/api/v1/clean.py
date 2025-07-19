@@ -41,6 +41,14 @@ class FieldMappingRequest(BaseModel):
     field_mappings: Dict[str, str]
 
 
+class ExecuteCleaningRequest(BaseModel):
+    """执行清洗请求模型"""
+    selected_suggestions: List[Dict[str, Any]]
+    field_mappings: Optional[Dict[str, str]] = None
+    user_requirements: Optional[str] = None
+    model_name: Optional[str] = None
+
+
 @router.post("/analyze")
 async def analyze_data_quality(
     file: UploadFile = File(...), 
@@ -49,6 +57,7 @@ async def analyze_data_quality(
 ) -> Dict[str, Any]:
     """
     使用智能Agent分析数据质量并生成清洗建议
+    如果有字段映射，立即应用并保存清洗后的数据文件
     
     Args:
         file: 上传的 CSV/Excel 文件
@@ -86,6 +95,35 @@ async def analyze_data_quality(
                 user_requirements=user_requirements
             )
             
+            if result["success"]:
+                # 如果有字段映射，准备应用到数据（但不立即上传）
+                field_mappings = result.get("field_mappings", {})
+                cleaned_file_path = None
+                
+                if field_mappings:
+                    logger.info(f"检测到字段映射，准备应用: {field_mappings}")
+                    
+                    # 应用字段映射，生成映射后的数据文件
+                    mapping_result = smart_clean_agent.apply_user_selected_cleaning(
+                        file_path=str(temp_path),
+                        selected_suggestions=[],  # 只应用字段映射，不执行其他清洗
+                        field_mappings=field_mappings
+                    )
+                    
+                    if mapping_result["success"]:
+                        # 保存应用字段映射后的数据文件，供后续使用
+                        cleaned_df = mapping_result["cleaned_data"]
+                        cleaned_file_path = UPLOAD_DIR / f"{file_id}_mapped{file_extension}"
+                        
+                        if file_extension == ".csv":
+                            cleaned_df.to_csv(cleaned_file_path, index=False)
+                        elif file_extension in [".xlsx", ".xls"]:
+                            cleaned_df.to_excel(cleaned_file_path, index=False)
+                        
+                        logger.info(f"字段映射应用完成，数据已准备: {cleaned_file_path}")
+                    else:
+                        logger.warning(f"字段映射应用失败: {mapping_result.get('error')}")
+            
             # 构建返回结果
             response = {
                 "file_info": {
@@ -100,20 +138,22 @@ async def analyze_data_quality(
                 "field_mappings": result.get("field_mappings", {}),
                 "cleaning_suggestions": result.get("cleaning_suggestions", []),
                 "summary": result.get("summary", ""),
-                "error": result.get("error") if not result["success"] else None
+                "error": result.get("error") if not result["success"] else None,
+                "field_mappings_applied": bool(field_mappings),
+                "cleaned_file_path": str(cleaned_file_path) if cleaned_file_path else None
             }
             
             # 记录日志
             if result["success"]:
                 quality_score = result.get("quality_report", {}).get("overall_score", 0)
-                logger.info(f"智能数据清洗分析完成: {file.filename}, 质量分数: {quality_score:.2f}")
+                logger.info(f"智能数据清洗分析完成: {file.filename}, 质量分数: {quality_score:.2f}, 字段映射: {len(field_mappings)} 个")
             else:
                 logger.error(f"智能数据清洗分析失败: {file.filename}, 错误: {result.get('error')}")
             
             return response
             
         finally:
-            # 清理临时文件
+            # 清理原始临时文件
             if temp_path.exists():
                 with contextlib.suppress(Exception):
                     temp_path.unlink()
@@ -495,6 +535,217 @@ async def get_field_mapping(
     except Exception as e:
         logger.error(f"获取字段映射失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取字段映射失败: {e}") from e
+
+
+@router.post("/execute-cleaning")
+async def execute_cleaning(
+    file: UploadFile = File(...),
+    cleaning_data: str = Form(...)  # JSON格式的清洗请求数据
+) -> Dict[str, Any]:
+    """
+    执行用户选择的数据清洗操作
+    
+    Args:
+        file: 上传的数据文件
+        cleaning_data: JSON格式的清洗请求数据，包含选择的建议、字段映射等
+    
+    Returns:
+        清洗执行结果和清洗后的数据信息
+    """
+    try:
+        # 解析清洗请求数据
+        try:
+            cleaning_request_data = json.loads(cleaning_data)
+            selected_suggestions = cleaning_request_data.get("selected_suggestions", [])
+            field_mappings = cleaning_request_data.get("field_mappings", {})
+            user_requirements = cleaning_request_data.get("user_requirements")
+            model_name = cleaning_request_data.get("model_name")
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"清洗请求数据格式错误: {e}")
+        
+        # 验证文件类型
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="请上传有效的文件")
+        
+        # 检查文件扩展名
+        allowed_extensions = [".csv", ".xlsx", ".xls"]
+        file_extension = Path(file.filename).suffix.lower()
+        
+        if file_extension not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="只支持 CSV 和 Excel 文件格式")
+        
+        # 生成唯一文件名
+        file_id = str(uuid.uuid4())
+        temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        
+        try:
+            # 保存上传的文件
+            with temp_path.open("wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # 使用智能Agent执行清洗
+            result = smart_clean_agent.apply_user_selected_cleaning(
+                file_path=str(temp_path),
+                selected_suggestions=selected_suggestions,
+                field_mappings=field_mappings
+            )
+            
+            if result["success"]:
+                # 构建返回结果
+                response = {
+                    "file_info": {
+                        "file_id": file_id,
+                        "original_filename": file.filename,
+                        "processing_time": datetime.now().isoformat(),
+                        "file_size": temp_path.stat().st_size,
+                        "file_extension": file_extension
+                    },
+                    "success": True,
+                    "cleaning_summary": result["summary"],
+                    "applied_operations": result["applied_operations"],
+                    "final_columns": result["final_columns"],
+                    "field_mappings_applied": result["field_mappings_applied"],
+                    "cleaned_data_info": {
+                        "shape": result["summary"]["final_shape"],
+                        "rows": result["summary"]["final_shape"][0],
+                        "columns": result["summary"]["final_shape"][1],
+                        "rows_changed": result["summary"]["rows_changed"],
+                        "columns_changed": result["summary"]["columns_changed"]
+                    }
+                }
+                
+                # 保存清洗后的数据到临时文件（可选，用于后续上传）
+                cleaned_df = result["cleaned_data"]
+                cleaned_file_path = UPLOAD_DIR / f"{file_id}_cleaned{file_extension}"
+                
+                if file_extension == ".csv":
+                    cleaned_df.to_csv(cleaned_file_path, index=False)
+                elif file_extension in [".xlsx", ".xls"]:
+                    cleaned_df.to_excel(cleaned_file_path, index=False)
+                
+                response["cleaned_file_path"] = str(cleaned_file_path)
+                
+                logger.info(f"数据清洗执行完成: {file.filename}, 应用了 {len(selected_suggestions)} 个清洗操作")
+                return response
+            else:
+                raise HTTPException(status_code=500, detail=result.get("error", "清洗执行失败"))
+                
+        finally:
+            # 清理原始临时文件
+            if temp_path.exists():
+                with contextlib.suppress(Exception):
+                    temp_path.unlink()
+    
+    except Exception as e:
+        logger.error(f"执行数据清洗失败: {e}")
+        raise HTTPException(status_code=500, detail=f"执行数据清洗失败: {e}") from e
+
+
+@router.post("/analyze-and-clean")
+async def analyze_and_clean(
+    file: UploadFile = File(...),
+    cleaning_data: str = Form(...)  # JSON格式的清洗请求数据
+) -> Dict[str, Any]:
+    """
+    完整的数据分析和清洗流程
+    
+    Args:
+        file: 上传的数据文件
+        cleaning_data: JSON格式的清洗请求数据
+    
+    Returns:
+        包含分析结果和清洗结果的完整响应
+    """
+    try:
+        # 解析清洗请求数据
+        try:
+            cleaning_request_data = json.loads(cleaning_data)
+            selected_suggestions = cleaning_request_data.get("selected_suggestions", [])
+            field_mappings = cleaning_request_data.get("field_mappings", {})
+            user_requirements = cleaning_request_data.get("user_requirements")
+            model_name = cleaning_request_data.get("model_name")
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"清洗请求数据格式错误: {e}")
+        
+        # 验证文件类型
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="请上传有效的文件")
+        
+        # 检查文件扩展名
+        allowed_extensions = [".csv", ".xlsx", ".xls"]
+        file_extension = Path(file.filename).suffix.lower()
+        
+        if file_extension not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="只支持 CSV 和 Excel 文件格式")
+        
+        # 生成唯一文件名
+        file_id = str(uuid.uuid4())
+        temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        
+        try:
+            # 保存上传的文件
+            with temp_path.open("wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # 使用智能Agent进行完整的分析和清洗流程
+            result = smart_clean_agent.process_and_clean_file(
+                file_path=str(temp_path),
+                user_requirements=user_requirements,
+                selected_suggestions=selected_suggestions
+            )
+            
+            if result["success"]:
+                # 构建返回结果
+                response = {
+                    "file_info": {
+                        "file_id": file_id,
+                        "original_filename": file.filename,
+                        "processing_time": datetime.now().isoformat(),
+                        "file_size": temp_path.stat().st_size,
+                        "file_extension": file_extension
+                    },
+                    "success": True,
+                    "analysis_result": result["analysis_result"],
+                    "cleaning_result": result["cleaning_result"],
+                    "field_mappings": result["field_mappings"],
+                    "applied_operations": result["applied_operations"],
+                    "summary": result["summary"]
+                }
+                
+                # 保存清洗后的数据到临时文件
+                if result.get("final_data") is not None:
+                    cleaned_df = result["final_data"]
+                    cleaned_file_path = UPLOAD_DIR / f"{file_id}_cleaned{file_extension}"
+                    
+                    if file_extension == ".csv":
+                        cleaned_df.to_csv(cleaned_file_path, index=False)
+                    elif file_extension in [".xlsx", ".xls"]:
+                        cleaned_df.to_excel(cleaned_file_path, index=False)
+                    
+                    response["cleaned_file_path"] = str(cleaned_file_path)
+                    response["cleaned_data_info"] = {
+                        "shape": cleaned_df.shape,
+                        "rows": len(cleaned_df),
+                        "columns": len(cleaned_df.columns),
+                        "column_names": cleaned_df.columns.tolist()
+                    }
+                
+                logger.info(f"完整数据分析和清洗完成: {file.filename}")
+                return response
+            else:
+                raise HTTPException(status_code=500, detail=result.get("error", "分析和清洗失败"))
+                
+        finally:
+            # 清理原始临时文件
+            if temp_path.exists():
+                with contextlib.suppress(Exception):
+                    temp_path.unlink()
+    
+    except Exception as e:
+        logger.error(f"数据分析和清洗失败: {e}")
+        raise HTTPException(status_code=500, detail=f"数据分析和清洗失败: {e}") from e
 
 
 @router.get("/health")

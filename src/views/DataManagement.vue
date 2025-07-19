@@ -3,9 +3,9 @@ import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue'
 import { useDataSourceStore } from '@/stores/datasource'
 import { useSessionStore } from '@/stores/session'
 import type { DataSourceMetadataWithID } from '@/types'
-import api, { cleaningAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
+import api, { cleaningAPI, dataSourceAPI, type CleaningAction, type CleaningSuggestion, type DataQualityReport } from '@/utils/api'
 import {
-  ArrowDown, ArrowRight, Back, Check, CircleCheck, CircleClose, Connection, DataAnalysis, Delete, Document, DocumentChecked, DocumentCopy, Edit,
+  ArrowDown, ArrowRight, Back, CircleCheck, CircleClose, Connection, DataAnalysis, Delete, Document, DocumentChecked, DocumentCopy, Edit,
   EditPen, Grid, InfoFilled, QuestionFilled, Refresh, RefreshRight, Search, Upload, UploadFilled, View, Warning
 } from '@element-plus/icons-vue'
 import { ElDialog, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
@@ -255,6 +255,11 @@ const analyzeDataQualityWithAI = async () => {
       cleaningSuggestions.value = result.cleaning_suggestions || []
       fieldMappings.value = result.field_mappings || {}
 
+      // 记录字段映射信息，等待用户选择操作
+      if (result.field_mappings_applied && result.cleaned_file_path) {
+        ElMessage.info('字段映射已准备完成，您可以选择直接上传或执行清洗操作')
+      }
+
       ElMessage.success('智能数据质量分析完成！')
     } else {
       throw new Error(result.error || '分析失败')
@@ -290,7 +295,7 @@ const analyzeDataQuality = async () => {
   }
 }
 
-// 应用清洗动作（记录用户选择）
+// 应用清洗动作（实际执行清洗操作）
 const applyCleaningActions = async () => {
   if (selectedCleaningActions.value.length === 0) {
     ElMessage.warning('请选择至少一个清洗建议')
@@ -299,75 +304,148 @@ const applyCleaningActions = async () => {
 
   isCleaning.value = true
   try {
-    // 模拟记录用户选择的过程
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // 确保当前文件存在
+    if (!currentUploadFile.value) {
+      throw new Error('当前文件不存在')
+    }
 
-    ElMessage.success(`已记录 ${selectedCleaningActions.value.length} 个清洗建议选择`)
-    cleaningStep.value = 'complete'
-  } catch (error) {
-    ElMessage.error('记录清洗选择失败')
-    console.error(error)
+    // 准备清洗建议，确保格式正确
+    const preparedSuggestions = selectedCleaningActions.value.map((action: any) => {
+      // 从原始建议中获取更多信息
+      const originalSuggestion = cleaningSuggestions.value.find((s: any) => 
+        s.type === action.type && s.column === action.column
+      )
+      
+      return {
+        title: originalSuggestion?.title || `清洗操作: ${action.type}`,
+        type: action.type,
+        column: action.column || '',
+        description: originalSuggestion?.description || `应用清洗操作: ${action.type} on ${action.column}`,
+        severity: originalSuggestion?.severity || 'medium',
+        priority: originalSuggestion?.priority || 'medium',
+        options: originalSuggestion?.options || [{
+          method: action.parameters || 'default',
+          description: `清洗列 ${action.column}`
+        }],
+        suggested_action: originalSuggestion?.description || `清洗列 ${action.column}`,
+        parameters: { method: action.parameters }
+      }
+    })
+
+    console.log('准备执行清洗操作:', preparedSuggestions)
+
+    // 执行清洗操作
+    const cleaningResult = await cleaningAPI.executeCleaning(
+      currentUploadFile.value,
+      preparedSuggestions as any,
+      fieldMappings.value,
+      userRequirements.value,
+      selectedModel.value
+    )
+
+    if (cleaningResult.success) {
+      ElMessage.success(`清洗操作执行成功！应用了 ${cleaningResult.applied_operations.length} 个清洗操作`)
+      
+      // 保存清洗结果
+      analysisResult.value = {
+        ...analysisResult.value,
+        cleaning_result: cleaningResult,
+        cleaned_file_path: cleaningResult.cleaned_file_path,
+        cleaned_data_info: cleaningResult.cleaned_data_info
+      }
+      
+      // 执行清洗后，自动上传清洗后的数据到Dremio
+      try {
+        ElMessage.info('正在上传清洗后的数据到Dremio...')
+        
+        const uploadResult = await dataSourceAPI.uploadFile(
+          currentUploadFile.value,
+          fileMetadata.value.name,
+          fileMetadata.value.description,
+          cleaningResult.cleaned_file_path,
+          fieldMappings.value,
+          true  // 标记为清洗后的数据
+        )
+        
+        ElMessage.success('清洗后的数据已成功上传到Dremio！')
+        
+        // 标记数据已上传
+        analysisResult.value.data_uploaded = true
+        analysisResult.value.upload_result = uploadResult
+        
+        // 上传成功后刷新数据源列表
+        await fetchDatasets()
+        ElMessage.success('数据源列表已更新')
+        
+        cleaningStep.value = 'complete'
+      } catch (uploadError: any) {
+        ElMessage.error('清洗操作成功，但上传到Dremio失败: ' + (uploadError?.message || uploadError))
+        console.error('上传清洗后数据失败:', uploadError)
+        cleaningStep.value = 'complete'
+      }
+    } else {
+      throw new Error(cleaningResult.error || '清洗执行失败')
+    }
+  } catch (error: any) {
+    ElMessage.error('清洗操作执行失败: ' + (error?.message || error))
+    console.error('清洗操作详细错误:', error)
   } finally {
     isCleaning.value = false
   }
 }
 
-// 跳过清洗直接上传
+// 跳过清洗直接上传（只应用字段映射）
 const skipCleaningAndUpload = async () => {
   if (!currentUploadFile.value) return
 
   isLoading.value = true
   try {
-    // 直接使用原始文件，通过参数传递用户修改的文件名
-    await dataSourceStore.uploadFileSource(
-      currentUploadFile.value, 
-      fileMetadata.value.description,
-      fileMetadata.value.name
-    )
-    ElMessage.success('文件上传成功！')
+    const mappedFilePath = analysisResult.value?.cleaned_file_path
+    const fieldMappingsToApply = analysisResult.value?.field_mappings || fieldMappings.value
+
+    if (mappedFilePath && Object.keys(fieldMappingsToApply).length > 0) {
+      // 使用应用了字段映射的文件
+      await dataSourceAPI.uploadFile(
+        currentUploadFile.value,
+        fileMetadata.value.name,
+        fileMetadata.value.description,
+        mappedFilePath,
+        fieldMappingsToApply,
+        true  // 标记为已处理的数据
+      )
+      ElMessage.success('字段映射已应用，数据上传成功！')
+    } else {
+      // 没有字段映射，使用原始文件
+      await dataSourceStore.uploadFileSource(
+        currentUploadFile.value, 
+        fileMetadata.value.description,
+        fileMetadata.value.name
+      )
+      ElMessage.success('原始文件上传成功！')
+    }
+    
     dataCleaningDialogVisible.value = false
+    // 上传成功后刷新数据源列表
     await fetchDatasets()
-  } catch (error) {
-    ElMessage.error('文件上传失败')
+    ElMessage.success('数据源列表已更新')
+  } catch (error: any) {
+    ElMessage.error('文件上传失败: ' + (error?.message || error))
     console.error(error)
   } finally {
     isLoading.value = false
   }
 }
 
-// 完成清洗并上传
+// 完成处理（数据已经上传，关闭对话框）
 const completeCleaningAndUpload = async () => {
-  if (!currentUploadFile.value) return
-
-  isLoading.value = true
-  try {
-    // 直接使用原始文件，通过参数传递用户修改的文件名
-    const uploadResult = await dataSourceStore.uploadFileSource(
-      currentUploadFile.value, 
-      fileMetadata.value.description,
-      fileMetadata.value.name
-    )
-
-    // 如果有字段映射，保存到数据源
-    if (Object.keys(fieldMappings.value).length > 0 && uploadResult?.source_id) {
-      try {
-        await cleaningAPI.saveFieldMappings(uploadResult.source_id, fieldMappings.value)
-        ElMessage.success('文件上传成功，字段映射已保存！')
-      } catch (mappingError) {
-        console.warn('字段映射保存失败:', mappingError)
-        ElMessage.success('文件上传成功，但字段映射保存失败')
-      }
-    } else {
-      ElMessage.success('文件上传成功！')
-    }
-
+  if (analysisResult.value?.data_uploaded) {
+    // 数据已经上传，直接关闭对话框并刷新列表
     dataCleaningDialogVisible.value = false
     await fetchDatasets()
-  } catch (error) {
-    ElMessage.error('文件上传失败')
-    console.error(error)
-  } finally {
-    isLoading.value = false
+    ElMessage.success('数据处理完成！数据源列表已刷新')
+  } else {
+    // 数据还没有上传（理论上不应该到这里）
+    ElMessage.warning('请先选择跳过清洗或执行清洗操作')
   }
 }
 
@@ -981,14 +1059,14 @@ watch(pageSize, updatePaginatedDataSources)
                   <el-icon>
                     <ArrowRight />
                   </el-icon>
-                  下一步：查看清洗建议 ({{ cleaningSuggestions.length }})
+                  下一步：执行清洗操作 ({{ cleaningSuggestions.length }})
                 </el-button>
 
                 <el-button type="success" @click="skipCleaningAndUpload" size="large" :disabled="!dataQualityReport">
                   <el-icon>
                     <Upload />
                   </el-icon>
-                  {{ cleaningSuggestions.length === 0 ? '直接上传' : '忽略问题并上传' }}
+                  {{ cleaningSuggestions.length === 0 ? '直接上传数据' : '忽略问题，仅应用字段映射并上传' }}
                 </el-button>
 
                 <el-button @click="cleaningStep = 'upload'" size="large">
@@ -1012,11 +1090,11 @@ watch(pageSize, updatePaginatedDataSources)
               <div class="header-content">
                 <div class="title">选择数据清洗建议</div>
                 <div class="subtitle">
-                  根据数据质量分析结果，我们为您提供了以下清洗建议。请选择您认为合适的建议，系统将记录您的选择。
+                  根据数据质量分析结果，我们为您提供了以下清洗建议。请选择您认为合适的建议，系统将自动执行这些清洗操作。
                 </div>
               </div>
 
-              <el-alert title="功能说明" description="本系统提供数据质量检测和清洗建议，但不会自动执行清洗操作。您可以根据这些建议手动优化您的数据文件。" type="info"
+              <el-alert title="功能说明" description="本系统将根据您选择的建议自动执行数据清洗操作，包括字段重命名、缺失值处理、异常值处理等，清洗后的数据将保存到Dremio中。" type="info"
                 show-icon :closable="false" />
             </div>
 
@@ -1030,14 +1108,14 @@ watch(pageSize, updatePaginatedDataSources)
                   <el-icon>
                     <DocumentChecked />
                   </el-icon>
-                  记录选中的建议 ({{ selectedCleaningActions.length }})
+                  执行选中的清洗操作 ({{ selectedCleaningActions.length }})
                 </el-button>
 
                 <el-button @click="skipCleaningAndUpload" size="large">
                   <el-icon>
                     <Upload />
                   </el-icon>
-                  跳过建议直接上传
+                  跳过清洗直接上传
                 </el-button>
 
                 <el-button @click="cleaningStep = 'analysis'" size="large">
@@ -1098,37 +1176,46 @@ watch(pageSize, updatePaginatedDataSources)
 
         <!-- 完成状态 -->
         <div v-if="cleaningStep === 'complete'" class="complete-status">
-          <el-result status="success" title="处理完成" :sub-title="selectedCleaningActions.length > 0 ?
-            `已记录 ${selectedCleaningActions.length} 个清洗建议，您可以根据这些建议优化数据质量` :
-            '数据质量检测完成，可以直接上传数据'">
+          <el-result status="success" title="处理完成" :sub-title="analysisResult?.data_uploaded ? 
+            '数据已成功上传到Dremio，您可以在数据源列表中查看' :
+            '数据处理完成，请选择操作'">
             <template #extra>
               <div class="complete-actions">
-                <el-button type="primary" @click="completeCleaningAndUpload" size="large">
+                <el-button type="primary" @click="completeCleaningAndUpload" size="large" 
+                  v-if="analysisResult?.data_uploaded">
+                  <el-icon>
+                    <CircleCheck />
+                  </el-icon>
+                  关闭并查看数据源列表
+                </el-button>
+
+                <el-button type="primary" @click="skipCleaningAndUpload" size="large" 
+                  v-if="!analysisResult?.data_uploaded">
                   <el-icon>
                     <Upload />
                   </el-icon>
-                  确认上传数据
+                  立即上传数据
                 </el-button>
 
                 <el-button @click="analyzeDataQualityWithAI" size="large">
                   <el-icon>
                     <RefreshRight />
                   </el-icon>
-                  重新智能分析数据质量
+                  重新分析数据质量
                 </el-button>
 
-                <el-button @click="cleaningStep = 'cleaning'" v-if="cleaningSuggestions.length > 0" size="large">
+                <el-button @click="cleaningStep = 'cleaning'" v-if="cleaningSuggestions.length > 0 && !analysisResult?.data_uploaded" size="large">
                   <el-icon>
                     <EditPen />
                   </el-icon>
-                  修改清洗选择
+                  重新选择清洗操作
                 </el-button>
               </div>
 
               <div class="complete-summary" v-if="selectedCleaningActions.length > 0">
                 <el-card class="summary-card">
                   <template #header>
-                    <span>您选择的清洗建议摘要</span>
+                    <span>已执行的清洗操作摘要</span>
                   </template>
                   <div class="summary-list">
                     <div v-for="(action, index) in selectedCleaningActions" :key="index" class="summary-item">
