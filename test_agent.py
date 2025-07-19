@@ -62,11 +62,8 @@ def test_agent() -> None:
     while user_input := input(">>> ").strip():
         reader = BufferedStreamEventReader()
         try:
-            for event in agent.stream(user_input):
-                for evt in reader.push(event):
-                    log_event(evt)
-            if evt := reader.flush():
-                log_event(evt)
+            for event in reader(agent.stream(user_input)):
+                log_event(event)
         except Exception:
             logger.exception("Agent 执行失败")
             continue
@@ -80,7 +77,7 @@ def test_agent() -> None:
         logger.info(f"  特征列: {model_info['feature_columns']}")
         logger.info(f"  目标列: {model_info['target_column']}")
         if le := model_info.get("label_encoder"):
-            logger.info(f"  标签编码器类别: {le['classes']}")
+            logger.info(f"  标签编码器类别: {le.classes_}")
     for model_id, model_path in agent.saved_models.items():
         logger.info(f"模型 {model_id} 已保存到: {model_path}")
 

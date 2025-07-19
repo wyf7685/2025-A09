@@ -59,28 +59,28 @@ def process_stream_event(event: Any) -> Iterable[StreamEvent]:
     message, metadata = event
 
     match message:
-        case AIMessage():
-            yield LlmTokenEvent(content=fix_message_content(message.content), metadata=metadata or {})
-            for tool_call in message.tool_calls or []:
+        case AIMessage(content=content, tool_calls=tool_calls):
+            yield LlmTokenEvent(content=fix_message_content(content), metadata=metadata or {})
+            for tool_call in tool_calls:
                 if tool_call["id"] is None:
                     continue
                 yield ToolCallEvent(name=tool_call["name"], id=tool_call["id"], args=tool_call["args"])
-        case ToolMessage() if message.status == "success":
+        case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):
             with contextlib.suppress(Exception):
-                success = json.loads(fix_message_content(message.content))["success"]
+                success = json.loads(fix_message_content(content))["success"]
                 if not success:
-                    yield ToolErrorEvent(id=message.tool_call_id, error=(str(message.content) or "Unknown error"))
+                    yield ToolErrorEvent(id=tool_call_id, error=(str(content) or "Unknown error"))
                     return
-            yield ToolResultEvent(id=message.tool_call_id, result=message.content, artifact=message.artifact)
-        case ToolMessage() if message.status == "error":
-            yield ToolErrorEvent(id=message.tool_call_id, error=str(message.content))
+            yield ToolResultEvent(id=tool_call_id, result=content, artifact=artifact)
+        case ToolMessage(status="error", content=content, tool_call_id=tool_call_id):
+            yield ToolErrorEvent(id=tool_call_id, error=str(content))
 
 
 class BufferedStreamEventReader:
     def __init__(self) -> None:
         self.tokens: list[LlmTokenEvent] = []
 
-    def push(self, event: Any) -> Iterable[StreamEvent]:
+    def push(self, event: StreamEvent) -> Iterable[StreamEvent]:
         if isinstance(event, LlmTokenEvent):
             self.tokens.append(event)
         else:
@@ -88,7 +88,7 @@ class BufferedStreamEventReader:
                 yield msg
             yield event
 
-    def flush(self) -> LlmTokenEvent | None:
+    def flush(self) -> StreamEvent | None:
         if not self.tokens:
             return None
 
@@ -99,3 +99,9 @@ class BufferedStreamEventReader:
         metadata = {k: v for event in self.tokens for k, v in event.metadata.items()}
         self.tokens.clear()
         return LlmTokenEvent(content=content, metadata=metadata)
+
+    def __call__(self, stream: Iterable[StreamEvent]) -> Iterable[StreamEvent]:
+        for event in stream:
+            yield from self.push(event)
+        if msg := self.flush():
+            yield msg
