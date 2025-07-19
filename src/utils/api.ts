@@ -1,3 +1,5 @@
+import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import type { DataSourceMetadata } from '@/types/dataSources';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
@@ -81,50 +83,6 @@ export const checkHealth = async (): Promise<{ status: string }> => {
 };
 
 // 数据清洗相关 API
-export interface DataQualityReport {
-  is_valid: boolean;
-  quality_score: number;
-  total_rows?: number;
-  total_columns?: number;
-  issues: Array<{
-    type: string;
-    column?: string;
-    count?: number;
-    description: string;
-  }>;
-  data_info: {
-    rows: number;
-    columns: number;
-    column_names: string[];
-    data_types: {
-      [column: string]: string;
-    };
-    missing_values_total: number;
-    file_size: number;
-  };
-}
-
-export interface CleaningSuggestion {
-  title: string;
-  description: string;
-  options: Array<{
-    method: string;
-    description: string;
-  }>;
-  severity: string;
-  priority?: string;
-  impact?: string;
-  reason?: string;
-  column: string;
-  type: string;
-}
-
-export interface CleaningAction {
-  type: string;
-  column?: string;
-  parameters?: any;
-}
-
 export interface ApiResponse {
   file_info?: {
     file_id: string;
@@ -154,7 +112,7 @@ export const cleaningAPI = {
   analyzeDataQuality: async (
     file: File,
     userRequirements?: string,
-    modelName?: string
+    modelName?: string,
   ): Promise<ApiResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -178,7 +136,7 @@ export const cleaningAPI = {
     selectedSuggestions: CleaningSuggestion[],
     fieldMappings?: Record<string, string>,
     userRequirements?: string,
-    modelName?: string
+    modelName?: string,
   ): Promise<{
     success: boolean;
     file_info: any;
@@ -192,16 +150,16 @@ export const cleaningAPI = {
   }> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const cleaningData = {
       selected_suggestions: selectedSuggestions,
       field_mappings: fieldMappings || {},
       user_requirements: userRequirements,
-      model_name: modelName
+      model_name: modelName,
     };
-    
+
     formData.append('cleaning_data', JSON.stringify(cleaningData));
-    
+
     const response = await api.post('/clean/execute-cleaning', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -216,7 +174,7 @@ export const cleaningAPI = {
     selectedSuggestions: CleaningSuggestion[],
     fieldMappings?: Record<string, string>,
     userRequirements?: string,
-    modelName?: string
+    modelName?: string,
   ): Promise<{
     success: boolean;
     file_info: any;
@@ -231,16 +189,16 @@ export const cleaningAPI = {
   }> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const cleaningData = {
       selected_suggestions: selectedSuggestions,
       field_mappings: fieldMappings || {},
       user_requirements: userRequirements,
-      model_name: modelName
+      model_name: modelName,
     };
-    
+
     formData.append('cleaning_data', JSON.stringify(cleaningData));
-    
+
     const response = await api.post('/clean/analyze-and-clean', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -264,7 +222,7 @@ export const cleaningAPI = {
   // 获取清洗建议（支持用户自定义要求）
   getCleaningSuggestions: async (
     file: File,
-    userRequirements?: string
+    userRequirements?: string,
   ): Promise<CleaningSuggestion[]> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -296,10 +254,7 @@ export const cleaningAPI = {
   },
 
   // 获取详细的质量报告（支持用户自定义要求）
-  getQualityReport: async (
-    file: File,
-    userRequirements?: string
-  ): Promise<DataQualityReport> => {
+  getQualityReport: async (file: File, userRequirements?: string): Promise<DataQualityReport> => {
     const formData = new FormData();
     formData.append('file', file);
     if (userRequirements) {
@@ -317,7 +272,7 @@ export const cleaningAPI = {
   getFieldMapping: async (
     file: File,
     userRequirements?: string,
-    modelName?: string
+    modelName?: string,
   ): Promise<{
     field_mappings: Record<string, string>;
     summary: string;
@@ -352,10 +307,13 @@ export const cleaningAPI = {
   },
 
   // 保存字段映射到数据源
-  saveFieldMappings: async (sourceId: string, fieldMappings: Record<string, string>): Promise<ApiResponse> => {
+  saveFieldMappings: async (
+    sourceId: string,
+    fieldMappings: Record<string, string>,
+  ): Promise<ApiResponse> => {
     const response = await api.post('/clean/save-field-mappings', {
       source_id: sourceId,
-      field_mappings: fieldMappings
+      field_mappings: fieldMappings,
     });
     return response.data;
   },
@@ -368,17 +326,6 @@ export const cleaningAPI = {
 };
 
 // 数据源管理相关 API
-export interface DataSourceMetadata {
-  id: string;
-  name: string;
-  source_type: string;
-  created_at: string;
-  description?: string;
-  row_count?: number;
-  column_count?: number;
-  columns?: string[];
-}
-
 export interface UploadDataSourceResponse {
   source_id: string;
   metadata: DataSourceMetadata;
@@ -392,11 +339,11 @@ export const dataSourceAPI = {
     description?: string,
     cleanedFilePath?: string,
     fieldMappings?: Record<string, string>,
-    isCleaned?: boolean
+    isCleaned?: boolean,
   ): Promise<UploadDataSourceResponse> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     if (sourceName) {
       formData.append('source_name', sourceName);
     }
@@ -412,7 +359,7 @@ export const dataSourceAPI = {
     if (isCleaned !== undefined) {
       formData.append('is_cleaned', isCleaned.toString());
     }
-    
+
     const response = await api.post('/datasources/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -427,12 +374,12 @@ export const dataSourceAPI = {
     sourceName: string,
     description?: string,
     fieldMappings?: Record<string, string>,
-    cleaningSummary?: string
+    cleaningSummary?: string,
   ): Promise<UploadDataSourceResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('source_name', sourceName);
-    
+
     if (description) {
       formData.append('description', description);
     }
@@ -442,7 +389,7 @@ export const dataSourceAPI = {
     if (cleaningSummary) {
       formData.append('cleaning_summary', cleaningSummary);
     }
-    
+
     const response = await api.post('/datasources/upload-cleaned', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -466,7 +413,7 @@ export const dataSourceAPI = {
   // 更新数据源信息
   updateDataSource: async (
     sourceId: string,
-    updates: { name?: string; description?: string }
+    updates: { name?: string; description?: string },
   ): Promise<DataSourceMetadata> => {
     const response = await api.put(`/datasources/${sourceId}`, updates);
     return response.data;
@@ -482,7 +429,7 @@ export const dataSourceAPI = {
   getDataSourceData: async (
     sourceId: string,
     limit: number = 100,
-    skip: number = 0
+    skip: number = 0,
   ): Promise<{
     data: any[];
     total: number;
@@ -490,7 +437,7 @@ export const dataSourceAPI = {
     limit: number;
   }> => {
     const response = await api.get(`/datasources/${sourceId}/data`, {
-      params: { limit, skip }
+      params: { limit, skip },
     });
     return response.data;
   },
@@ -510,17 +457,13 @@ export const reportAPI = {
   },
 
   // 上传自定义模板
-  uploadTemplate: async (
-    templateName: string,
-    templateDescription: string,
-    templateFile: File
-  ) => {
+  uploadTemplate: async (templateName: string, templateDescription: string, templateFile: File) => {
     try {
       const formData = new FormData();
       formData.append('template_name', templateName);
       formData.append('template_description', templateDescription);
       formData.append('template_file', templateFile);
-      
+
       const response = await api.post('/chat/templates/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -545,11 +488,7 @@ export const reportAPI = {
   },
 
   // 生成报告（基于现有的summary功能）
-  generateReport: async (
-    sessionId: string,
-    templateId?: string,
-    modelId?: string
-  ) => {
+  generateReport: async (sessionId: string, templateId?: string, modelId?: string) => {
     try {
       const response = await api.post('/chat/generate-report', {
         session_id: sessionId,
