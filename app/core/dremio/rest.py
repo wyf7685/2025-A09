@@ -432,7 +432,7 @@ class DremioRestClient(AbstractDremioClient):
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
-        self._container_cache = containers
+        _container_cache.set(containers)
         logger.opt(colors=True).info(f"共找到 <y>{len(containers)}</> 个容器")
         return containers
 
@@ -480,6 +480,7 @@ class DremioRestClient(AbstractDremioClient):
             return cache
 
         containers = self._list_containers()
-        self._source_cache = sources = self._query_source_children(*(c.path for c in containers))
+        sources = self._query_source_children(*(c.path for c in containers))
+        _source_cache.set(sources)
         logger.opt(colors=True).info(f"共找到 <y>{len(sources)}</> 个数据源")
         return sources
