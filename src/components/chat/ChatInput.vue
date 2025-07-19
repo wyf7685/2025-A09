@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { DataAnalysis, Document, DocumentCopy, Edit, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
-import { turncateString } from '@/utils/tools';
 import type { DataSourceMetadata } from '@/types';
+import { turncateString } from '@/utils/tools';
+import { DataAnalysis, Document, DocumentCopy, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
+import { ElButton, ElDivider, ElIcon, ElInput, ElLink, ElTooltip } from 'element-plus';
 
 const props = defineProps<{
   isProcessingChat: boolean;
@@ -41,47 +42,45 @@ const handleKeydown = (e: KeyboardEvent) => {
     sendMessage();
   }
 };
+
+const formatDatasetsTooltip = (names: string[]) => {
+  if (names.length === 0) return '无数据集';
+  if (names.length === 1) return names[0];
+  return `共 ${names.length} 个数据集: ${names.slice(0, 2).map(s => turncateString(s, 20)).join(', ')} ${names.length > 3 ? '等' : ''}`;
+}
 </script>
 
 <template>
   <div class="chat-input-area">
     <div class="chat-input-wrapper">
-      <el-input v-model="input" placeholder="输入你的问题..." @keydown="handleKeydown" resize="none" type="textarea"
+      <el-input v-model="input" placeholder="输入你的问题..." @keydown="handleKeydown($event as KeyboardEvent)" resize="none" type="textarea"
         :autosize="{ minRows: 1, maxRows: 5 }" :disabled="isProcessingChat" />
       <el-button @click="sendMessage" :disabled="isProcessingChat || !input.trim()" type="primary" class="send-button">
         发送
       </el-button>
     </div>
     <div class="quick-actions">
-      <div class="dataset-indicator">
-        <template v-if="currentDatasets && currentDatasets.length > 0">
+      <el-tooltip placement="top" :content="formatDatasetsTooltip(currentDatasets?.map(ds => ds.name || ds.id) || [])">
+        <div class="dataset-indicator">
           <el-icon>
-            <DocumentCopy />
+            <DocumentCopy v-if="currentDatasets?.length" />
+            <WarningFilled v-else />
           </el-icon>
-          当前数据集:
-          <strong v-if="currentDatasets.length === 1">
-            {{ turncateString(currentDatasets[0].name || currentDatasets[0].id, 12) }}
-          </strong>
-          <strong v-else>
-            <!-- TODO: 优化数据集显示 -->
-            {{ currentDatasets.length }} 个
-          </strong>
-          <el-link type="primary" @click="goToAddData" :underline="false">
-            <el-icon>
-              <Edit />
-            </el-icon>
-            更换
-          </el-link>
-        </template>
-        <template v-else>
-          <el-icon>
-            <WarningFilled />
-          </el-icon>
-          <el-link type="warning" @click="goToAddData" :underline="false">
+          <template v-if="currentDatasets?.length">
+            当前数据集:
+            <strong v-if="currentDatasets.length === 1">
+              {{ turncateString(currentDatasets[0].name || currentDatasets[0].id, 12) }}
+            </strong>
+            <strong v-else>
+              {{ currentDatasets.length }} 个
+            </strong>
+          </template>
+          <el-link v-else type="warning" @click="goToAddData" :underline="false">
             请先选择一个数据集进行分析
           </el-link>
-        </template>
-      </div>
+        </div>
+      </el-tooltip>
+
       <el-divider direction="vertical" style="margin: 0 8px;" />
       <div class="quick-prompt-tags">
         <el-tag v-for="(question, index) in quickQuestions" :key="index" class="action-tag"
