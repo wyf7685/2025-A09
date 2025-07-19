@@ -3,7 +3,7 @@ import AssistantMessageText from '@/components/chat/AssistantMessageText.vue';
 import type { AssistantChatMessage } from '@/types';
 import { ref } from 'vue';
 
-const props = defineProps<{
+defineProps<{
   message: AssistantChatMessage & { loading?: boolean };
 }>();
 
@@ -138,6 +138,7 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
               <pre>{{ message.tool_calls[part.id].error }}</pre>
             </div>
           </div>
+
         </div>
       </div>
     </div>
@@ -208,7 +209,12 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
   }
 
   /* 调整标题样式 */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     color: #1f2937;
     font-weight: 600;
   }
@@ -224,7 +230,8 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
   }
 
   /* 调整列表样式 */
-  ul, ol {
+  ul,
+  ol {
     margin: 8px 0;
     padding-left: 20px;
   }
@@ -369,6 +376,7 @@ const isSectionExpanded = (toolId: string, section: keyof ExpandState) => {
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }

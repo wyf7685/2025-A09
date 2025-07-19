@@ -546,7 +546,7 @@ onMounted(async () => {
               系统将生成综合数据分析报告
             </span>
             <span v-else class="route-desc">
-              系统将执行具体的数据处理操作
+              系统将调用工具执行数据分析
             </span>
           </div>
         </div>
@@ -576,9 +576,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 路线2：其他处理 -->
+        <!-- 路线2：调用工具分析 -->
         <div v-if="selectedRoute === 'route2'" class="flow-route">
-          <h4 class="route-title">路线2：其他处理</h4>
+          <h4 class="route-title">路线2：调用工具分析</h4>
           <div class="flow-steps">
             <div v-for="(step, index) in route2Steps" :key="index" :class="['flow-step', step.status]">
               <div class="step-number">{{ index + 1 }}</div>
