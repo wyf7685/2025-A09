@@ -21,7 +21,7 @@ class DataSourceMetadata(BaseModel):
     columns: list[str] | None = None
     dtypes: dict[str, str] | None = None
     preview_rows: int = 5
-    column_aliases: dict[str, str] | None = None
+    column_description: dict[str, str] | None = None
 
 
 class DataSource(abc.ABC):
@@ -157,20 +157,35 @@ class DataSource(abc.ABC):
     def format_overview(self) -> str:
         df = self.get_preview(self.metadata.preview_rows)
         w, h = self.get_shape()
-        column_alias = (
-            (f"列别名:\n{aliases}\n" + "".join(f"  {col}: {alias}\n" for col, alias in aliases.items()) + "\n")
-            if (aliases := self.metadata.column_aliases)
-            else ""
-        )
+
+        # 处理字段映射和描述
+        original_columns = df.columns.tolist()
+
+        # 构建显示用的列名信息
+        if aliases := (self.metadata.column_description or {}):
+            # 如果有字段映射，显示原始名称 -> 清洗后名称
+            mapped_columns = [aliases.get(col, col) for col in original_columns]
+            column_info = (
+                f"原始列名: {original_columns}\n"
+                f"清洗后列名: {mapped_columns}\n"
+                f"字段映射:\n" + "".join(f"  {orig} -> {aliases.get(orig, orig)}\n" for orig in original_columns) + "\n"
+            )
+
+            # 为数据预览重命名列（仅用于显示）
+            display_df = df.copy()
+            display_df.columns = mapped_columns
+        else:
+            # 没有字段映射时的默认显示
+            column_info = f"列名: {original_columns}\n"
+            display_df = df
 
         return (
             f"数据规模: {w} 行 × {h} 列\n"
-            f"列数据类型:\n{df.dtypes}\n"
+            f"列数据类型:\n{display_df.dtypes}\n"
             f"数据源名称: {self.metadata.name}\n"
             f"数据源描述: {self.metadata.description or '无'}\n"
-            f"列名:\n{df.columns.tolist()}\n"
-            f"{column_alias}"
-            f"数据预览:\n{df.to_string()}\n"
+            f"{column_info}"
+            f"数据预览:\n{display_df.to_string()}\n"
         )
 
     @abc.abstractmethod

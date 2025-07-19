@@ -447,7 +447,7 @@ onMounted(async () => {
   await modelStore.fetchAvailableModels() // 获取可用模型
 
   // 运行路线选择测试
-  testRouteSelection()
+  // testRouteSelection()
 
   // 初始化模型配置
   addFlowStep({

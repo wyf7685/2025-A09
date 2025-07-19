@@ -3,7 +3,6 @@
 管理用户自定义的API模型配置
 """
 
-
 from app.log import logger
 from app.schemas.custom_model import CustomModelConfig
 

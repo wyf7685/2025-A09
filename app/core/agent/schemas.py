@@ -20,6 +20,7 @@ class DataAnalyzerAgentState(BaseModel):
 type DatasetID = str
 type SourcesDict = MutableMapping[DatasetID, DataSource]
 
+
 def format_sources_overview(sources: SourcesDict) -> str:
     """
     格式化数据源的概览信息。

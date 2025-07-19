@@ -36,6 +36,7 @@ def create_file_source(file_path: Path, name: str | None = None, **pandas_kwargs
 def create_dremio_source(
     dremio_source: DremioSource,
     name: str | None = None,
+    description: str | None = None,
 ) -> DremioDataSource:
     """
     创建 Dremio 数据源
@@ -43,6 +44,7 @@ def create_dremio_source(
     Args:
         dremio_source: Dremio 数据源
         name: 数据源名称，默认使用 Dremio 路径
+        description: 数据源描述
 
     Returns:
         DremioDataSource: Dremio 数据源
@@ -54,7 +56,7 @@ def create_dremio_source(
         id=f"dremio_{source_name.replace('.', '_')}",
         name=name or source_name,
         source_type=f"dremio:{dremio_source.type}",
-        description=getattr(dremio_source, "description", ""),
+        description=description or "",
     )
 
     return DremioDataSource(dremio_source, metadata)

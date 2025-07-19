@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # Dremio REST API config
     DREMIO_BASE_URL: str = "http://localhost"
     DREMIO_REST_PORT: int = 9047
+    DREMIO_FLIGHT_PORT: int = 32010
     DREMIO_USERNAME: str
     DREMIO_PASSWORD: SecretStr
     DREMIO_EXTERNAL_DIR: Path
