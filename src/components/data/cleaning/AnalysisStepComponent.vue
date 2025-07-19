@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import type { CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning'
-import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue'
-import DataQualityReportDetail from './DataQualityReport.vue'
-import FieldMappingsGrid from './FieldMappingsGrid.vue'
-import QualitySummaryCards from './QualitySummaryCards.vue'
+import type { CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue';
+import DataQualityReportDetail from './DataQualityReport.vue';
+import FieldMappingsGrid from './FieldMappingsGrid.vue';
+import QualitySummaryCards from './QualitySummaryCards.vue';
 
 
 // 当前步骤的双向绑定
 const step = defineModel<CleaningStep>('step', {
   required: true,
   default: 'analysis'
-})
+});
 
 // 定义组件属性
 defineProps<{
-  dataQualityReport: DataQualityReport | null
-  cleaningSuggestions: CleaningSuggestion[]
-  fieldMappings: Record<string, string>
-  isAnalyzing: boolean
-  analysisResult: any
-}>()
+  dataQualityReport: DataQualityReport | null;
+  cleaningSuggestions: CleaningSuggestion[];
+  fieldMappings: Record<string, string>;
+  isAnalyzing: boolean;
+  analysisResult: any;
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  skipAndUpload: []
-}>()
+  skipAndUpload: [];
+}>();
 
 // 跳过清洗直接上传
-const skipAnalysisAndUpload = () => emit('skipAndUpload')
+const skipAnalysisAndUpload = () => emit('skipAndUpload');
 </script>
 
 <template>

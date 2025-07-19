@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload } from '@element-plus/icons-vue'
-import { ref } from 'vue'
+import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload } from '@element-plus/icons-vue';
+import { ref } from 'vue';
 
 // 双向绑定数据
-const userRequirements = defineModel<string>('userRequirements', { default: '' })
-const selectedModel = defineModel<string>('selectedModel', { default: '' })
-const fileMetadata = defineModel<{ name: string, description: string }>('fileMetadata', { required: true })
+const userRequirements = defineModel<string>('userRequirements', { default: '' });
+const selectedModel = defineModel<string>('selectedModel', { default: '' });
+const fileMetadata = defineModel<{ name: string, description: string; }>('fileMetadata', { required: true });
 
 // 定义组件属性
 defineProps<{
-  file: File | null
-  isAnalyzing: boolean
-  availableModels: Array<{ value: string, label: string }>
-}>()
+  file: File | null;
+  isAnalyzing: boolean;
+  availableModels: Array<{ value: string, label: string; }>;
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  analyze: []
-  skipAndUpload: []
-  close: []
-}>()
+  analyze: [];
+  skipAndUpload: [];
+  close: [];
+}>();
 
 // 高级选项显示状态
-const showAdvancedOptions = ref(false)
+const showAdvancedOptions = ref(false);
 
 // 处理函数
-const startAnalysis = () => emit('analyze')
-const skipAnalysisAndUpload = () => emit('skipAndUpload')
-const closeDialog = () => emit('close')
+const startAnalysis = () => emit('analyze');
+const skipAnalysisAndUpload = () => emit('skipAndUpload');
+const closeDialog = () => emit('close');
 </script>
 
 <template>

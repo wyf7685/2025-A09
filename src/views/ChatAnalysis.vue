@@ -14,20 +14,20 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { reportAPI } from '@/utils/api';
 
-const router = useRouter()
+const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 
 // --- State for new UI ---
-const isSidebarOpen = ref(true)
-const userInput = ref<string>('')
-const selectDatasetDialogVisible = ref<boolean>(false)
-const isFlowPanelOpen = ref<boolean>(true) // 控制流程图面板的显示/隐藏
-const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>()
-const flowPanelRef = ref<InstanceType<typeof FlowPanel>>()
+const isSidebarOpen = ref(true);
+const userInput = ref<string>('');
+const selectDatasetDialogVisible = ref<boolean>(false);
+const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
+const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
+const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
 
-const sessions = computed(() => sessionStore.sessions)
-const currentSessionId = computed(() => sessionStore.currentSessionId)
+const sessions = computed(() => sessionStore.sessions);
+const currentSessionId = computed(() => sessionStore.currentSessionId);
 const currentDatasets = computed(() =>
   sessionStore.currentSession
     ? sessionStore.currentSession.dataset_ids
@@ -36,25 +36,25 @@ const currentDatasets = computed(() =>
 );
 
 // 报告生成相关状态
-const reportDialogVisible = ref(false)
-const isGeneratingReport = ref(false)
-const reportTemplates = ref<any[]>([])
-const selectedTemplateId = ref<string>('default')
-const generatedReport = ref<string>('')
-const reportFigures = ref<string[]>([])
-const activeTab = ref('generate')
-const viewingTemplate = ref<any>(null)
+const reportDialogVisible = ref(false);
+const isGeneratingReport = ref(false);
+const reportTemplates = ref<any[]>([]);
+const selectedTemplateId = ref<string>('default');
+const generatedReport = ref<string>('');
+const reportFigures = ref<string[]>([]);
+const activeTab = ref('generate');
+const viewingTemplate = ref<any>(null);
 
 // 模板上传相关
-const uploadTemplateDialogVisible = ref(false)
-const templateName = ref('')
-const templateDescription = ref('')
-const templateContent = ref('')
+const uploadTemplateDialogVisible = ref(false);
+const templateName = ref('');
+const templateDescription = ref('');
+const templateContent = ref('');
 
 // 会话编辑相关
-const editSessionDialogVisible = ref(false)
-const editingSessionId = ref('')
-const editingSessionName = ref('')
+const editSessionDialogVisible = ref(false);
+const editingSessionId = ref('');
+const editingSessionName = ref('');
 
 const {
   messages,
@@ -65,168 +65,168 @@ const {
 // 报告生成相关方法
 const loadReportTemplates = async () => {
   try {
-    const result = await reportAPI.getTemplates()
+    const result = await reportAPI.getTemplates();
     if (result.success) {
-      reportTemplates.value = result.templates
+      reportTemplates.value = result.templates;
     }
   } catch (error) {
-    console.error('加载报告模板失败:', error)
-    ElMessage.error('加载报告模板失败')
+    console.error('加载报告模板失败:', error);
+    ElMessage.error('加载报告模板失败');
   }
-}
+};
 
 const openReportDialog = async () => {
   if (!currentSessionId.value) {
-    ElMessage.warning('请先选择一个会话')
-    return
+    ElMessage.warning('请先选择一个会话');
+    return;
   }
 
   if (messages.value.length === 0) {
-    ElMessage.warning('当前会话没有分析内容')
-    return
+    ElMessage.warning('当前会话没有分析内容');
+    return;
   }
 
   // 重置状态
-  activeTab.value = 'generate'
-  viewingTemplate.value = null
-  generatedReport.value = ''
-  reportFigures.value = []
+  activeTab.value = 'generate';
+  viewingTemplate.value = null;
+  generatedReport.value = '';
+  reportFigures.value = [];
 
-  await loadReportTemplates()
-  reportDialogVisible.value = true
-}
+  await loadReportTemplates();
+  reportDialogVisible.value = true;
+};
 
 const generateReport = async () => {
-  if (!currentSessionId.value) return
+  if (!currentSessionId.value) return;
 
-  isGeneratingReport.value = true
+  isGeneratingReport.value = true;
   try {
     // 统一使用报告生成接口
     const result = await reportAPI.generateReport(
       currentSessionId.value,
       selectedTemplateId.value === 'default' ? undefined : selectedTemplateId.value
-    )
-    generatedReport.value = result.report
-    reportFigures.value = result.figures
-    ElMessage.success(`报告生成成功！使用模板：${result.template_used}`)
+    );
+    generatedReport.value = result.report;
+    reportFigures.value = result.figures;
+    ElMessage.success(`报告生成成功！使用模板：${result.template_used}`);
   } catch (error: any) {
-    console.error('生成报告失败:', error)
-    ElMessage.error('生成报告失败: ' + (error?.response?.data?.detail || error?.message || error))
+    console.error('生成报告失败:', error);
+    ElMessage.error('生成报告失败: ' + (error?.response?.data?.detail || error?.message || error));
   } finally {
-    isGeneratingReport.value = false
+    isGeneratingReport.value = false;
   }
-}
+};
 
 const downloadReport = () => {
-  if (!generatedReport.value) return
+  if (!generatedReport.value) return;
 
-  const sessionName = sessions.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
-  const filename = `${sessionName}_分析报告_${new Date().toISOString().slice(0, 10)}.md`
+  const sessionName = sessions.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话';
+  const filename = `${sessionName}_分析报告_${new Date().toISOString().slice(0, 10)}.md`;
 
-  reportAPI.downloadReport(generatedReport.value, filename)
-  ElMessage.success('报告下载成功')
-}
+  reportAPI.downloadReport(generatedReport.value, filename);
+  ElMessage.success('报告下载成功');
+};
 
 const viewSelectedTemplate = () => {
-  const template = reportTemplates.value.find(t => t.id === selectedTemplateId.value)
+  const template = reportTemplates.value.find(t => t.id === selectedTemplateId.value);
   if (template) {
-    viewingTemplate.value = template
+    viewingTemplate.value = template;
   } else if (selectedTemplateId.value === 'default') {
     // 从模板列表中找到默认模板
-    const defaultTemplate = reportTemplates.value.find(t => t.is_default)
+    const defaultTemplate = reportTemplates.value.find(t => t.is_default);
     if (defaultTemplate) {
-      viewingTemplate.value = defaultTemplate
+      viewingTemplate.value = defaultTemplate;
     } else {
       // 如果没有找到，显示占位符
       viewingTemplate.value = {
         name: '默认分析报告模板',
         description: '系统内置的标准数据分析报告模板',
         content: '正在加载默认模板内容...'
-      }
+      };
     }
   }
-}
+};
 
 const viewTemplate = (template: any) => {
-  viewingTemplate.value = template
-}
+  viewingTemplate.value = template;
+};
 
 const deleteTemplate = async (templateId: string) => {
   try {
     await ElMessageBox.confirm('确定要删除这个模板吗？', '删除确认', {
       type: 'warning'
-    })
+    });
 
-    await reportAPI.deleteTemplate(templateId)
-    ElMessage.success('模板删除成功')
-    await loadReportTemplates()
+    await reportAPI.deleteTemplate(templateId);
+    ElMessage.success('模板删除成功');
+    await loadReportTemplates();
   } catch (error: any) {
     if (error !== 'cancel') {
-      console.error('删除模板失败:', error)
-      ElMessage.error('删除模板失败')
+      console.error('删除模板失败:', error);
+      ElMessage.error('删除模板失败');
     }
   }
-}
+};
 
 const openUploadTemplate = () => {
-  templateName.value = ''
-  templateDescription.value = ''
-  templateContent.value = ''
-  uploadTemplateDialogVisible.value = true
-}
+  templateName.value = '';
+  templateDescription.value = '';
+  templateContent.value = '';
+  uploadTemplateDialogVisible.value = true;
+};
 
 const uploadTemplate = async () => {
   if (!templateName.value.trim() || !templateDescription.value.trim() || !templateContent.value.trim()) {
-    ElMessage.warning('请填写完整的模板信息')
-    return
+    ElMessage.warning('请填写完整的模板信息');
+    return;
   }
 
   try {
-    const blob = new Blob([templateContent.value], { type: 'text/plain' })
-    const file = new File([blob], `${templateName.value}.txt`, { type: 'text/plain' })
+    const blob = new Blob([templateContent.value], { type: 'text/plain' });
+    const file = new File([blob], `${templateName.value}.txt`, { type: 'text/plain' });
 
-    await reportAPI.uploadTemplate(templateName.value, templateDescription.value, file)
-    ElMessage.success('模板上传成功')
+    await reportAPI.uploadTemplate(templateName.value, templateDescription.value, file);
+    ElMessage.success('模板上传成功');
 
-    uploadTemplateDialogVisible.value = false
-    await loadReportTemplates()
+    uploadTemplateDialogVisible.value = false;
+    await loadReportTemplates();
   } catch (error: any) {
-    console.error('上传模板失败:', error)
-    ElMessage.error('上传模板失败: ' + (error?.message || error))
+    console.error('上传模板失败:', error);
+    ElMessage.error('上传模板失败: ' + (error?.message || error));
   }
-}
+};
 
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {
-  editingSessionId.value = sessionId
-  editingSessionName.value = sessionName
-  editSessionDialogVisible.value = true
-}
+  editingSessionId.value = sessionId;
+  editingSessionName.value = sessionName;
+  editSessionDialogVisible.value = true;
+};
 
 const saveSessionEdit = async () => {
   if (!editingSessionId.value || !editingSessionName.value.trim()) {
-    ElMessage.warning('会话名称不能为空')
-    return
+    ElMessage.warning('会话名称不能为空');
+    return;
   }
 
   try {
-    await sessionStore.updateSessionName(editingSessionId.value, editingSessionName.value.trim())
-    ElMessage.success('会话名称更新成功')
-    editSessionDialogVisible.value = false
+    await sessionStore.updateSessionName(editingSessionId.value, editingSessionName.value.trim());
+    ElMessage.success('会话名称更新成功');
+    editSessionDialogVisible.value = false;
   } catch (error) {
-    console.error('更新会话名称失败:', error)
-    ElMessage.error('更新会话名称失败')
+    console.error('更新会话名称失败:', error);
+    ElMessage.error('更新会话名称失败');
   }
-}
+};
 
 // --- Methods for new UI ---
 const loadSessions = async () => {
   try {
-    await sessionStore.listSessions()
+    await sessionStore.listSessions();
   } catch (error) {
-    console.error('加载会话失败:', error)
+    console.error('加载会话失败:', error);
   }
-}
+};
 
 const createNewSession = async (sourceIds: string[]) => {
   try {
@@ -253,7 +253,7 @@ const createNewSession = async (sourceIds: string[]) => {
     console.error('创建新会话失败:', error);
     ElMessage.error('创建新会话失败');
   }
-}
+};
 
 const refreshChatHistory = async () => {
   if (!currentSessionId.value) return;
@@ -262,16 +262,16 @@ const refreshChatHistory = async () => {
 };
 
 const switchSession = async (sessionId: string) => {
-  await sessionStore.setCurrentSessionById(sessionId)
-  const session = sessions.value.find(s => s.id === sessionId)
-  await refreshChatHistory()
-  ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`)
-}
+  await sessionStore.setCurrentSessionById(sessionId);
+  const session = sessions.value.find(s => s.id === sessionId);
+  await refreshChatHistory();
+  ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`);
+};
 
 // 删除会话
 const deleteSession = async (sessionId: string) => {
-  const session = sessions.value.find(s => s.id === sessionId)
-  const sessionName = session?.name || sessionId.slice(0, 8) + '...'
+  const session = sessions.value.find(s => s.id === sessionId);
+  const sessionName = session?.name || sessionId.slice(0, 8) + '...';
 
   try {
     await ElMessageBox.confirm(
@@ -283,50 +283,50 @@ const deleteSession = async (sessionId: string) => {
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
       }
-    )
+    );
 
-    await sessionStore.deleteSession(sessionId)
+    await sessionStore.deleteSession(sessionId);
 
     // 如果删除的是当前会话
     if (sessionId === currentSessionId.value) {
-      messages.value = []
-      flowPanelRef.value?.flowPanel?.clearFlowSteps()
+      messages.value = [];
+      flowPanelRef.value?.flowPanel?.clearFlowSteps();
 
       // 如果还有其他会话，切换到第一个会话
       if (sessions.value.length > 0) {
-        await switchSession(sessions.value[0].id)
+        await switchSession(sessions.value[0].id);
       }
     }
 
-    ElMessage.success(`会话 "${sessionName}" 已删除`)
+    ElMessage.success(`会话 "${sessionName}" 已删除`);
 
     // 如果没有会话了，提示用户创建新会话
     if (sessions.value.length === 0) {
-      ElMessage.info('所有会话已删除，请创建新会话开始分析')
+      ElMessage.info('所有会话已删除，请创建新会话开始分析');
     }
 
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除会话失败:', error)
-      ElMessage.error('删除会话失败')
+      console.error('删除会话失败:', error);
+      ElMessage.error('删除会话失败');
     }
   }
-}
+};
 
 // --- Method to navigate to data management ---
 const goToAddData = () => {
-  router.push('/data-management')
-}
+  router.push('/data-management');
+};
 
 // --- Existing Chat Logic Methods ---
 const scrollToBottom = (): void => {
-  chatMessagesRef.value?.scrollToBottom()
+  chatMessagesRef.value?.scrollToBottom();
 };
 
 const sendMessage = async (): Promise<void> => {
-  if (!userInput.value.trim()) return
-  const userMessage = userInput.value.trim()
-  userInput.value = ''
+  if (!userInput.value.trim()) return;
+  const userMessage = userInput.value.trim();
+  userInput.value = '';
 
   await chat.sendMessage(
     userMessage,

@@ -1,35 +1,35 @@
 <script setup lang="ts">
-import { UploadFilled, Connection } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { UploadFilled, Connection } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
 // 定义组件事件，带类型标注
 const emit = defineEmits<{
-  fileUpload: [options: { file: File }]
-  openDatabaseDialog: []
-}>()
+  fileUpload: [options: { file: File; }];
+  openDatabaseDialog: [];
+}>();
 
 // 处理文件上传
 const handleFileUpload = (options: any) => {
-  const file = options.file
-  if (!file) return
+  const file = options.file;
+  if (!file) return;
 
   // 检查文件类型
-  const allowedTypes = ['csv', 'xlsx', 'xls']
-  const fileExtension = file.name.split('.').pop()?.toLowerCase()
+  const allowedTypes = ['csv', 'xlsx', 'xls'];
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
   if (!fileExtension || !allowedTypes.includes(fileExtension)) {
-    ElMessage.error('只支持 CSV 和 Excel 文件格式')
-    return
+    ElMessage.error('只支持 CSV 和 Excel 文件格式');
+    return;
   }
 
   // 向父组件发送上传事件
-  emit('fileUpload', { file })
-}
+  emit('fileUpload', { file });
+};
 
 // 打开数据库对话框
 const openAddDatabase = () => {
-  emit('openDatabaseDialog')
-}
+  emit('openDatabaseDialog');
+};
 </script>
 
 <template>

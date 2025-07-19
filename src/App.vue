@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { checkHealth as checkHealthApi } from '@/utils/api'
+import { ref, onMounted } from 'vue';
+import { checkHealth as checkHealthApi } from '@/utils/api';
 
 // 响应式数据
-const sidebarCollapsed = ref(false)
-const healthStatus = ref({ status: '' })
+const sidebarCollapsed = ref(false);
+const healthStatus = ref({ status: '' });
 
 // 方法
 const toggleSidebar = () => {
-  sidebarCollapsed.value = !sidebarCollapsed.value
-}
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+};
 
 const checkHealth = async () => {
   try {
-    const status = await checkHealthApi()
-    healthStatus.value = status
+    const status = await checkHealthApi();
+    healthStatus.value = status;
   } catch (error) {
-    console.error('健康检查失败:', error)
+    console.error('健康检查失败:', error);
   }
-}
+};
 
 // 生命周期
 onMounted(async () => {
-  await checkHealth()
+  await checkHealth();
 
   // 定期检查健康状态
-  setInterval(checkHealth, 3 * 60 * 1000)
-})
+  setInterval(checkHealth, 3 * 60 * 1000);
+});
 </script>
 
 <template>

@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh } from '@element-plus/icons-vue';
 
 // 定义组件属性，带类型标注
 defineProps<{
-  isLoading: boolean
-}>()
+  isLoading: boolean;
+}>();
 
 // 定义组件事件，带类型标注
 const emit = defineEmits<{
-  refresh: []
-}>()
+  refresh: [];
+}>();
 
 // 刷新数据的处理函数
 const handleRefresh = () => {
-  emit('refresh')
-}
+  emit('refresh');
+};
 </script>
 
 <template>

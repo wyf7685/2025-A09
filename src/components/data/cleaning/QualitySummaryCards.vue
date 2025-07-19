@@ -4,27 +4,27 @@ import { Connection, Document, Grid, Warning } from '@element-plus/icons-vue';
 
 // 定义组件属性
 defineProps<{
-  dataQualityReport: DataQualityReport | null
-  cleaningSuggestionsCount: number
-  fieldMappingsCount: number
-  overallScore?: number
+  dataQualityReport: DataQualityReport | null;
+  cleaningSuggestionsCount: number;
+  fieldMappingsCount: number;
+  overallScore?: number;
 }
->()
+>();
 
 // 获取质量评分的颜色
 const getQualityScoreColor = (score: number) => {
-  if (score >= 80) return 'success'
-  if (score >= 60) return 'warning'
-  return 'danger'
-}
+  if (score >= 80) return 'success';
+  if (score >= 60) return 'warning';
+  return 'danger';
+};
 
 // 获取质量评分的文本
 const getQualityScoreText = (score: number) => {
-  if (score >= 90) return '优秀'
-  if (score >= 80) return '良好'
-  if (score >= 60) return '一般'
-  return '需要改进'
-}
+  if (score >= 90) return '优秀';
+  if (score >= 80) return '良好';
+  if (score >= 60) return '一般';
+  return '需要改进';
+};
 </script>
 
 <template>

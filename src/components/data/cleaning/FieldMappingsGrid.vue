@@ -3,8 +3,8 @@ import { ArrowRight } from '@element-plus/icons-vue';
 
 // 定义组件属性
 defineProps<{
-  fieldMappings: Record<string, string>
-}>()
+  fieldMappings: Record<string, string>;
+}>();
 </script>
 
 <template>

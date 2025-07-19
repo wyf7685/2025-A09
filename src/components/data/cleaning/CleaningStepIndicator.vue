@@ -4,8 +4,8 @@ import { CircleCheck, CircleClose } from '@element-plus/icons-vue';
 
 // 组件属性
 defineProps<{
-  currentStep: CleaningStep
-}>()
+  currentStep: CleaningStep;
+}>();
 
 // 步骤配置
 const steps = [
@@ -13,7 +13,7 @@ const steps = [
   { key: 'analysis', name: '智能分析' },
   { key: 'cleaning', name: '清洗建议' },
   { key: 'complete', name: '完成上传' },
-] as { key: CleaningStep, name: string }[]
+] as { key: CleaningStep, name: string; }[];
 </script>
 
 <template>

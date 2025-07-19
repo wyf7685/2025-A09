@@ -1,59 +1,59 @@
 <script setup lang="ts">
-import type { DataSourceMetadataWithID } from '@/types'
+import type { DataSourceMetadataWithID } from '@/types';
 
 // 使用 defineModel 实现对话框可见性双向绑定
-const visible = defineModel<boolean>('visible', { required: true })
+const visible = defineModel<boolean>('visible', { required: true });
 
 // 定义组件属性
 interface PaginationProps {
-  current: number
-  pageSize: number
-  total: number
+  current: number;
+  pageSize: number;
+  total: number;
 }
 
 interface Props {
-  datasource: DataSourceMetadataWithID | null
-  previewData: any[]
-  previewColumns: string[]
-  pagination: PaginationProps
-  loading: boolean
+  datasource: DataSourceMetadataWithID | null;
+  previewData: any[];
+  previewColumns: string[];
+  pagination: PaginationProps;
+  loading: boolean;
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  loadPage: [page: number]
-}>()
+  loadPage: [page: number];
+}>();
 
 // 数据源类型人类可读表示
 const sourceTypeHumanRepr = (metadata: DataSourceMetadataWithID | null) => {
   if (!metadata || !metadata.source_type.startsWith('dremio:')) {
-    return metadata?.source_type || ''
+    return metadata?.source_type || '';
   }
 
-  const type = metadata.source_type.split(':')[1]
+  const type = metadata.source_type.split(':')[1];
   switch (type) {
     case 'PROMOTED':
     case 'FILE':
-      const parts = metadata.id.split('_')
-      const fileExt = parts[parts.length - 1].toLowerCase()
-      return fileExt === 'csv' ? 'CSV 文件' : ['xls', 'xlsx'].includes(fileExt) ? 'Excel 文件' : 'Dremio 数据集'
+      const parts = metadata.id.split('_');
+      const fileExt = parts[parts.length - 1].toLowerCase();
+      return fileExt === 'csv' ? 'CSV 文件' : ['xls', 'xlsx'].includes(fileExt) ? 'Excel 文件' : 'Dremio 数据集';
     case 'DIRECT':
-      return '数据库表'
+      return '数据库表';
   }
-  return type
-}
+  return type;
+};
 
 // 处理分页变化
 const handleCurrentChange = (page: number) => {
-  emit('loadPage', page)
-}
+  emit('loadPage', page);
+};
 
 // 处理每页条数变化
 const handleSizeChange = (size: number) => {
-  emit('loadPage', props.pagination.current)
-}
+  emit('loadPage', props.pagination.current);
+};
 </script>
 
 <template>

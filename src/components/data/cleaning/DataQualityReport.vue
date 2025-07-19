@@ -4,12 +4,12 @@ import { ref } from 'vue';
 
 // 定义组件属性
 defineProps<{
-  dataQualityReport: DataQualityReport | null
+  dataQualityReport: DataQualityReport | null;
 }
->()
+>();
 
 // 详情显示状态
-const showDetails = ref(false)
+const showDetails = ref(false);
 </script>
 
 <template>

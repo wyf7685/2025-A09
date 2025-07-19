@@ -47,14 +47,14 @@ const formatDatasetsTooltip = (names: string[]) => {
   if (names.length === 0) return '无数据集';
   if (names.length === 1) return names[0];
   return `共 ${names.length} 个数据集: ${names.slice(0, 2).map(s => turncateString(s, 20)).join(', ')} ${names.length > 3 ? '等' : ''}`;
-}
+};
 </script>
 
 <template>
   <div class="chat-input-area">
     <div class="chat-input-wrapper">
-      <el-input v-model="input" placeholder="输入你的问题..." @keydown="handleKeydown($event as KeyboardEvent)" resize="none" type="textarea"
-        :autosize="{ minRows: 1, maxRows: 5 }" :disabled="isProcessingChat" />
+      <el-input v-model="input" placeholder="输入你的问题..." @keydown="handleKeydown($event as KeyboardEvent)" resize="none"
+        type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" :disabled="isProcessingChat" />
       <el-button @click="sendMessage" :disabled="isProcessingChat || !input.trim()" type="primary" class="send-button">
         发送
       </el-button>

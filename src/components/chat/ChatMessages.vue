@@ -3,7 +3,7 @@ import AssistantMessage from '@/components/chat/AssistantMessage.vue';
 import type { ChatMessage } from '@/types';
 import { nextTick, onMounted, ref, watch } from 'vue';
 
-type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[] }
+type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[]; };
 
 const props = defineProps<{
   messages: ChatMessageWithSuggestions[];

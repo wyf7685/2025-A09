@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { useDataSourceStore } from '@/stores/datasource'
-import type { AnyDatabaseConnection, DremioDatabaseType, OracleConnection, PostgreSQLConnection } from '@/types'
-import { Connection } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { computed, reactive, ref, watch } from 'vue'
+import { useDataSourceStore } from '@/stores/datasource';
+import type { AnyDatabaseConnection, DremioDatabaseType, OracleConnection, PostgreSQLConnection } from '@/types';
+import { Connection } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { computed, reactive, ref, watch } from 'vue';
 
 const visible = defineModel<boolean>('visible', { required: true });
 
 const emit = defineEmits<{
-  (e: 'success'): void
-}>()
+  (e: 'success'): void;
+}>();
 
-const dataSourceStore = useDataSourceStore()
+const dataSourceStore = useDataSourceStore();
 
 // 数据库类型选项
-const databaseTypes: Array<{ label: string; value: DremioDatabaseType }> = [
+const databaseTypes: Array<{ label: string; value: DremioDatabaseType; }> = [
   { label: 'MySQL 数据库', value: 'MYSQL' },
   { label: 'PostgreSQL 数据库', value: 'POSTGRES' },
   { label: 'SQL Server 数据库', value: 'MSSQL' },
   { label: 'Oracle 数据库', value: 'ORACLE' }
-]
+];
 
 // 表单数据
 const formData = reactive({
@@ -34,7 +34,7 @@ const formData = reactive({
     databaseName: '',  // 用于PostgreSQL
     instance: ''       // 用于Oracle
   }
-})
+});
 
 // 表单验证规则
 const rules = {
@@ -49,58 +49,58 @@ const rules = {
   'connection.password': [{ required: true, message: '请输入密码', trigger: 'blur' }],
   'connection.databaseName': [{ required: true, message: '请输入数据库名称', trigger: 'blur' }],
   'connection.instance': [{ required: true, message: '请输入实例名称', trigger: 'blur' }]
-}
+};
 
-const formRef = ref()
-const isSubmitting = ref(false)
+const formRef = ref();
+const isSubmitting = ref(false);
 
 // 根据数据库类型设置默认端口
 watch(() => formData.database_type, (type) => {
   switch (type) {
     case 'MYSQL':
-      formData.connection.port = 3306
-      break
+      formData.connection.port = 3306;
+      break;
     case 'POSTGRES':
-      formData.connection.port = 5432
-      break
+      formData.connection.port = 5432;
+      break;
     case 'MSSQL':
-      formData.connection.port = 1433
-      break
+      formData.connection.port = 1433;
+      break;
     case 'ORACLE':
-      formData.connection.port = 1521
-      break
+      formData.connection.port = 1521;
+      break;
   }
-})
+});
 
 // 获取当前数据库类型的特定连接字段
 const specialFields = computed((): {
-  name: 'databaseName' | 'instance'
-  label: string
-  placeholder: string
+  name: 'databaseName' | 'instance';
+  label: string;
+  placeholder: string;
 }[] => {
   switch (formData.database_type) {
     case 'POSTGRES':
       return [
         { name: 'databaseName', label: '数据库名称', placeholder: '请输入数据库名称' }
-      ]
+      ];
     case 'ORACLE':
       return [
         { name: 'instance', label: '实例名称', placeholder: '请输入Oracle实例名称' }
-      ]
+      ];
     default:
-      return []
+      return [];
   }
-})
+});
 
 const close = () => {
-  visible.value = false
-  resetForm()
-}
+  visible.value = false;
+  resetForm();
+};
 
 const resetForm = () => {
-  formData.database_type = 'MYSQL'
-  formData.name = ''
-  formData.description = ''
+  formData.database_type = 'MYSQL';
+  formData.name = '';
+  formData.description = '';
   formData.connection = {
     hostname: '',
     port: 3306,
@@ -108,19 +108,19 @@ const resetForm = () => {
     password: '',
     databaseName: '',
     instance: ''
-  }
+  };
   if (formRef.value) {
-    formRef.value.resetFields()
+    formRef.value.resetFields();
   }
-}
+};
 
 const submitForm = async () => {
-  if (!formRef.value) return
+  if (!formRef.value) return;
 
   try {
-    await formRef.value.validate()
+    await formRef.value.validate();
 
-    isSubmitting.value = true
+    isSubmitting.value = true;
 
     // 根据数据库类型准备连接参数
     const connection: AnyDatabaseConnection = {
@@ -128,13 +128,13 @@ const submitForm = async () => {
       port: formData.connection.port,
       username: formData.connection.username,
       password: formData.connection.password
-    }
+    };
 
     // 为特定数据库类型添加额外字段
     if (formData.database_type === 'POSTGRES') {
-      (connection as PostgreSQLConnection).databaseName = formData.connection.databaseName
+      (connection as PostgreSQLConnection).databaseName = formData.connection.databaseName;
     } else if (formData.database_type === 'ORACLE') {
-      (connection as OracleConnection).instance = formData.connection.instance
+      (connection as OracleConnection).instance = formData.connection.instance;
     }
 
     // 调用store方法添加数据库连接
@@ -143,18 +143,18 @@ const submitForm = async () => {
       connection: connection,
       name: formData.name,
       description: formData.description || undefined
-    })
+    });
 
-    ElMessage.success('数据库连接添加成功')
-    emit('success')
-    close()
+    ElMessage.success('数据库连接添加成功');
+    emit('success');
+    close();
   } catch (error) {
-    console.error('提交表单失败:', error)
-    ElMessage.error('添加数据库连接失败，请检查输入信息是否正确')
+    console.error('提交表单失败:', error);
+    ElMessage.error('添加数据库连接失败，请检查输入信息是否正确');
   } finally {
-    isSubmitting.value = false
+    isSubmitting.value = false;
   }
-}
+};
 </script>
 
 <template>

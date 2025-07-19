@@ -2,7 +2,6 @@ import { marked } from 'marked';
 // import hljs from 'highlight.js';
 import 'github-markdown-css/github-markdown-light.css'; // 导入 GitHub 风格样式
 import 'highlight.js/styles/github.css'; // 导入 GitHub 代码高亮样式
-import type { ChatEntry, ChatMessage } from '@/types';
 
 // 配置 marked 使用 highlight.js 进行代码高亮
 marked.setOptions({

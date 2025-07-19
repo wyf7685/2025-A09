@@ -7,39 +7,39 @@ import CleaningSuggestionItem from './CleaningSuggestionItem.vue';
 const step = defineModel<CleaningStep>('step', {
   required: true,
   default: 'cleaning'
-})
+});
 
 // 定义组件属性
 const props = defineProps<{
-  cleaningSuggestions: CleaningSuggestion[]
-  selectedCleaningActions: CleaningAction[]
-  isCleaning: boolean
-}>()
+  cleaningSuggestions: CleaningSuggestion[];
+  selectedCleaningActions: CleaningAction[];
+  isCleaning: boolean;
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  applyCleaningActions: []
-  skipAndUpload: []
-  toggleCleaningAction: [suggestion: CleaningSuggestion]
-}>()
+  applyCleaningActions: [];
+  skipAndUpload: [];
+  toggleCleaningAction: [suggestion: CleaningSuggestion];
+}>();
 
 // 检查清洗动作是否已选择
 const isCleaningActionSelected = (suggestion: CleaningSuggestion) => {
   return props.selectedCleaningActions.some(a =>
     a.type === suggestion.type && a.column === suggestion.column
-  )
-}
+  );
+};
 
 // 切换清洗动作选择
 const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
-  emit('toggleCleaningAction', suggestion)
-}
+  emit('toggleCleaningAction', suggestion);
+};
 
 // 应用清洗操作
-const applyCleaningActions = () => emit('applyCleaningActions')
+const applyCleaningActions = () => emit('applyCleaningActions');
 
 // 跳过清洗直接上传
-const skipAnalysisAndUpload = () => emit('skipAndUpload')
+const skipAnalysisAndUpload = () => emit('skipAndUpload');
 </script>
 
 <template>

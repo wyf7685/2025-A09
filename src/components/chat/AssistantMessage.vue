@@ -4,7 +4,7 @@ import type { AssistantChatMessage } from '@/types';
 import { ref } from 'vue';
 
 defineProps<{
-  message: AssistantChatMessage & { loading?: boolean };
+  message: AssistantChatMessage & { loading?: boolean; };
 }>();
 
 const parsePossibleJsonString = (value: any) => {
@@ -14,7 +14,7 @@ const parsePossibleJsonString = (value: any) => {
   } catch (_: unknown) {
     return value;
   }
-}
+};
 
 // 用于管理工具调用的折叠状态
 interface ExpandState {

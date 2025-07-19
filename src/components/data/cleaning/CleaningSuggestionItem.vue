@@ -9,76 +9,76 @@ import {
 
 // 定义组件属性
 const props = defineProps<{
-  suggestion: CleaningSuggestion
-  isSelected: boolean
+  suggestion: CleaningSuggestion;
+  isSelected: boolean;
 }
->()
+>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  toggle: [suggestion: CleaningSuggestion]
-}>()
+  toggle: [suggestion: CleaningSuggestion];
+}>();
 
 // 获取问题类型的图标
 const getIssueTypeIcon = (type: string) => {
   switch (type) {
     case 'missing_values':
-      return QuestionFilled
+      return QuestionFilled;
     case 'outliers':
-      return Warning
+      return Warning;
     case 'duplicates':
     case 'duplicate_rows':
-      return DocumentCopy
+      return DocumentCopy;
     case 'invalid_values':
-      return CircleClose
+      return CircleClose;
     case 'column_name':
-      return Edit
+      return Edit;
     case 'data_type':
-      return DocumentChecked
+      return DocumentChecked;
     default:
-      return InfoFilled
+      return InfoFilled;
   }
-}
+};
 
 // 获取问题类型的颜色
 const getIssueTypeColor = (type: string) => {
   switch (type) {
     case 'missing_values':
-      return 'warning'
+      return 'warning';
     case 'outliers':
-      return 'danger'
+      return 'danger';
     case 'duplicates':
     case 'duplicate_rows':
-      return 'info'
+      return 'info';
     case 'invalid_values':
-      return 'danger'
+      return 'danger';
     case 'column_name':
-      return 'primary'
+      return 'primary';
     case 'data_type':
-      return 'success'
+      return 'success';
     default:
-      return 'info'
+      return 'info';
   }
-}
+};
 
 // 获取优先级颜色
 const getPriorityColor = (priority: string) => {
   switch (priority) {
     case 'high':
-      return 'danger'
+      return 'danger';
     case 'medium':
-      return 'warning'
+      return 'warning';
     case 'low':
-      return 'success'
+      return 'success';
     default:
-      return 'info'
+      return 'info';
   }
-}
+};
 
 // 切换选择状态
 const toggleSelection = () => {
-  emit('toggle', props.suggestion)
-}
+  emit('toggle', props.suggestion);
+};
 </script>
 
 <template>

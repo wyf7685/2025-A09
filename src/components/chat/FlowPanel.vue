@@ -11,15 +11,15 @@ const modelStore = useModelStore();
 const isFlowPanelOpen = defineModel<boolean>("isFlowPanelOpen", { required: true });
 
 // 固定路线配置
-const selectedRoute = ref<string>('route1') // 当前选中的路线
-const currentRouteReason = ref<string>('') // 当前路线选择的原因
+const selectedRoute = ref<string>('route1'); // 当前选中的路线
+const currentRouteReason = ref<string>(''); // 当前路线选择的原因
 
 // 路线1：生成总体报告的步骤
 const route1Steps = ref<FlowRoute[]>([
   { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
   { title: 'AI分析处理', description: '智能分析用户需求和数据', status: 'pending' },
   { title: '生成报告', description: '生成完整的数据分析报告', status: 'pending' }
-])
+]);
 
 // 路线2：其他处理的步骤
 const route2Steps = ref<FlowRoute[]>([
@@ -28,22 +28,22 @@ const route2Steps = ref<FlowRoute[]>([
   { title: '判断执行工具', description: '分析并选择合适的处理工具', status: 'pending' },
   { title: '调用执行工具', description: '执行相应的数据处理工具', status: 'pending' },
   { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending' }
-])
+]);
 
 // 流程图相关状态 (保留原有的flowSteps以兼容现有代码)
-const flowSteps = ref<FlowStep[]>([])
+const flowSteps = ref<FlowStep[]>([]);
 
 // 模型配置相关状态
-const storeAvailableModels = computed(() => modelStore.availableModels)
+const storeAvailableModels = computed(() => modelStore.availableModels);
 
 // 自定义API相关状态
-const showCustomApiDialog = ref(false)
+const showCustomApiDialog = ref(false);
 const customApiForm = ref({
   provider: '',  // 选择的提供商
   apiKey: '',
   modelName: '',
   customApiUrl: ''  // 自定义API URL
-})
+});
 
 // 预设的API提供商配置
 const apiProviders = [
@@ -72,30 +72,30 @@ const apiProviders = [
     baseUrl: '',
     models: []
   }
-]
+];
 
 const selectedProvider = computed(() => {
-  return apiProviders.find(p => p.name === customApiForm.value.provider) || apiProviders[0]
-})
+  return apiProviders.find(p => p.name === customApiForm.value.provider) || apiProviders[0];
+});
 
 const providerModels = computed(() => {
-  return selectedProvider.value.models
-})
+  return selectedProvider.value.models;
+});
 
 const selectedModel = computed({
   get: () => modelStore.selectedModel?.id || 'gemini-2.0-flash',
   set: (value: string) => {
     if (value === 'custom-api') {
       // 显示自定义API对话框
-      showCustomApiDialog.value = true
-      return
+      showCustomApiDialog.value = true;
+      return;
     }
-    const model = storeAvailableModels.value.find(m => m.id === value)
+    const model = storeAvailableModels.value.find(m => m.id === value);
     if (model) {
-      modelStore.setSelectedModel(model)
+      modelStore.setSelectedModel(model);
     }
   }
-})
+});
 
 // 流程图管理方法
 const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
@@ -103,60 +103,60 @@ const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
     ...step,
     id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     timestamp: new Date()
-  }
-  flowSteps.value.push(newStep)
-  return newStep.id
-}
+  };
+  flowSteps.value.push(newStep);
+  return newStep.id;
+};
 
 const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
-  const stepIndex = flowSteps.value.findIndex(step => step.id === stepId)
+  const stepIndex = flowSteps.value.findIndex(step => step.id === stepId);
   if (stepIndex !== -1) {
-    flowSteps.value[stepIndex] = { ...flowSteps.value[stepIndex], ...updates }
+    flowSteps.value[stepIndex] = { ...flowSteps.value[stepIndex], ...updates };
   }
-}
+};
 
 const clearFlowSteps = () => {
-  flowSteps.value = []
-}
+  flowSteps.value = [];
+};
 
 // 模型配置方法
 const changeModel = (modelId: string) => {
   if (modelId === 'custom-api') {
     // 显示自定义API对话框
-    showCustomApiDialog.value = true
-    return
+    showCustomApiDialog.value = true;
+    return;
   }
 
-  selectedModel.value = modelId
-  const model = storeAvailableModels.value.find(m => m.id === modelId)
+  selectedModel.value = modelId;
+  const model = storeAvailableModels.value.find(m => m.id === modelId);
 
   // 添加模型切换步骤到流程图
   addFlowStep({
     title: '模型切换',
     description: `切换到模型: ${model?.name || modelId}`,
     status: 'completed'
-  })
+  });
 
-  ElMessage.success(`已切换到模型: ${model?.name || modelId}`)
-}
+  ElMessage.success(`已切换到模型: ${model?.name || modelId}`);
+};
 
 // 处理自定义API配置
 const handleCustomApiSubmit = async () => {
   if (!customApiForm.value.provider || !customApiForm.value.apiKey || !customApiForm.value.modelName) {
-    ElMessage.error('请填写完整的API信息')
-    return
+    ElMessage.error('请填写完整的API信息');
+    return;
   }
 
   try {
-    const provider = selectedProvider.value
-    let apiUrl = provider.baseUrl
+    const provider = selectedProvider.value;
+    let apiUrl = provider.baseUrl;
 
     // 如果是自定义提供商，使用用户输入的URL
     if (customApiForm.value.provider === 'Custom') {
-      apiUrl = customApiForm.value.customApiUrl
+      apiUrl = customApiForm.value.customApiUrl;
       if (!apiUrl) {
-        ElMessage.error('请输入自定义API URL')
-        return
+        ElMessage.error('请输入自定义API URL');
+        return;
       }
     }
 
@@ -166,7 +166,7 @@ const handleCustomApiSubmit = async () => {
       api_url: apiUrl,
       api_key: customApiForm.value.apiKey,
       model_name: customApiForm.value.modelName
-    })
+    });
 
     // 调用后端API保存自定义模型配置
     const customModel = await modelStore.submitCustomModel({
@@ -175,9 +175,9 @@ const handleCustomApiSubmit = async () => {
       api_url: apiUrl,
       api_key: customApiForm.value.apiKey,
       model_name: customApiForm.value.modelName
-    })
+    });
 
-    showCustomApiDialog.value = false
+    showCustomApiDialog.value = false;
 
     // 重置表单
     customApiForm.value = {
@@ -185,83 +185,83 @@ const handleCustomApiSubmit = async () => {
       apiKey: '',
       modelName: '',
       customApiUrl: ''
-    }
+    };
 
     // 添加模型切换步骤到流程图
     addFlowStep({
       title: '自定义模型配置',
       description: `配置自定义模型: ${customModel.name}`,
       status: 'completed'
-    })
+    });
 
-    ElMessage.success(`已配置自定义模型: ${customModel.name}`)
+    ElMessage.success(`已配置自定义模型: ${customModel.name}`);
   } catch (error) {
-    console.error('配置自定义API失败:', error)
-    ElMessage.error('配置自定义API失败')
+    console.error('配置自定义API失败:', error);
+    ElMessage.error('配置自定义API失败');
   }
-}
+};
 
 const cancelCustomApi = () => {
-  showCustomApiDialog.value = false
+  showCustomApiDialog.value = false;
   // 重置表单
   customApiForm.value = {
     provider: '',
     apiKey: '',
     modelName: '',
     customApiUrl: ''
-  }
-}
+  };
+};
 
 const getCurrentModelInfo = computed(() => {
-  return modelStore.selectedModel || storeAvailableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' }
-})
+  return modelStore.selectedModel || storeAvailableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' };
+});
 
 // 路线切换处理
 const handleRouteChange = (route: string) => {
-  console.log('切换到路线:', route)
-  logRouteStatus(`切换到${route}`)
+  console.log('切换到路线:', route);
+  logRouteStatus(`切换到${route}`);
   // 重置所有步骤状态
-  resetAllSteps()
-  logRouteStatus('重置步骤状态完成')
-}
+  resetAllSteps();
+  logRouteStatus('重置步骤状态完成');
+};
 
 // 重置所有路线步骤状态
 const resetAllSteps = () => {
   route1Steps.value.forEach(step => {
-    step.status = 'pending'
-  })
+    step.status = 'pending';
+  });
   route2Steps.value.forEach(step => {
-    step.status = 'pending'
-  })
-}
+    step.status = 'pending';
+  });
+};
 
 // 更新当前路线的步骤状态
 const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'completed') => {
   const oldStatus = selectedRoute.value === 'route1'
     ? route1Steps.value[stepIndex]?.status
-    : route2Steps.value[stepIndex]?.status
+    : route2Steps.value[stepIndex]?.status;
 
   if (selectedRoute.value === 'route1' && route1Steps.value[stepIndex]) {
-    route1Steps.value[stepIndex].status = status
-    console.log(`[流程图] 路线1步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`)
+    route1Steps.value[stepIndex].status = status;
+    console.log(`[流程图] 路线1步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`);
   } else if (selectedRoute.value === 'route2' && route2Steps.value[stepIndex]) {
-    route2Steps.value[stepIndex].status = status
-    console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`)
+    route2Steps.value[stepIndex].status = status;
+    console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`);
   }
 
-  logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`)
-}
+  logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`);
+};
 
 // 调试函数：监控流程图状态
 const logRouteStatus = (message: string) => {
-  console.log(`[流程图调试] ${message}`)
-  console.log('当前路线:', selectedRoute.value)
+  console.log(`[流程图调试] ${message}`);
+  console.log('当前路线:', selectedRoute.value);
   if (selectedRoute.value === 'route1') {
-    console.log('路线1状态:', route1Steps.value.map(step => `${step.title}: ${step.status}`))
+    console.log('路线1状态:', route1Steps.value.map(step => `${step.title}: ${step.status}`));
   } else {
-    console.log('路线2状态:', route2Steps.value.map(step => `${step.title}: ${step.status}`))
+    console.log('路线2状态:', route2Steps.value.map(step => `${step.title}: ${step.status}`));
   }
-}
+};
 
 // 测试智能路线选择功能
 const testRouteSelection = () => {
@@ -272,20 +272,20 @@ const testRouteSelection = () => {
     "绘制相关性热力图",
     "计算统计信息",
     "分析数据质量"
-  ]
+  ];
 
-  console.log('=== 智能路线选择测试 ===')
+  console.log('=== 智能路线选择测试 ===');
   testCases.forEach(testCase => {
-    const route = selectRouteAutomatically(testCase)
-    const reason = getRouteSelectionReason(testCase, route)
-    console.log(`输入: "${testCase}" -> 路线: ${route} (${reason})`)
-  })
-  console.log('=== 测试完成 ===')
-}
+    const route = selectRouteAutomatically(testCase);
+    const reason = getRouteSelectionReason(testCase, route);
+    console.log(`输入: "${testCase}" -> 路线: ${route} (${reason})`);
+  });
+  console.log('=== 测试完成 ===');
+};
 
 // 智能路线选择函数
 const selectRouteAutomatically = (userMessage: string): 'route1' | 'route2' => {
-  const message = userMessage.toLowerCase()
+  const message = userMessage.toLowerCase();
 
   // 路线1关键词：报告生成相关
   const route1Keywords = [
@@ -296,7 +296,7 @@ const selectRouteAutomatically = (userMessage: string): 'route1' | 'route2' => {
     '分析结果', '数据总结', '统计总结', '整体情况',
     'report', 'summary', 'overview', 'analysis report',
     'comprehensive', 'complete report', 'detailed report'
-  ]
+  ];
 
   // 路线2关键词：具体操作、工具使用相关
   const route2Keywords = [
@@ -306,129 +306,129 @@ const selectRouteAutomatically = (userMessage: string): 'route1' | 'route2' => {
     '热力图', '散点图', '柱状图', '折线图', '饼图',
     'plot', 'chart', 'graph', 'visualization', 'draw',
     'calculate', 'filter', 'query', 'clean', 'process'
-  ]
+  ];
 
   // 检查是否包含路线1关键词
-  const hasRoute1Keywords = route1Keywords.some(keyword => message.includes(keyword))
+  const hasRoute1Keywords = route1Keywords.some(keyword => message.includes(keyword));
 
   // 检查是否包含路线2关键词
-  const hasRoute2Keywords = route2Keywords.some(keyword => message.includes(keyword))
+  const hasRoute2Keywords = route2Keywords.some(keyword => message.includes(keyword));
 
   // 决策逻辑
   if (hasRoute1Keywords && !hasRoute2Keywords) {
-    return 'route1'
+    return 'route1';
   } else if (hasRoute2Keywords && !hasRoute1Keywords) {
-    return 'route2'
+    return 'route2';
   } else if (hasRoute1Keywords && hasRoute2Keywords) {
     // 如果同时包含，根据优先级判断
     // 如果明确提到"报告"，优先选择路线1
     if (message.includes('报告') || message.includes('report')) {
-      return 'route1'
+      return 'route1';
     }
-    return 'route2'
+    return 'route2';
   } else {
     // 默认情况：如果都不包含特定关键词，根据消息长度和复杂度判断
     // 简短的问题通常是具体操作，长的问题通常需要综合分析
     if (message.length > 100 || message.includes('分析') || message.includes('怎么') || message.includes('如何')) {
-      return 'route1'
+      return 'route1';
     }
-    return 'route2'
+    return 'route2';
   }
-}
+};
 
 // 获取路线选择的原因说明
 const getRouteSelectionReason = (userMessage: string, selectedRoute: 'route1' | 'route2'): string => {
-  const message = userMessage.toLowerCase()
+  const message = userMessage.toLowerCase();
 
   if (selectedRoute === 'route1') {
     if (message.includes('报告') || message.includes('report')) {
-      return '检测到报告生成需求'
+      return '检测到报告生成需求';
     } else if (message.includes('分析') || message.includes('总结') || message.includes('概述')) {
-      return '检测到综合分析需求'
+      return '检测到综合分析需求';
     } else if (message.length > 100) {
-      return '复杂查询，适合生成综合报告'
+      return '复杂查询，适合生成综合报告';
     } else {
-      return '默认使用报告生成模式'
+      return '默认使用报告生成模式';
     }
   } else {
     if (message.includes('绘制') || message.includes('图表') || message.includes('可视化')) {
-      return '检测到可视化需求'
+      return '检测到可视化需求';
     } else if (message.includes('计算') || message.includes('统计') || message.includes('筛选')) {
-      return '检测到数据处理需求'
+      return '检测到数据处理需求';
     } else if (message.includes('热力图') || message.includes('散点图') || message.includes('柱状图')) {
-      return '检测到特定图表需求'
+      return '检测到特定图表需求';
     } else {
-      return '检测到具体操作需求'
+      return '检测到具体操作需求';
     }
   }
-}
+};
 
 // 自动路线选择并更新UI
 const autoSelectRoute = (userMessage: string) => {
-  const previousRoute = selectedRoute.value
-  const newRoute = selectRouteAutomatically(userMessage)
-  const reason = getRouteSelectionReason(userMessage, newRoute)
+  const previousRoute = selectedRoute.value;
+  const newRoute = selectRouteAutomatically(userMessage);
+  const reason = getRouteSelectionReason(userMessage, newRoute);
 
-  currentRouteReason.value = reason
+  currentRouteReason.value = reason;
 
   if (newRoute !== previousRoute) {
-    selectedRoute.value = newRoute
-    resetAllSteps()
-    logRouteStatus(`自动切换路线：${previousRoute} -> ${newRoute} (${reason})`)
-    console.log(`[智能路线选择] 用户输入: "${userMessage}"`)
-    console.log(`[智能路线选择] 选择路线: ${newRoute}`)
-    console.log(`[智能路线选择] 选择原因: ${reason}`)
+    selectedRoute.value = newRoute;
+    resetAllSteps();
+    logRouteStatus(`自动切换路线：${previousRoute} -> ${newRoute} (${reason})`);
+    console.log(`[智能路线选择] 用户输入: "${userMessage}"`);
+    console.log(`[智能路线选择] 选择路线: ${newRoute}`);
+    console.log(`[智能路线选择] 选择原因: ${reason}`);
   } else {
-    logRouteStatus(`保持当前路线: ${newRoute} (${reason})`)
+    logRouteStatus(`保持当前路线: ${newRoute} (${reason})`);
   }
 
-  return newRoute
-}
+  return newRoute;
+};
 
 // 手动切换路线
 const toggleRouteManually = () => {
-  const currentRoute = selectedRoute.value
-  const newRoute = currentRoute === 'route1' ? 'route2' : 'route1'
+  const currentRoute = selectedRoute.value;
+  const newRoute = currentRoute === 'route1' ? 'route2' : 'route1';
 
-  selectedRoute.value = newRoute
-  resetAllSteps()
+  selectedRoute.value = newRoute;
+  resetAllSteps();
 
-  console.log(`[手动路线切换] ${currentRoute} -> ${newRoute}`)
-  logRouteStatus(`手动切换路线到: ${newRoute}`)
+  console.log(`[手动路线切换] ${currentRoute} -> ${newRoute}`);
+  logRouteStatus(`手动切换路线到: ${newRoute}`);
 
-  ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '调用工具分析'}`)
-}
+  ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '调用工具分析'}`);
+};
 
 // 检查是否有活跃步骤
 const hasActiveSteps = computed(() => {
   if (selectedRoute.value === 'route1') {
-    return route1Steps.value.some(step => step.status === 'active')
+    return route1Steps.value.some(step => step.status === 'active');
   } else {
-    return route2Steps.value.some(step => step.status === 'active')
+    return route2Steps.value.some(step => step.status === 'active');
   }
-})
+});
 
 // 强制完成流程
 const forceCompleteFlow = () => {
-  console.log('用户强制完成流程')
+  console.log('用户强制完成流程');
 
   if (selectedRoute.value === 'route1') {
     route1Steps.value.forEach(step => {
       if (step.status === 'active' || step.status === 'pending') {
-        step.status = 'completed'
+        step.status = 'completed';
       }
-    })
+    });
   } else {
     route2Steps.value.forEach(step => {
       if (step.status === 'active' || step.status === 'pending') {
-        step.status = 'completed'
+        step.status = 'completed';
       }
-    })
+    });
   }
 
-  logRouteStatus('用户强制完成所有流程步骤')
-  ElMessage.success('流程已强制完成')
-}
+  logRouteStatus('用户强制完成所有流程步骤');
+  ElMessage.success('流程已强制完成');
+};
 
 defineExpose({
   flowPanel: {
@@ -440,11 +440,11 @@ defineExpose({
     autoSelectRoute,
     logRouteStatus,
   } as FlowPanel,
-})
+});
 
 // --- Lifecycle Hooks ---
 onMounted(async () => {
-  await modelStore.fetchAvailableModels() // 获取可用模型
+  await modelStore.fetchAvailableModels(); // 获取可用模型
 
   // 运行路线选择测试
   // testRouteSelection()
@@ -459,8 +459,8 @@ onMounted(async () => {
       `提供商: ${getCurrentModelInfo.value.provider}`,
       `模型ID: ${selectedModel.value}`
     ]
-  })
-})
+  });
+});
 </script>
 
 <template>

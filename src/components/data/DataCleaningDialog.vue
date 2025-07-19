@@ -1,69 +1,69 @@
 <script setup lang="ts">
-import type { CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning'
-import { computed } from 'vue'
-import AnalysisStepComponent from './cleaning/AnalysisStepComponent.vue'
-import CleaningStepComponent from './cleaning/CleaningStepComponent.vue'
-import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue'
-import CompleteStepComponent from './cleaning/CompleteStepComponent.vue'
-import UploadStepComponent from './cleaning/UploadStepComponent.vue'
+import type { CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import { computed } from 'vue';
+import AnalysisStepComponent from './cleaning/AnalysisStepComponent.vue';
+import CleaningStepComponent from './cleaning/CleaningStepComponent.vue';
+import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
+import CompleteStepComponent from './cleaning/CompleteStepComponent.vue';
+import UploadStepComponent from './cleaning/UploadStepComponent.vue';
 
 // 使用 defineModel 实现对话框可见性双向绑定
-const visible = defineModel<boolean>('visible', { required: true })
+const visible = defineModel<boolean>('visible', { required: true });
 
 // 当前清洗步骤
 const step = defineModel<CleaningStep>('step', {
   required: true,
   default: 'upload'
-})
+});
 
 // 用户要求和模型选择的双向绑定
-const userRequirements = defineModel<string>('userRequirements', { default: '' })
-const selectedModel = defineModel<string>('selectedModel', { default: '' })
-const fileMetadata = defineModel<{ name: string, description: string }>('fileMetadata', { required: true })
+const userRequirements = defineModel<string>('userRequirements', { default: '' });
+const selectedModel = defineModel<string>('selectedModel', { default: '' });
+const fileMetadata = defineModel<{ name: string, description: string; }>('fileMetadata', { required: true });
 
 // 定义组件属性
 defineProps<{
-  file: File | null
-  dataQualityReport: DataQualityReport | null
-  cleaningSuggestions: CleaningSuggestion[]
-  fieldMappings: Record<string, string>
-  isAnalyzing: boolean
-  isCleaning: boolean
-  selectedCleaningActions: CleaningAction[]
-  analysisResult: any
-  availableModels: Array<{ value: string, label: string }>
-}>()
+  file: File | null;
+  dataQualityReport: DataQualityReport | null;
+  cleaningSuggestions: CleaningSuggestion[];
+  fieldMappings: Record<string, string>;
+  isAnalyzing: boolean;
+  isCleaning: boolean;
+  selectedCleaningActions: CleaningAction[];
+  analysisResult: any;
+  availableModels: Array<{ value: string, label: string; }>;
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  analyze: []
-  skipAndUpload: []
-  applyCleaningActions: []
-  complete: []
-  close: []
-  toggleCleaningAction: [suggestion: CleaningSuggestion]
-}>()
+  analyze: [];
+  skipAndUpload: [];
+  applyCleaningActions: [];
+  complete: [];
+  close: [];
+  toggleCleaningAction: [suggestion: CleaningSuggestion];
+}>();
 
 // 根据不同步骤返回不同宽度
 const dialogWidth = computed(() => {
   switch (step.value) {
     case 'upload':
-      return '600px'
+      return '600px';
     case 'analysis':
-      return '55%'
+      return '55%';
     case 'cleaning':
-      return '70%'
+      return '70%';
     case 'complete':
-      return '700px'
+      return '700px';
     default:
-      return '60%'
+      return '60%';
   }
-})
+});
 
 // 关闭对话框
 const closeDialog = () => {
-  emit('close')
-}
+  emit('close');
+};
 </script>
 
 <template>

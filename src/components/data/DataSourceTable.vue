@@ -1,122 +1,122 @@
 <script setup lang="ts">
-import { DocumentCopy, View, Edit, Delete, Search } from '@element-plus/icons-vue'
-import { ref, onMounted, nextTick, watch } from 'vue'
-import type { ElTable } from 'element-plus'
-import type { DataSourceMetadataWithID } from '@/types'
+import { DocumentCopy, View, Edit, Delete, Search } from '@element-plus/icons-vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
+import type { ElTable } from 'element-plus';
+import type { DataSourceMetadataWithID } from '@/types';
 
 // 使用 defineModel 实现分页相关双向绑定
-const currentPage = defineModel<number>('currentPage', { required: true })
-const pageSize = defineModel<number>('pageSize', { required: true })
+const currentPage = defineModel<number>('currentPage', { required: true });
+const pageSize = defineModel<number>('pageSize', { required: true });
 
 // 定义组件属性
 interface Props {
-  dataSources: DataSourceMetadataWithID[]
-  isLoading: boolean
-  total: number
-  selectedSources: string[]
+  dataSources: DataSourceMetadataWithID[];
+  isLoading: boolean;
+  total: number;
+  selectedSources: string[];
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 // 表格引用
-const tableRef = ref<InstanceType<typeof ElTable>>()
+const tableRef = ref<InstanceType<typeof ElTable>>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  selectionChange: [selection: DataSourceMetadataWithID[]]
-  edit: [source: DataSourceMetadataWithID]
-  delete: [source: DataSourceMetadataWithID]
-  preview: [source: DataSourceMetadataWithID]
-  analyze: [source: DataSourceMetadataWithID]
-}>()
+  selectionChange: [selection: DataSourceMetadataWithID[]];
+  edit: [source: DataSourceMetadataWithID];
+  delete: [source: DataSourceMetadataWithID];
+  preview: [source: DataSourceMetadataWithID];
+  analyze: [source: DataSourceMetadataWithID];
+}>();
 
 // 数据源类型人类可读表示
 const sourceTypeHumanRepr = (metadata: DataSourceMetadataWithID) => {
   if (!metadata.source_type.startsWith('dremio:')) {
-    return metadata.source_type
+    return metadata.source_type;
   }
-  const type = metadata.source_type.split(':')[1]
+  const type = metadata.source_type.split(':')[1];
   switch (type) {
     case 'PROMOTED':
     case 'FILE':
-      const parts = metadata.id.split('_')
-      const fileExt = parts[parts.length - 1].toLowerCase()
-      return fileExt === 'csv' ? 'CSV 文件' : ['xls', 'xlsx'].includes(fileExt) ? 'Excel 文件' : 'Dremio 数据集'
+      const parts = metadata.id.split('_');
+      const fileExt = parts[parts.length - 1].toLowerCase();
+      return fileExt === 'csv' ? 'CSV 文件' : ['xls', 'xlsx'].includes(fileExt) ? 'Excel 文件' : 'Dremio 数据集';
     case 'DIRECT':
-      return '数据库表'
+      return '数据库表';
   }
-  return type
-}
+  return type;
+};
 
 // 获取类型标签颜色
 const getTypeTagType = (source: DataSourceMetadataWithID) => {
-  const type = sourceTypeHumanRepr(source)
-  if (type.includes('CSV')) return 'success'
-  if (type.includes('Excel')) return 'warning'
-  if (type.includes('数据库')) return 'danger'
-  return 'info'
-}
+  const type = sourceTypeHumanRepr(source);
+  if (type.includes('CSV')) return 'success';
+  if (type.includes('Excel')) return 'warning';
+  if (type.includes('数据库')) return 'danger';
+  return 'info';
+};
 
 // 处理表格选择变化
 const handleSelectionChange = (selection: DataSourceMetadataWithID[]) => {
-  emit('selectionChange', selection)
-}
+  emit('selectionChange', selection);
+};
 
 // 根据当前选择状态设置行的选中状态
 const setRowSelection = () => {
-  if (!tableRef.value) return
+  if (!tableRef.value) return;
 
   // 清除现有选择
-  tableRef.value.clearSelection()
+  tableRef.value.clearSelection();
 
   // 根据 selectedSources 重新设置选中状态
   props.dataSources.forEach(row => {
     if (props.selectedSources.includes(row.source_id)) {
-      tableRef.value?.toggleRowSelection(row, true)
+      tableRef.value?.toggleRowSelection(row, true);
     }
-  })
-}
+  });
+};
 
 // 编辑数据源
 const handleEdit = (source: DataSourceMetadataWithID) => {
-  emit('edit', source)
-}
+  emit('edit', source);
+};
 
 // 删除数据源
 const handleDelete = (source: DataSourceMetadataWithID) => {
-  emit('delete', source)
-}
+  emit('delete', source);
+};
 
 // 预览数据源
 const handlePreview = (source: DataSourceMetadataWithID) => {
-  emit('preview', source)
-}
+  emit('preview', source);
+};
 
 // 分析数据源
 const handleAnalyze = (source: DataSourceMetadataWithID) => {
-  emit('analyze', source)
-}
+  emit('analyze', source);
+};
 
 // 在组件挂载后设置选中状态
 onMounted(() => {
   nextTick(() => {
-    setRowSelection()
-  })
-})
+    setRowSelection();
+  });
+});
 
 // 监听数据源变化，保持选择状态
 watch(() => props.dataSources, () => {
   nextTick(() => {
-    setRowSelection()
-  })
-}, { deep: true })
+    setRowSelection();
+  });
+}, { deep: true });
 
 // 监听选中源变化，保持选择状态
 watch(() => props.selectedSources, () => {
   nextTick(() => {
-    setRowSelection()
-  })
-}, { deep: true })
+    setRowSelection();
+  });
+}, { deep: true });
 </script>
 
 <template>

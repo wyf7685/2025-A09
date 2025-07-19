@@ -8,87 +8,87 @@ import {
   InfoFilled,
   Loading,
   Warning,
-} from '@element-plus/icons-vue'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+} from '@element-plus/icons-vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 export interface FlowStep {
-  id: string
-  title: string
-  description?: string
-  status: 'pending' | 'running' | 'completed' | 'error'
-  timestamp: Date
-  details?: string[]
-  error?: string
+  id: string;
+  title: string;
+  description?: string;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  timestamp: Date;
+  details?: string[];
+  error?: string;
 }
 
 const props = defineProps<{
-  steps?: FlowStep[]
-}>()
+  steps?: FlowStep[];
+}>();
 
 const emit = defineEmits<{
-  clear: []
-}>()
+  clear: [];
+}>();
 
-const flowSteps = computed(() => props.steps || [])
+const flowSteps = computed(() => props.steps || []);
 
 // 折叠状态管理
-const expandedDescriptions = ref<boolean[]>([])
-const expandedDetails = ref<boolean[]>([])
-const expandedErrors = ref<boolean[]>([])
+const expandedDescriptions = ref<boolean[]>([]);
+const expandedDetails = ref<boolean[]>([]);
+const expandedErrors = ref<boolean[]>([]);
 
 // 是否需要折叠的判断
-const descriptionNeedsCollapse = ref<boolean[]>([])
-const detailsNeedCollapse = ref<boolean[]>([])
-const errorsNeedCollapse = ref<boolean[]>([])
+const descriptionNeedsCollapse = ref<boolean[]>([]);
+const detailsNeedCollapse = ref<boolean[]>([]);
+const errorsNeedCollapse = ref<boolean[]>([]);
 
 // 元素引用
-const descriptionRefs = ref<Element[]>([])
-const detailsRefs = ref<Element[]>([])
-const errorRefs = ref<Element[]>([])
+const descriptionRefs = ref<Element[]>([]);
+const detailsRefs = ref<Element[]>([]);
+const errorRefs = ref<Element[]>([]);
 
 const formatTime = (timestamp: Date) => {
   return timestamp.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
-  })
-}
+  });
+};
 
 const clearFlow = () => {
-  emit('clear')
-}
+  emit('clear');
+};
 
 // 设置元素引用
 const setDescriptionRef = (el: Element | null, index: number) => {
   if (el) {
-    descriptionRefs.value[index] = el
+    descriptionRefs.value[index] = el;
   }
-}
+};
 
 const setDetailsRef = (el: Element | null, index: number) => {
   if (el) {
-    detailsRefs.value[index] = el
+    detailsRefs.value[index] = el;
   }
-}
+};
 
 const setErrorRef = (el: Element | null, index: number) => {
   if (el) {
-    errorRefs.value[index] = el
+    errorRefs.value[index] = el;
   }
-}
+};
 
 // 切换折叠状态
 const toggleDescription = (index: number) => {
-  expandedDescriptions.value[index] = !expandedDescriptions.value[index]
-}
+  expandedDescriptions.value[index] = !expandedDescriptions.value[index];
+};
 
 const toggleDetails = (index: number) => {
-  expandedDetails.value[index] = !expandedDetails.value[index]
-}
+  expandedDetails.value[index] = !expandedDetails.value[index];
+};
 
 const toggleError = (index: number) => {
-  expandedErrors.value[index] = !expandedErrors.value[index]
-}
+  expandedErrors.value[index] = !expandedErrors.value[index];
+};
 
 // 检查内容是否需要折叠
 const checkCollapseNeeded = () => {
@@ -96,57 +96,57 @@ const checkCollapseNeeded = () => {
     // 检查描述是否需要折叠
     descriptionRefs.value.forEach((el, index) => {
       if (el) {
-        const lineHeight = parseInt(getComputedStyle(el).lineHeight)
-        const maxHeight = lineHeight * 2 // 最多显示2行
-        descriptionNeedsCollapse.value[index] = el.scrollHeight > maxHeight
+        const lineHeight = parseInt(getComputedStyle(el).lineHeight);
+        const maxHeight = lineHeight * 2; // 最多显示2行
+        descriptionNeedsCollapse.value[index] = el.scrollHeight > maxHeight;
       }
-    })
+    });
 
     // 检查详情是否需要折叠
     detailsRefs.value.forEach((el, index) => {
       if (el) {
-        const maxHeight = 120 // 最多显示120px高度
-        detailsNeedCollapse.value[index] = el.scrollHeight > maxHeight
+        const maxHeight = 120; // 最多显示120px高度
+        detailsNeedCollapse.value[index] = el.scrollHeight > maxHeight;
       }
-    })
+    });
 
     // 检查错误是否需要折叠
     errorRefs.value.forEach((el, index) => {
       if (el) {
-        const lineHeight = parseInt(getComputedStyle(el).lineHeight)
-        const maxHeight = lineHeight * 3 // 最多显示3行
-        errorsNeedCollapse.value[index] = el.scrollHeight > maxHeight
+        const lineHeight = parseInt(getComputedStyle(el).lineHeight);
+        const maxHeight = lineHeight * 3; // 最多显示3行
+        errorsNeedCollapse.value[index] = el.scrollHeight > maxHeight;
       }
-    })
-  })
-}
+    });
+  });
+};
 
 // 监听步骤变化，重新检查折叠状态
 watch(() => props.steps, () => {
   nextTick(() => {
     // 重置折叠状态
-    const stepsLength = flowSteps.value.length
-    expandedDescriptions.value = new Array(stepsLength).fill(false)
-    expandedDetails.value = new Array(stepsLength).fill(false)
-    expandedErrors.value = new Array(stepsLength).fill(false)
+    const stepsLength = flowSteps.value.length;
+    expandedDescriptions.value = new Array(stepsLength).fill(false);
+    expandedDetails.value = new Array(stepsLength).fill(false);
+    expandedErrors.value = new Array(stepsLength).fill(false);
 
-    descriptionNeedsCollapse.value = new Array(stepsLength).fill(false)
-    detailsNeedCollapse.value = new Array(stepsLength).fill(false)
-    errorsNeedCollapse.value = new Array(stepsLength).fill(false)
+    descriptionNeedsCollapse.value = new Array(stepsLength).fill(false);
+    detailsNeedCollapse.value = new Array(stepsLength).fill(false);
+    errorsNeedCollapse.value = new Array(stepsLength).fill(false);
 
     // 清空引用数组
-    descriptionRefs.value = []
-    detailsRefs.value = []
-    errorRefs.value = []
+    descriptionRefs.value = [];
+    detailsRefs.value = [];
+    errorRefs.value = [];
 
     // 检查折叠状态
-    setTimeout(checkCollapseNeeded, 100)
-  })
-}, { deep: true })
+    setTimeout(checkCollapseNeeded, 100);
+  });
+}, { deep: true });
 
 onMounted(() => {
-  checkCollapseNeeded()
-})
+  checkCollapseNeeded();
+});
 </script>
 
 <template>

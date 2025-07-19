@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
 
@@ -7,22 +7,22 @@ const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 
 // 计算属性
-const currentSessionId = computed(() => sessionStore.currentSession?.id)
+const currentSessionId = computed(() => sessionStore.currentSession?.id);
 const currentSessionName = computed(() => {
-  if (!currentSessionId.value) return '无'
-  const session = sessionStore.sessions.find(s => s.id === currentSessionId.value)
-  const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无')
-  return name.length > 11 ? name.slice(0, 11) + '...' : name
-})
-const dataSourceCount = computed(() => Object.keys(dataSourceStore.dataSources).length)
-const chatHistoryLength = computed(() => sessionStore.currentSession?.chat_history.length || 0)
+  if (!currentSessionId.value) return '无';
+  const session = sessionStore.sessions.find(s => s.id === currentSessionId.value);
+  const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无');
+  return name.length > 11 ? name.slice(0, 11) + '...' : name;
+});
+const dataSourceCount = computed(() => Object.keys(dataSourceStore.dataSources).length);
+const chatHistoryLength = computed(() => sessionStore.currentSession?.chat_history.length || 0);
 
 // 生命周期
 onMounted(() => {
   sessionStore.listSessions().catch(error => {
-    console.error('加载会话列表失败:', error)
-  })
-})
+    console.error('加载会话列表失败:', error);
+  });
+});
 </script>
 
 <template>

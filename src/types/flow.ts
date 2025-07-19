@@ -1,4 +1,4 @@
-import type { Ref } from "vue";
+import type { Ref } from 'vue';
 
 // 流程图步骤类型定义
 export interface FlowStep {

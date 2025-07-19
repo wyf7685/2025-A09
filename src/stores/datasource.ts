@@ -1,4 +1,10 @@
-import type { AnyDatabaseConnection, DataSourceMetadata, DataSourceMetadataWithID, DremioDatabaseType, SourceID } from '@/types';
+import type {
+  AnyDatabaseConnection,
+  DataSourceMetadata,
+  DataSourceMetadataWithID,
+  DremioDatabaseType,
+  SourceID,
+} from '@/types';
 import api from '@/utils/api';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
@@ -70,14 +76,12 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
-  const createDatabaseSource = async(
-    params: {
-      database_type: DremioDatabaseType;
-      connection: AnyDatabaseConnection;
-      name?: string;
-      description?: string;
-    }
-  ) => {
+  const createDatabaseSource = async (params: {
+    database_type: DremioDatabaseType;
+    connection: AnyDatabaseConnection;
+    name?: string;
+    description?: string;
+  }) => {
     try {
       const response = await api.post<{
         source_id: SourceID;
@@ -89,7 +93,7 @@ export const useDataSourceStore = defineStore('dataSource', () => {
       console.error('Failed to create database source:', error);
       throw error;
     }
-  }
+  };
 
   const updateDataSource = async (
     sourceId: SourceID,

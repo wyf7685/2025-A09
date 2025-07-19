@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { DataSourceMetadataWithID } from '@/types'
+import { ref, watch } from 'vue';
+import type { DataSourceMetadataWithID } from '@/types';
 
 // 使用 defineModel 实现对话框可见性双向绑定
-const visible = defineModel<boolean>('visible', { required: true })
+const visible = defineModel<boolean>('visible', { required: true });
 
 // 定义组件属性
 interface Props {
-  datasource: DataSourceMetadataWithID | null
+  datasource: DataSourceMetadataWithID | null;
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  save: [name: string, description: string]
-}>()
+  save: [name: string, description: string];
+}>();
 
 // 编辑表单数据
 const editForm = ref({
   name: '',
   description: ''
-})
+});
 
 // 监听数据源变化，更新表单数据
 watch(() => props.datasource, (newVal) => {
   if (newVal) {
-    editForm.value.name = newVal.name
-    editForm.value.description = newVal.description || ''
+    editForm.value.name = newVal.name;
+    editForm.value.description = newVal.description || '';
   }
-}, { immediate: true })
+}, { immediate: true });
 
 // 保存编辑
 const saveEdit = () => {
-  emit('save', editForm.value.name, editForm.value.description)
-}
+  emit('save', editForm.value.name, editForm.value.description);
+};
 </script>
 
 <template>

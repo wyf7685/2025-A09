@@ -6,30 +6,30 @@ import { CircleCheck, EditPen, RefreshRight, Upload } from '@element-plus/icons-
 const step = defineModel<CleaningStep>('step', {
   required: true,
   default: 'complete'
-})
+});
 
 // 定义组件属性
 defineProps<{
-  analysisResult: any
-  selectedCleaningActions: CleaningAction[]
-  cleaningSuggestions: CleaningSuggestion[]
-}>()
+  analysisResult: any;
+  selectedCleaningActions: CleaningAction[];
+  cleaningSuggestions: CleaningSuggestion[];
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  complete: []
-  skipAndUpload: []
-  analyze: []
-}>()
+  complete: [];
+  skipAndUpload: [];
+  analyze: [];
+}>();
 
 // 完成清洗
-const completeCleaningAndUpload = () => emit('complete')
+const completeCleaningAndUpload = () => emit('complete');
 
 // 跳过清洗直接上传
-const skipAnalysisAndUpload = () => emit('skipAndUpload')
+const skipAnalysisAndUpload = () => emit('skipAndUpload');
 
 // 重新分析
-const startAnalysis = () => emit('analyze')
+const startAnalysis = () => emit('analyze');
 </script>
 
 <template>

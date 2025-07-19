@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { DataSourceMetadataWithID } from '@/types'
-import { formatRowCount } from '@/utils/dataSourceUtils'
+import type { DataSourceMetadataWithID } from '@/types';
+import { formatRowCount } from '@/utils/dataSourceUtils';
 import {
   Connection,
   Delete,
@@ -12,71 +12,71 @@ import {
   More,
   TrendCharts,
   View
-} from '@element-plus/icons-vue'
+} from '@element-plus/icons-vue';
 
 interface Props {
-  dataSource: DataSourceMetadataWithID
+  dataSource: DataSourceMetadataWithID;
 }
 
 interface Emits {
-  (e: 'analyze', dataSource: DataSourceMetadataWithID): void
-  (e: 'preview', dataSource: DataSourceMetadataWithID): void
-  (e: 'edit', dataSource: DataSourceMetadataWithID): void
-  (e: 'download', dataSource: DataSourceMetadataWithID): void
-  (e: 'delete', dataSource: DataSourceMetadataWithID): void
+  (e: 'analyze', dataSource: DataSourceMetadataWithID): void;
+  (e: 'preview', dataSource: DataSourceMetadataWithID): void;
+  (e: 'edit', dataSource: DataSourceMetadataWithID): void;
+  (e: 'download', dataSource: DataSourceMetadataWithID): void;
+  (e: 'delete', dataSource: DataSourceMetadataWithID): void;
 }
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+const props = defineProps<Props>();
+const emit = defineEmits<Emits>();
 
 // 获取图标组件
 const getIconComponent = () => {
-  const type = props.dataSource.source_type.toLowerCase()
-  if (type.includes('csv')) return DocumentCopy
-  if (type.includes('excel') || type.includes('xlsx')) return Document
-  if (type.includes('database') || type.includes('direct')) return Connection
-  return Folder
-}
+  const type = props.dataSource.source_type.toLowerCase();
+  if (type.includes('csv')) return DocumentCopy;
+  if (type.includes('excel') || type.includes('xlsx')) return Document;
+  if (type.includes('database') || type.includes('direct')) return Connection;
+  return Folder;
+};
 
 // 获取类型标签颜色
 const getTypeTagType = () => {
-  const type = props.dataSource.source_type.toLowerCase()
-  if (type.includes('csv')) return 'success'
-  if (type.includes('excel')) return 'warning'
-  if (type.includes('database')) return 'danger'
-  return 'info'
-}
+  const type = props.dataSource.source_type.toLowerCase();
+  if (type.includes('csv')) return 'success';
+  if (type.includes('excel')) return 'warning';
+  if (type.includes('database')) return 'danger';
+  return 'info';
+};
 
 // 获取类型文本
 const getTypeText = () => {
-  const type = props.dataSource.source_type
-  if (type.includes('csv')) return 'CSV'
-  if (type.includes('excel')) return 'Excel'
-  if (type.includes('database')) return '数据库'
-  return '未知'
-}
+  const type = props.dataSource.source_type;
+  if (type.includes('csv')) return 'CSV';
+  if (type.includes('excel')) return 'Excel';
+  if (type.includes('database')) return '数据库';
+  return '未知';
+};
 
 // 获取状态标签颜色
 const getStatusTagType = () => {
   if (props.dataSource.row_count && props.dataSource.row_count > 0) {
-    return 'success'
+    return 'success';
   }
   if (props.dataSource.row_count === 0) {
-    return 'warning'
+    return 'warning';
   }
-  return 'info'
-}
+  return 'info';
+};
 
 // 获取状态文本
 const getStatusText = () => {
   if (props.dataSource.row_count && props.dataSource.row_count > 0) {
-    return '正常'
+    return '正常';
   }
   if (props.dataSource.row_count === 0) {
-    return '无数据'
+    return '无数据';
   }
-  return '未知'
-}
+  return '未知';
+};
 </script>
 
 <template>

@@ -1,37 +1,37 @@
 <script setup lang="ts">
-import { ArrowRight, Search, DocumentChecked, EditPen } from '@element-plus/icons-vue'
-import { turncateString } from '@/utils/tools'
-import { ElMessage } from 'element-plus'
+import { ArrowRight, Search, DocumentChecked, EditPen } from '@element-plus/icons-vue';
+import { turncateString } from '@/utils/tools';
+import { ElMessage } from 'element-plus';
 
 // 使用 defineModel 实现双向绑定
-const searchQuery = defineModel<string>('searchQuery', { required: true })
+const searchQuery = defineModel<string>('searchQuery', { required: true });
 
 // 获取props
 const props = defineProps<{
-  selectedSources: string[]
-  sourceNames: Record<string, string>
-}>()
+  selectedSources: string[];
+  sourceNames: Record<string, string>;
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{
-  createSession: []
-}>()
+  createSession: [];
+}>();
 
 // 创建会话
 const createSessionWithSelectedSources = () => {
   if (props.selectedSources.length === 0) {
-    ElMessage.warning('请至少选择一个数据集')
-    return
+    ElMessage.warning('请至少选择一个数据集');
+    return;
   }
 
-  emit('createSession')
-}
+  emit('createSession');
+};
 
 
 // 获取展示的数据源名称
 const getDatasourceName = (sourceId: string): string => {
-  return props.sourceNames[sourceId] || `${sourceId.slice(0, 8)}...`
-}
+  return props.sourceNames[sourceId] || `${sourceId.slice(0, 8)}...`;
+};
 </script>
 
 <template>

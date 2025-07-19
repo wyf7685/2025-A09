@@ -1,46 +1,46 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Model } from '@/types';
-import { useSessionStore } from '@/stores/session';
 import { useModelStore } from '@/stores/model';
+import { useSessionStore } from '@/stores/session';
+import type { Model } from '@/types';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { onMounted, ref } from 'vue';
 
 const sessionStore = useSessionStore();
 const modelStore = useModelStore();
 
 // 响应式数据
-const loading = ref<boolean>(false)
-const models = ref<Model[]>([])
-const showModelDialog = ref<boolean>(false)
-const selectedModel = ref<Model | null>(null)
+const loading = ref<boolean>(false);
+const models = ref<Model[]>([]);
+const showModelDialog = ref<boolean>(false);
+const selectedModel = ref<Model | null>(null);
 
 // 方法
 const refreshModels = async (): Promise<void> => {
-  loading.value = true
+  loading.value = true;
   try {
-    const sessionId = sessionStore.currentSession?.id
+    const sessionId = sessionStore.currentSession?.id;
     if (sessionId) {
-      const response = await modelStore.getModels(sessionId)
-      models.value = response.models || []
+      const response = await modelStore.getModels(sessionId);
+      models.value = response.models || [];
     }
   } catch (error) {
-    console.error('刷新模型失败:', error)
-    ElMessage.error('获取模型列表失败')
+    console.error('刷新模型失败:', error);
+    ElMessage.error('获取模型列表失败');
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const formatDate = (timestamp: string | undefined): string => {
-  if (!timestamp) return '未知'
-  const date = new Date(timestamp)
-  return date.toLocaleString()
-}
+  if (!timestamp) return '未知';
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+};
 
 const viewModel = (model: Model): void => {
-  selectedModel.value = model
-  showModelDialog.value = true
-}
+  selectedModel.value = model;
+  showModelDialog.value = true;
+};
 
 const deleteModel = async (modelId: string): Promise<void> => {
   try {
@@ -52,23 +52,23 @@ const deleteModel = async (modelId: string): Promise<void> => {
         cancelButtonText: '取消',
         type: 'warning',
       }
-    )
+    );
 
-    await modelStore.deleteModel(modelId)
-    await refreshModels()
-    ElMessage.success('模型删除成功')
+    await modelStore.deleteModel(modelId);
+    await refreshModels();
+    ElMessage.success('模型删除成功');
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除模型失败:', error)
-      ElMessage.error('删除模型失败')
+      console.error('删除模型失败:', error);
+      ElMessage.error('删除模型失败');
     }
   }
-}
+};
 
 // 生命周期
 onMounted(() => {
-  refreshModels()
-})
+  refreshModels();
+});
 </script>
 
 <template>
