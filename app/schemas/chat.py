@@ -98,3 +98,16 @@ class ChatEntry(BaseModel):
             merged_content.append(AssistantChatMessageText(content=current_text))
 
         self.assistant_response.content = merged_content
+
+
+class SummaryRequest(BaseModel):
+    """总结请求"""
+    session_id: str
+    model_id: str | None = None
+
+
+class SummaryResponse(BaseModel):
+    """总结响应"""
+    session_id: str
+    summary: str
+    figures: list[str] = Field(default_factory=list)

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
-export const API_BASE_URL = 'http://127.0.0.1:8082/api';
+export const API_BASE_URL = 'http://127.0.0.1:8081/api';
 
 // 创建 axios 实例
 const api = axios.create({
@@ -493,5 +493,100 @@ export const dataSourceAPI = {
       params: { limit, skip }
     });
     return response.data;
+  },
+};
+
+// 报告生成API
+export const reportAPI = {
+  // 获取报告模板列表
+  getTemplates: async () => {
+    try {
+      const response = await api.get('/chat/templates');
+      return response.data;
+    } catch (error) {
+      console.error('获取模板列表失败:', error);
+      throw error;
+    }
+  },
+
+  // 上传自定义模板
+  uploadTemplate: async (
+    templateName: string,
+    templateDescription: string,
+    templateFile: File
+  ) => {
+    try {
+      const formData = new FormData();
+      formData.append('template_name', templateName);
+      formData.append('template_description', templateDescription);
+      formData.append('template_file', templateFile);
+      
+      const response = await api.post('/chat/templates/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('上传模板失败:', error);
+      throw error;
+    }
+  },
+
+  // 删除模板
+  deleteTemplate: async (templateId: string) => {
+    try {
+      const response = await api.delete(`/chat/templates/${templateId}`);
+      return response.data;
+    } catch (error) {
+      console.error('删除模板失败:', error);
+      throw error;
+    }
+  },
+
+  // 生成报告（基于现有的summary功能）
+  generateReport: async (
+    sessionId: string,
+    templateId?: string,
+    modelId?: string
+  ) => {
+    try {
+      const response = await api.post('/chat/generate-report', {
+        session_id: sessionId,
+        template_id: templateId,
+        model_id: modelId,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('生成报告失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取简单的summary（使用现有接口）
+  getSummary: async (sessionId: string, modelId?: string) => {
+    try {
+      const response = await api.post('/chat/summary', {
+        session_id: sessionId,
+        model_id: modelId,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('获取总结失败:', error);
+      throw error;
+    }
+  },
+
+  // 下载报告为Markdown文件
+  downloadReport: (content: string, filename: string = '分析报告.md'): void => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 };
