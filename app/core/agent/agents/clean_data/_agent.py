@@ -18,7 +18,7 @@ from app.log import logger
 from ._clean import (
     apply_cleaning,
     apply_cleaning_actions,
-    apply_user_selected_cleaning,
+    apply_user_selected_cleaning_with_ai,  # 使用新的AI驱动的函数
     generate_cleaning_summary,
     generate_suggestions,
 )
@@ -61,7 +61,7 @@ class SmartCleanDataAgent:
         self._graph = _create_graph()
         # Export methods
         self.apply_cleaning_actions = apply_cleaning_actions
-        self.apply_user_selected_cleaning = apply_user_selected_cleaning
+        self.apply_user_selected_cleaning = apply_user_selected_cleaning_with_ai
 
     def process_and_clean_file(
         self,
@@ -96,7 +96,7 @@ class SmartCleanDataAgent:
                 ]
 
             # 3. 应用用户选择的清洗操作
-            cleaning_result = apply_user_selected_cleaning(
+            cleaning_result = apply_user_selected_cleaning_with_ai(
                 file_path=file_path,
                 selected_suggestions=selected_suggestions,
                 field_mappings=analysis_result.get("field_mappings", {}),
