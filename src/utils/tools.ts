@@ -35,3 +35,50 @@ export const turncateString = (str: string, maxLength: number): string => {
   }
   return str.slice(0, maxLength) + '...';
 };
+
+export const parsePossibleJsonString = (value: any) => {
+  try {
+    const obj = JSON.parse(value);
+    return JSON.stringify(obj, null, 2);
+  } catch (_: unknown) {
+    return value;
+  }
+};
+
+export const base64ToBlob = (b64_data: string, contentType: string = ''): Blob | null => {
+  // 检查 b64_data 是否以 "data:" 开头，如果是，则提取实际的 Base64 数据和 MIME 类型
+  let base64String = b64_data;
+  let mimeType = contentType;
+
+  if (b64_data.startsWith('data:')) {
+    const parts = b64_data.split(',');
+    if (parts.length > 1) {
+      // 提取 MIME 类型，例如 "image/png"
+      const meta = parts[0].split(';')[0].split(':')[1];
+      if (meta) {
+        mimeType = meta;
+      }
+      // 提取实际的 Base64 数据
+      base64String = parts[1];
+    }
+  }
+
+  // 检查是否成功提取了 MIME 类型，如果没有，则尝试从 b64_data 中推断
+  if (!mimeType) {
+    // 这是一个简单的推断，可能不适用于所有情况
+    if (base64String.startsWith('/9j/')) {
+      mimeType = 'image/jpeg';
+    } else if (base64String.startsWith('iVBORw0KGgo')) {
+      mimeType = 'image/png';
+    } else if (base64String.startsWith('R0lGODlh')) {
+      mimeType = 'image/gif';
+    } else {
+      console.warn('无法从 Base64 数据中推断 MIME 类型');
+      return null;
+    }
+  }
+
+  return new Blob([Uint8Array.from(atob(base64String), (c) => c.charCodeAt(0))], {
+    type: mimeType,
+  });
+};

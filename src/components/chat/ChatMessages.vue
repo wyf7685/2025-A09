@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import AssistantMessage from '@/components/chat/AssistantMessage.vue';
 import type { ChatMessage } from '@/types';
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import AssistantMessage from './message/AssistantMessage.vue';
+import UserMessage from './message/UserMessage.vue';
+import { ElIcon, ElButton } from 'element-plus';
+import { Loading } from '@element-plus/icons-vue';
 
 type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[]; };
 
@@ -16,6 +19,8 @@ const emit = defineEmits<{
 }>();
 
 const messagesContainer = ref<HTMLElement | null>(null);
+
+const lastMessage = computed(() => props.messages.length ? props.messages[props.messages.length - 1] : null);
 
 // 工具函数：去除markdown粗体、冒号和多余空格，只取建议标题部分
 const stripSuggestion = (s: string) => {
@@ -76,34 +81,29 @@ onMounted(() => {
     </div>
 
     <!-- 消息列表 -->
-    <div v-for="(message, index) in messages" :key="index">
-      <!-- AI 助手消息 -->
-      <AssistantMessage v-if="message.type === 'assistant'" :message="message" />
-      <!-- 用户消息 -->
-      <div v-else class="user-message-container">
-        <div class="user-message">
-          {{ message.content }}
+    <template v-else>
+      <div v-for="(message, index) in messages" :key="index">
+        <AssistantMessage v-if="message.type === 'assistant'" :message="message" />
+        <UserMessage v-else :content="message.content" />
+      </div>
+      <!-- 最后一条 AI 消息的加载状态和建议按钮 -->
+      <template v-if="lastMessage?.type === 'assistant'">
+        <!-- 加载状态 -->
+        <div v-if="lastMessage.loading" class="message-loading">
+          <el-icon>
+            <Loading class="rotating" />
+          </el-icon>
+          <span>正在处理...</span>
         </div>
-      </div>
-
-      <!-- 加载状态 -->
-      <div v-if="message.type === 'assistant' && message.loading" class="message-loading">
-        <el-icon>
-          <Loading class="rotating" />
-        </el-icon>
-        <span>正在处理...</span>
-      </div>
-
-      <!-- 建议按钮 -->
-      <div v-if="message.suggestions && message.suggestions.length" class="suggestion-buttons">
-        <el-button v-for="(suggestion, idx) in message.suggestions" :key="idx" size="small"
-          @click="addSampleQuestion(suggestion)" style="margin: 4px 4px 0 0;">
-          {{ stripSuggestion(suggestion) }}
-        </el-button>
-      </div>
-
-    </div>
-
+        <!-- 建议按钮 -->
+        <div v-if="!lastMessage.loading && lastMessage.suggestions?.length" class="suggestion-buttons">
+          <el-button v-for="(suggestion, idx) in lastMessage.suggestions" :key="idx" size="small"
+            @click="addSampleQuestion(suggestion)" style="margin: 4px 4px 0 0;">
+            {{ stripSuggestion(suggestion) }}
+          </el-button>
+        </div>
+      </template>
+    </template>
   </div>
 </template>
 
@@ -134,25 +134,6 @@ onMounted(() => {
       background: #a8a8a8;
     }
   }
-}
-
-.user-message-container {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.user-message {
-  background: #f3f4f6;
-  color: #1f2937;
-  padding: 12px 16px;
-  border-radius: 18px 18px 6px 18px;
-  max-width: 70%;
-  word-wrap: break-word;
-  font-size: 14px;
-  line-height: 1.5;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
 }
 
 .empty-state {
