@@ -13,6 +13,7 @@ import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { reportAPI } from '@/utils/api';
+import type { ReportTemplate } from '@/types/report';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
@@ -38,7 +39,7 @@ const currentDatasets = computed(() =>
 // 报告生成相关状态
 const reportDialogVisible = ref(false);
 const isGeneratingReport = ref(false);
-const reportTemplates = ref<any[]>([]);
+const reportTemplates = ref<ReportTemplate[]>([]);
 const selectedTemplateId = ref<string>('default');
 const generatedReport = ref<string>('');
 const reportFigures = ref<string[]>([]);
@@ -66,9 +67,7 @@ const {
 const loadReportTemplates = async () => {
   try {
     const result = await reportAPI.getTemplates();
-    if (result.success) {
-      reportTemplates.value = result.templates;
-    }
+    reportTemplates.value = result;
   } catch (error) {
     console.error('加载报告模板失败:', error);
     ElMessage.error('加载报告模板失败');

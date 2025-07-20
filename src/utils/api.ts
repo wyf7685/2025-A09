@@ -1,5 +1,6 @@
 import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import type { DataSourceMetadata } from '@/types/dataSources';
+import type { ReportTemplate } from '@/types/report';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
@@ -448,7 +449,7 @@ export const reportAPI = {
   // 获取报告模板列表
   getTemplates: async () => {
     try {
-      const response = await api.get('/chat/templates');
+      const response = await api.get<ReportTemplate[]>('/chat/templates');
       return response.data;
     } catch (error) {
       console.error('获取模板列表失败:', error);
@@ -464,7 +465,11 @@ export const reportAPI = {
       formData.append('template_description', templateDescription);
       formData.append('template_file', templateFile);
 
-      const response = await api.post('/chat/templates/upload', formData, {
+      const response = await api.post<{
+        id: string;
+        name: string;
+        description: string;
+      }>('/chat/templates/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -479,7 +484,7 @@ export const reportAPI = {
   // 删除模板
   deleteTemplate: async (templateId: string) => {
     try {
-      const response = await api.delete(`/chat/templates/${templateId}`);
+      const response = await api.delete<void>(`/chat/templates/${templateId}`);
       return response.data;
     } catch (error) {
       console.error('删除模板失败:', error);
@@ -490,7 +495,12 @@ export const reportAPI = {
   // 生成报告（基于现有的summary功能）
   generateReport: async (sessionId: string, templateId?: string, modelId?: string) => {
     try {
-      const response = await api.post('/chat/generate-report', {
+      const response = await api.post<{
+        session_id: string;
+        report: string;
+        figures: string[];
+        template_used: string;
+      }>('/chat/generate-report', {
         session_id: sessionId,
         template_id: templateId,
         model_id: modelId,
@@ -498,20 +508,6 @@ export const reportAPI = {
       return response.data;
     } catch (error) {
       console.error('生成报告失败:', error);
-      throw error;
-    }
-  },
-
-  // 获取简单的summary（使用现有接口）
-  getSummary: async (sessionId: string, modelId?: string) => {
-    try {
-      const response = await api.post('/chat/summary', {
-        session_id: sessionId,
-        model_id: modelId,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('获取总结失败:', error);
       throw error;
     }
   },

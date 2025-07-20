@@ -38,6 +38,7 @@ TOOL_INTRO = _read_prompt_file("tool_intro.md")
 SYSTEM_PROMPT = _read_prompt_file("system.md")
 CREATE_TITLE_PROMPT = _read_prompt_file("create_title.md")
 SUMMARY_PROMPT = _read_prompt_file("summary.md")
+DEFAULT_REPORT_TEMPLATE = _read_prompt_file("default_report_template.md")
 
 
 def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
@@ -89,11 +90,14 @@ def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object
     return (lambda _: input) | prompt | llm
 
 
-def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, tuple[str, list[str]]]:
+def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[str, list[str]]]:
+    def params(report_template: str) -> dict[str, str]:
+        """返回包含报告模板的参数字典"""
+        return {"conversation": conversation, "tool_intro": TOOL_INTRO, "report_template": report_template}
+
     conversation, figures = format_conversation(messages, include_figures=True)
-    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation", "tool_intro"])
-    params = {"conversation": conversation, "tool_intro": TOOL_INTRO}
-    return (lambda _: params) | prompt | llm | (lambda s: (s, figures))
+    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation", "tool_intro", "report_template"])
+    return params | prompt | llm | (lambda s: (s, figures))
 
 
 class DataAnalyzerAgent:
@@ -137,17 +141,21 @@ class DataAnalyzerAgent:
         """获取当前 agent 的对话记录"""
         return self.agent.get_state(self.config).values["messages"]
 
+    def has_messages(self) -> bool:
+        """检查 agent 是否有对话记录"""
+        return len(self.get_messages()) > 0
+
     def create_title(self) -> str:
         return _create_title_chain(self.llm, self.get_messages()).invoke(...)
 
     async def create_title_async(self) -> str:
         return await _create_title_chain(self.llm, self.get_messages()).ainvoke(...)
 
-    def summary(self) -> tuple[str, list[str]]:
-        return _summary_chain(self.llm, self.get_messages()).invoke(...)
+    def summary(self, report_template: str | None = None) -> tuple[str, list[str]]:
+        return _summary_chain(self.llm, self.get_messages()).invoke(report_template or DEFAULT_REPORT_TEMPLATE)
 
-    async def summary_async(self) -> tuple[str, list[str]]:
-        return await _summary_chain(self.llm, self.get_messages()).ainvoke(...)
+    async def summary_async(self, report_template: str | None = None) -> tuple[str, list[str]]:
+        return await _summary_chain(self.llm, self.get_messages()).ainvoke(report_template or DEFAULT_REPORT_TEMPLATE)
 
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""

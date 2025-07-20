@@ -9,7 +9,7 @@ from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
-from app.utils import run_sync
+from app.utils import escape_tag, run_sync
 
 
 class DataAnalyzerAgentService:
@@ -34,7 +34,9 @@ class DataAnalyzerAgentService:
         agent = DataAnalyzerAgent(sources, llm, chat_model, session.id)
         agent.load_state(state_file)
         self.agents[session.id] = model_id, agent
-        logger.info(f"为会话 {session.id} 创建新 Agent，使用模型: {model_id}")
+        logger.opt(colors=True).info(
+            f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
+        )
         return agent
 
     def get_agent(
@@ -52,6 +54,7 @@ class DataAnalyzerAgentService:
         """尝试获取会话的 Agent"""
         if self.in_use.get(session_id, False):
             return False
+        logger.opt(colors=True).info(f"获取会话 <c>{escape_tag(session_id)}</> 的 Agent")
         self.in_use[session_id] = True
         return True
 
@@ -59,9 +62,9 @@ class DataAnalyzerAgentService:
         """释放会话的 Agent"""
         if session_id in self.in_use:
             del self.in_use[session_id]
-            logger.info(f"释放会话 {session_id} 的 Agent")
+            logger.opt(colors=True).info(f"释放会话 <c>{escape_tag(session_id)}</> 的 Agent")
         else:
-            logger.warning(f"尝试释放未被占用的会话 {session_id} 的 Agent")
+            logger.opt(colors=True).warning(f"尝试释放未被占用的会话 <c>{escape_tag(session_id)}</> 的 Agent")
 
     @contextlib.asynccontextmanager
     async def use_agent(

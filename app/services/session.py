@@ -45,7 +45,7 @@ class SessionService:
                 logger.opt(exception=True).warning(f"Failed to load session from {fp}")
 
     def load_session(self, session_id: SessionID | Path) -> Session:
-        fp = SESSION_DIR / f"{session_id}.json" if isinstance(session_id, str) else session_id
+        fp = (SESSION_DIR / f"{session_id}.json") if isinstance(session_id, str) else session_id
         if not fp.exists():
             raise KeyError(f"Session with id {session_id} not found")
         try:
@@ -80,9 +80,9 @@ class SessionService:
         ]
 
     def delete_session(self, session_id: SessionID) -> None:
+        fp = SESSION_DIR / f"{session_id}.json"
         if session_id not in self.sessions:
             # 检查文件是否存在，如果存在则尝试加载后再删除
-            fp = SESSION_DIR / f"{session_id}.json"
             if fp.exists():
                 try:
                     self.load_session(session_id)
@@ -102,7 +102,6 @@ class SessionService:
         self.sessions.pop(session_id, None)
 
         # 删除文件
-        fp = SESSION_DIR / f"{session_id}.json"
         try:
             if fp.exists():
                 fp.unlink()
