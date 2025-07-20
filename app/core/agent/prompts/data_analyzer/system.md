@@ -110,7 +110,7 @@
 - 分层采样（stratify_by参数）有助于保持目标变量分布
 
 **多数据集工作流示例**：
-<code>
+```python
 # 1. 检查原始数据集
 main_data_info = inspect_dataframe_tool(dataset_id="main_data")
 
@@ -141,7 +141,7 @@ test_data_result = create_dataset_from_query_tool(
     dataset_id=analysis_subset_result["new_dataset_id"],
     query=f"index not in {{train_data_result['creation_details']['sampled_indices']}}"
 )
-</code>
+```
 
 ## 数据清洗最佳实践
 
@@ -164,7 +164,7 @@ test_data_result = create_dataset_from_query_tool(
 5. 如果缺失值比例很高，考虑是否应该保留该列
 
 **处理数据错位的示例**：
-<code>
+```python
 # 1. 检查数据集状态
 df_info = inspect_dataframe_tool(dataset_id="raw_data")
 
@@ -193,7 +193,7 @@ if missing_values_summary["missing_by_column"]["age"] < 0.1:  # 少于10%的缺�
         column="age",
         method="fill_median"
     )
-</code>
+```
 
 **数据清洗后的验证**：
 - 使用inspect_dataframe_tool检查清洗后的数据状态
@@ -235,7 +235,7 @@ if missing_values_summary["missing_by_column"]["age"] < 0.1:  # 少于10%的缺�
 - 尝试不同类型的模型并比较性能
 
 **集成模型构建伪代码示例**：
-<code>
+```python
 # 1. 优化基础模型超参数
 rf_params_result = optimize_hyperparameters_tool(
     features=["feature1", "feature2"],
@@ -289,7 +289,7 @@ ensemble_id = create_composite_model_tool(
 
 # 6. 评估集成模型
 ensemble_eval = evaluate_model_tool(ensemble_id)
-</code>
+```
 
 **预测与应用工作流**：
 1. 使用fit_model_tool训练模型或load_model_tool加载模型
@@ -298,7 +298,7 @@ ensemble_eval = evaluate_model_tool(ensemble_id)
 4. 分析预测结果，提取关键见解
 
 **模型预测工作流示例**：
-<code>
+```python
 # 1. 训练或加载模型
 model_id = create_model_tool(
     model_type="random_forest_classifier",
@@ -330,7 +330,7 @@ predictions_info = inspect_dataframe_tool(
         "show_summary_stats": True
     }}
 )
-</code>
+```
 
 **预测结果解释最佳实践**：
 - 解释预测分布的特点（如均值、分位数、极值）

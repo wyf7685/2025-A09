@@ -185,6 +185,7 @@ def scikit_tools(
     ) -> str:
         """
         使用指定的模型实例和数据进行训练。
+        模型ID由create_model_tool或create_composite_model_tool创建。
 
         Args:
             dataset_id (str): 操作的数据集ID。
@@ -236,6 +237,7 @@ def scikit_tools(
     ) -> str:
         """
         创建集成模型，组合多个已训练模型以提高性能。
+        创建模型后，应使用fit_model_tool进行训练。
 
         Args:
             model_ids (list[str]): 已训练模型的ID列表，通过fit_model_tool获得
@@ -252,7 +254,7 @@ def scikit_tools(
             meta_model_hyperparams (dict, optional): 元模型的超参数，仅用于stacking或blending
 
         Returns:
-            str: 集成模型ID，可用于后续的fit_model_tool调用
+            str: 创建集成模型ID，可用于后续的fit_model_tool训练
         """
         # 验证模型ID是否存在
         models = []
@@ -333,6 +335,7 @@ def scikit_tools(
     def save_model_tool(model_id: ModelID) -> SaveModelResult:
         """
         保存训练好的机器学习模型及其元数据。
+        模型训练完成且效果可观时，应及时使用此工具保存模型。
 
         Args:
             model_id (str): 模型ID，由 `fit_model_tool` 返回。
