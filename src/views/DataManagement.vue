@@ -326,8 +326,11 @@ const analyzeDataQualityWithAI = async () => {
 
 // 应用清洗动作
 const applyCleaningActions = async () => {
-  if (selectedCleaningActions.value.length === 0) {
-    ElMessage.warning('请选择至少一个清洗建议');
+  // 检查是否有有效的字段映射
+  const hasFieldMappings = fieldMappings.value && Object.keys(fieldMappings.value).length > 0;
+  
+  if (selectedCleaningActions.value.length === 0 && !hasFieldMappings) {
+    ElMessage.warning('请选择至少一个清洗建议或确认字段映射');
     return;
   }
 
@@ -345,11 +348,15 @@ const applyCleaningActions = async () => {
         s.type === action.type && s.column === action.column
       );
 
+      // 确保issue_type字段正确设置
+      const issueType = action.type || originalSuggestion?.type || 'unknown';
+      
       return {
-        title: originalSuggestion?.title || `清洗操作: ${action.type}`,
-        type: action.type,
+        title: originalSuggestion?.title || `清洗操作: ${issueType}`,
+        type: issueType, // 保持向后兼容
+        issue_type: issueType, // 新的字段名
         column: action.column || '',
-        description: originalSuggestion?.description || `应用清洗操作: ${action.type} on ${action.column}`,
+        description: originalSuggestion?.description || `应用清洗操作: ${issueType} on ${action.column}`,
         severity: originalSuggestion?.severity || 'medium',
         priority: originalSuggestion?.priority || 'medium',
         options: originalSuggestion?.options || [{
@@ -357,14 +364,38 @@ const applyCleaningActions = async () => {
           description: `清洗列 ${action.column}`
         }],
         suggested_action: originalSuggestion?.description || `清洗列 ${action.column}`,
-        parameters: { method: action.parameters }
+        parameters: { 
+          method: action.parameters || 'default',
+          ...(originalSuggestion as any)?.parameters
+        },
+        method: action.parameters || (originalSuggestion as any)?.method || 'default'
       };
     });
 
+    // 过滤掉无效的清洗操作
+    const validSuggestions = preparedSuggestions.filter(suggestion => 
+      suggestion.issue_type && 
+      suggestion.issue_type !== 'None' && 
+      suggestion.issue_type !== 'null' &&
+      suggestion.column
+    );
+
+    if (validSuggestions.length === 0 && hasFieldMappings) {
+      ElMessage.info('没有有效的清洗操作，将只应用字段映射');
+    } else if (validSuggestions.length === 0 && !hasFieldMappings) {
+      ElMessage.warning('没有有效的清洗操作和字段映射');
+      return;
+    }
+
     // 执行清洗操作
+    console.log('=== 调用清洗API ===');
+    console.log('选择的清洗建议:', validSuggestions);
+    console.log('字段映射:', fieldMappings.value);
+    console.log('用户要求:', userRequirements.value);
+    
     const cleaningResult = await cleaningAPI.executeCleaning(
       currentUploadFile.value,
-      preparedSuggestions as any,
+      validSuggestions as any,
       fieldMappings.value,
       userRequirements.value,
       selectedModel.value

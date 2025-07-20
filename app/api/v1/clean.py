@@ -553,7 +553,7 @@ async def execute_cleaning(
             cleaning_request_data = json.loads(cleaning_data)
             selected_suggestions = cleaning_request_data.get("selected_suggestions", [])
             field_mappings = cleaning_request_data.get("field_mappings", {})
-            # user_requirements = cleaning_request_data.get("user_requirements")
+            user_requirements = cleaning_request_data.get("user_requirements")
             # model_name = cleaning_request_data.get("model_name")
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=400, detail=f"清洗请求数据格式错误: {e}") from e
@@ -573,10 +573,6 @@ async def execute_cleaning(
         file_id = str(uuid.uuid4())
         temp_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
 
-        # 初始化变量
-        field_mappings = {}
-        cleaned_file_path = None
-
         try:
             # 保存上传的文件
             with temp_path.open("wb") as buffer:
@@ -584,7 +580,13 @@ async def execute_cleaning(
                 buffer.write(content)
 
             # 使用智能Agent执行清洗
-            result = smart_clean_agent.apply_user_selected_cleaning(temp_path, selected_suggestions, field_mappings)
+            # 即使没有选择的建议，也会应用字段映射
+            result = smart_clean_agent.apply_user_selected_cleaning(
+                temp_path, 
+                selected_suggestions, 
+                field_mappings,
+                user_requirements  # 添加用户要求参数
+            )
 
             if result["success"]:
                 # 构建返回结果
@@ -614,17 +616,30 @@ async def execute_cleaning(
                 cleaned_df = result["cleaned_data"]
                 cleaned_file_path = UPLOAD_DIR / f"{file_id}_cleaned{file_extension}"
 
+                # 调试日志：检查保存前的数据状态
+                logger.info(f"=== 保存清洗后的数据 ===")
+                logger.info(f"清洗后数据形状: {cleaned_df.shape}")
+                logger.info(f"清洗后列名: {cleaned_df.columns.tolist()}")
+                logger.info(f"保存文件路径: {cleaned_file_path}")
+
                 if file_extension == ".csv":
                     cleaned_df.to_csv(cleaned_file_path, index=False)
+                    logger.info(f"数据已保存为CSV文件")
                 elif file_extension in [".xlsx", ".xls"]:
                     cleaned_df.to_excel(cleaned_file_path, index=False)
+                    logger.info(f"数据已保存为Excel文件")
 
                 response["cleaned_file_path"] = str(cleaned_file_path)
 
-                logger.info(f"数据清洗执行完成: {file.filename}, 应用了 {len(selected_suggestions)} 个清洗操作")
+                # 记录日志
+                operations_count = len(selected_suggestions)
+                mappings_count = len(field_mappings)
+                logger.info(f"数据清洗执行完成: {file.filename}, 应用了 {operations_count} 个清洗操作和 {mappings_count} 个字段映射")
+
                 return response
 
-            raise HTTPException(status_code=500, detail=result.get("error", "清洗执行失败"))
+            else:
+                raise HTTPException(status_code=500, detail=result.get("error", "清洗执行失败"))
 
         finally:
             # 清理原始临时文件
@@ -632,9 +647,11 @@ async def execute_cleaning(
                 with contextlib.suppress(Exception):
                     temp_path.unlink()
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"执行数据清洗失败: {e}")
-        raise HTTPException(status_code=500, detail=f"执行数据清洗失败: {e}") from e
+        logger.error(f"数据清洗执行失败: {e}")
+        raise HTTPException(status_code=500, detail=f"数据清洗执行失败: {e}") from e
 
 
 @router.post("/analyze-and-clean")

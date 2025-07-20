@@ -6,238 +6,79 @@ from typing import Any
 import pandas as pd
 
 from app.core.chain import get_llm
+from app.core.executor import CodeExecutor
+from app.core.datasource import create_df_source
 from app.log import logger
 
 from .schemas import CleaningState
 
+# AI代码生成的提示模板
+CODE_GENERATION_PROMPT = """
+你是一位专业的数据清洗专家。基于用户的要求，为以下数据生成Python代码来执行数据清洗操作。
 
-def _apply_single_cleaning(df: pd.DataFrame, suggestion: dict[str, Any]) -> pd.DataFrame:
-    """应用单个清洗操作"""
-    try:
-        column: str = suggestion["column"]
-        issue_type: str = suggestion["issue_type"]
-        parameters: dict = suggestion.get("parameters", {})
+数据信息:
+- 形状: {data_shape}
+- 列名: {columns}
+- 数据类型: {dtypes}
+- 数据预览:
+{data_preview}
 
-        if issue_type == "duplicate_rows":
-            return df.drop_duplicates(keep=parameters.get("keep", "first"))
+字段映射 (必须应用):
+{field_mappings}
 
-        if issue_type == "column_name" and column in df.columns:
-            # 规范化列名
-            new_name = column.strip().replace(" ", "_")
-            return df.rename(columns={column: new_name})
+用户选择的清洗操作:
+{selected_suggestions}
 
-        if issue_type == "missing_values" and column in df.columns:
-            method = parameters.get("method", "mean")
-            if method == "mean" and df[column].dtype in ["int64", "float64"]:
-                df[column] = df[column].fillna(df[column].mean())
-            elif method == "mode":
-                df[column] = df[column].fillna(df[column].mode().iloc[0])
-            elif method == "drop":
-                df = df.dropna(subset=[column])
+用户自定义要求:
+{user_requirements}
 
-            return df
+请生成Python代码来执行以下操作:
+1. **首先应用字段映射** - 将列名从原始名称重命名为映射后的名称
+2. 执行用户选择的清洗操作
+3. 确保最终的DataFrame列名是映射后的名称
 
-        if issue_type == "data_type" and column in df.columns:
-            target_type = parameters.get("target_type")
-            if target_type == "numeric":
-                df[column] = pd.to_numeric(df[column], errors="coerce")
+要求:
+- 使用变量名 `df` 来表示DataFrame
+- 最终返回清洗后的DataFrame: `result = df`  
+- 代码要安全、高效
+- 包含适当的错误处理
+- 添加注释说明每个步骤
 
-            return df
+生成的代码:
+```python
+import pandas as pd
+import numpy as np
 
-        return df
-
-    except Exception as e:
-        logger.error(f"应用清洗操作失败: {e}")
-        return df
-
-
-def apply_cleaning(state: CleaningState) -> CleaningState:
-    """应用清洗操作"""
-    try:
-        df_data = state["df_data"]
-        suggestions = state["cleaning_suggestions"]
-
-        if df_data is None:
-            raise ValueError("数据未加载")
-
-        df = pd.DataFrame(df_data)  # 反序列化DataFrame
-
-        logger.info("开始应用清洗操作")
-
-        # 创建数据副本用于清洗
-        cleaned_df = df.copy()
-
-        # 应用清洗建议
-        for suggestion in suggestions:
-            if suggestion.get("auto_apply", False):
-                cleaned_df = _apply_single_cleaning(cleaned_df, suggestion)
-
-        state["cleaned_df_data"] = cleaned_df.to_dict()  # 序列化清洗后DataFrame
-        logger.info(f"清洗操作完成，处理了 {len(suggestions)} 个建议")
-        return state
-
-    except Exception as e:
-        logger.error(f"应用清洗操作失败: {e}")
-        state["error_message"] = str(e)
-        return state
+# 你的清洗代码
+```
+"""
 
 
-def _apply_single_cleaning_enhanced(df: pd.DataFrame, cleaning_params: dict[str, Any]) -> pd.DataFrame:
-    """
-    增强的单个清洗操作应用方法
-
-    Args:
-        df: 数据框
-        cleaning_params: 清洗参数
-
-    Returns:
-        清洗后的数据框
-    """
-    try:
-        column = cleaning_params.get("column")
-        issue_type = cleaning_params.get("issue_type")
-        parameters = cleaning_params.get("parameters", {})
-        method = cleaning_params.get("method")
-
-        logger.debug(f"应用清洗操作: {issue_type}, 列: {column}, 参数: {parameters}")
-
-        if issue_type == "duplicate_rows":
-            # 删除重复行
-            keep = parameters.get("keep", "first")
-            return df.drop_duplicates(keep=keep)
-
-        if issue_type == "column_name" and column and column in df.columns:
-            # 规范化列名（这个在字段映射阶段已经处理了，这里可以跳过）
-            return df
-
-        if issue_type == "missing_values" and column and column in df.columns:
-            # 处理缺失值
-            fill_method = method or parameters.get("method", "drop")
-
-            if fill_method == "drop":
-                # 删除含缺失值的行
-                return df.dropna(subset=[column])
-            if fill_method == "mean" and df[column].dtype in ["int64", "float64", "int32", "float32"]:
-                # 用均值填充
-                df[column] = df[column].fillna(df[column].mean())
-                return df
-            if fill_method == "median" and df[column].dtype in ["int64", "float64", "int32", "float32"]:
-                # 用中位数填充
-                df[column] = df[column].fillna(df[column].median())
-                return df
-            if fill_method == "mode":
-                # 用众数填充
-                mode_value = df[column].mode()
-                if len(mode_value) > 0:
-                    df[column] = df[column].fillna(mode_value.iloc[0])
-                return df
-            if fill_method == "forward":
-                # 前向填充
-                df[column] = df[column].ffill()
-                return df
-            if fill_method == "backward":
-                # 后向填充
-                df[column] = df[column].bfill()
-                return df
-
-            # 默认用众数填充
-            mode_value = df[column].mode()
-            if len(mode_value) > 0:
-                df.loc[:, column] = df[column].fillna(mode_value.iloc[0])
-            return df
-
-        if issue_type == "data_type" and column and column in df.columns:
-            # 数据类型转换
-            target_type = parameters.get("target_type", "string")
-
-            if target_type == "numeric":
-                df[column] = pd.to_numeric(df[column], errors="coerce")
-            elif target_type == "datetime":
-                df[column] = pd.to_datetime(df[column], errors="coerce")
-            elif target_type == "string":
-                df[column] = df[column].astype(str)
-            elif target_type == "category":
-                df[column] = df[column].astype("category")
-
-            return df
-
-        if issue_type == "outliers" and column and column in df.columns:
-            # 处理异常值
-            treatment = method or parameters.get("treatment", "remove")
-
-            if df[column].dtype in ["int64", "float64", "int32", "float32"]:
-                Q1 = df[column].quantile(0.25)
-                Q3 = df[column].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-
-                if treatment == "remove":
-                    # 删除异常值
-                    mask = (df[column] >= lower_bound) & (df[column] <= upper_bound)
-                    return df.loc[mask].copy()
-                if treatment == "cap":
-                    # 限制异常值
-                    df.loc[:, column] = df[column].clip(lower_bound, upper_bound)
-                    return df
-                if treatment == "median":
-                    # 用中位数替换异常值
-                    median_value = df[column].median()
-                    df.loc[(df[column] < lower_bound) | (df[column] > upper_bound), column] = median_value
-                    return df
-
-            return df
-
-        logger.warning(f"未知的清洗操作类型: {issue_type}")
-        return df
-
-    except Exception as e:
-        logger.error(f"应用单个清洗操作失败: {e}")
-        return df
-
-
-def apply_cleaning_actions(path: Path, actions: list[dict[str, Any]]) -> dict[str, Any]:
-    """应用指定的清洗动作"""
-    try:
-        # 加载数据
-        if path.suffix.lower() == ".csv":
-            df = pd.read_csv(path)
-        elif path.suffix.lower() in [".xlsx", ".xls"]:
-            df = pd.read_excel(path)
-        else:
-            raise ValueError(f"不支持的文件格式: {path.suffix}")
-
-        # 应用清洗动作
-        results = []
-        for action in actions:
-            try:
-                df = _apply_single_cleaning(df, action)
-                results.append({"action": action, "status": "success", "message": "清洗动作应用成功"})
-            except Exception as e:
-                results.append({"action": action, "status": "error", "message": str(e)})
-
-        return {"success": True, "results": results, "cleaned_rows": len(df), "cleaned_columns": len(df.columns)}
-
-    except Exception as e:
-        logger.exception("应用清洗动作失败")
-        return {"success": False, "error": str(e), "results": []}
-
-
-def apply_user_selected_cleaning(
-    file_path: Path, selected_suggestions: list[dict[str, Any]], field_mappings: dict[str, str] | None = None
+def apply_user_selected_cleaning_with_ai(
+    file_path: Path, 
+    selected_suggestions: list[dict[str, Any]], 
+    field_mappings: dict[str, str] | None = None,
+    user_requirements: str | None = None
 ) -> dict[str, Any]:
     """
-    应用用户选择的清洗操作和字段映射
+    使用AI生成代码来执行用户选择的清洗操作和字段映射
 
     Args:
         file_path: 文件路径
         selected_suggestions: 用户选择的清洗建议列表
         field_mappings: 字段映射字典 {原始字段名: 新字段名}
+        user_requirements: 用户自定义要求
 
     Returns:
         包含清洗后数据和操作结果的字典
     """
     try:
+        logger.info(f"=== AI驱动的数据清洗开始 ===")
+        logger.info(f"文件路径: {file_path}")
+        logger.info(f"清洗建议数量: {len(selected_suggestions)}")
+        logger.info(f"字段映射: {field_mappings}")
+        logger.info(f"用户要求: {user_requirements}")
+
         # 加载数据
         if file_path.suffix.lower() == ".csv":
             df = pd.read_csv(file_path)
@@ -247,112 +88,178 @@ def apply_user_selected_cleaning(
             raise ValueError(f"不支持的文件格式: {file_path.suffix}")
 
         original_shape = df.shape
-        logger.info(f"开始应用用户选择的清洗操作，原始数据: {original_shape[0]} 行 × {original_shape[1]} 列")
+        original_columns = df.columns.tolist()
+        logger.info(f"原始数据: {original_shape[0]} 行 × {original_shape[1]} 列")
+        logger.info(f"原始列名: {original_columns}")
 
-        # 记录应用的操作
-        applied_operations = []
-
-        # 1. 先应用字段映射（如果有）
+        # 第一步：先应用字段映射（如果有的话）
+        field_mappings_applied = {}
         if field_mappings:
-            # old_columns = df.columns.tolist()
-            # 创建重命名映射，只处理实际存在的列
-            rename_mapping = {
-                old_name: new_name
-                for old_name, new_name in field_mappings.items()
-                if old_name in df.columns and old_name != new_name
+            logger.info("开始应用字段映射...")
+            for old_name, new_name in field_mappings.items():
+                if old_name in df.columns:
+                    df = df.rename(columns={old_name: new_name})
+                    field_mappings_applied[old_name] = new_name
+                    logger.info(f"字段映射: {old_name} -> {new_name}")
+            
+            logger.info(f"字段映射完成，应用了 {len(field_mappings_applied)} 个映射")
+            logger.info(f"映射后列名: {df.columns.tolist()}")
+
+        # 如果没有清洗操作，只返回应用字段映射后的数据
+        if not selected_suggestions:
+            logger.info("没有清洗操作，只应用字段映射")
+            final_shape = df.shape
+            final_columns = df.columns.tolist()
+            
+            applied_operations = []
+            if field_mappings_applied:
+                applied_operations.append({
+                    "type": "field_mapping",
+                    "description": f"应用字段映射，重命名了 {len(field_mappings_applied)} 个列",
+                    "status": "success",
+                    "details": field_mappings_applied
+                })
+
+            summary = {
+                "original_shape": original_shape,
+                "final_shape": final_shape,
+                "rows_changed": 0,
+                "columns_changed": 0,
+                "successful_operations": len(applied_operations),
+                "failed_operations": 0,
+                "applied_field_mappings": bool(field_mappings_applied),
+                "field_mappings_count": len(field_mappings_applied),
             }
 
-            if rename_mapping:
-                df = df.rename(columns=rename_mapping)
-                applied_operations.append(
-                    {
-                        "type": "column_rename",
-                        "description": f"应用字段映射，重命名了 {len(rename_mapping)} 个列",
-                        "details": rename_mapping,
-                        "status": "success",
-                    }
-                )
-                logger.info(f"应用字段映射: {rename_mapping}")
+            return {
+                "success": True,
+                "cleaned_data": df,
+                "summary": summary,
+                "applied_operations": applied_operations,
+                "final_columns": final_columns,
+                "field_mappings_applied": field_mappings_applied,
+                "generated_code": "# 只应用字段映射，无需生成清洗代码",
+            }
 
-        # 2. 应用用户选择的清洗操作
+        # 第二步：在映射后的数据上执行清洗操作
+        logger.info("开始在映射后的数据上执行清洗操作...")
+        
+        # 更新清洗建议中的列名为映射后的列名
+        updated_suggestions = []
         for suggestion in selected_suggestions:
-            try:
-                # 准备清洗参数
-                cleaning_params = {
-                    "column": suggestion.get("column"),
-                    "issue_type": suggestion.get("issue_type") or suggestion.get("type"),
-                    "parameters": suggestion.get("parameters", {}),
-                    "suggested_action": suggestion.get("suggested_action"),
-                    "method": suggestion.get("method"),
+            updated_suggestion = suggestion.copy()
+            if suggestion.get("column") and suggestion["column"] != "all":
+                old_column = suggestion["column"]
+                # 查找映射后的列名
+                new_column = field_mappings_applied.get(old_column, old_column)
+                updated_suggestion["column"] = new_column
+                logger.info(f"更新清洗建议中的列名: {old_column} -> {new_column}")
+            updated_suggestions.append(updated_suggestion)
+
+        # 准备数据信息给AI（使用映射后的数据）
+        data_info = {
+            "data_shape": f"{df.shape[0]} 行 × {df.shape[1]} 列",
+            "columns": df.columns.tolist(),  # 使用映射后的列名
+            "dtypes": df.dtypes.to_dict(),
+            "data_preview": df.head(3).to_string(),
+            "field_mappings": {},  # 字段映射已经应用，这里传空字典
+            "selected_suggestions": updated_suggestions,  # 使用更新后的建议
+            "user_requirements": user_requirements or "无特殊要求"
+        }
+
+        # 生成清洗代码
+        prompt = CODE_GENERATION_PROMPT.format(**data_info)
+        logger.info("开始生成清洗代码...")
+        
+        llm = get_llm()
+        code_response = llm.invoke(prompt)
+        
+        # 提取Python代码
+        code_match = re.search(r'```python\n(.*?)\n```', code_response, re.DOTALL)
+        if not code_match:
+            code_match = re.search(r'```\n(.*?)\n```', code_response, re.DOTALL)
+        
+        if not code_match:
+            raise ValueError("AI未能生成有效的Python代码")
+        
+        generated_code = code_match.group(1).strip()
+        logger.info(f"生成的清洗代码:\n{generated_code}")
+
+        # 创建数据源并执行代码
+        data_source = create_df_source(df, "temp_data", "临时数据用于清洗")
+        
+        with CodeExecutor(data_source) as executor:
+            # 添加返回结果的代码
+            full_code = generated_code + "\n\nresult = df"
+            
+            # 执行生成的代码
+            exec_result = executor.execute(full_code)
+            
+            if not exec_result["success"]:
+                raise ValueError(f"代码执行失败: {exec_result['error']}")
+            
+            # 获取执行结果
+            if exec_result["result"] is None:
+                raise ValueError("代码执行没有返回结果")
+            
+            cleaned_df = exec_result["result"]
+            
+            if not isinstance(cleaned_df, pd.DataFrame):
+                raise ValueError(f"代码执行结果不是DataFrame: {type(cleaned_df)}")
+
+        final_shape = cleaned_df.shape
+        final_columns = cleaned_df.columns.tolist()
+
+        # 构建操作记录
+        applied_operations = []
+        
+        if field_mappings_applied:
+            applied_operations.append({
+                "type": "field_mapping",
+                "description": f"应用字段映射，重命名了 {len(field_mappings_applied)} 个列",
+                "status": "success",
+                "details": field_mappings_applied
+            })
+
+        if selected_suggestions:
+            applied_operations.append({
+                "type": "ai_generated_cleaning",
+                "description": f"AI生成代码执行清洗操作，包含 {len(selected_suggestions)} 个清洗建议",
+                "status": "success",
+                "details": {
+                    "field_mappings_count": len(field_mappings_applied),
+                    "suggestions_count": len(selected_suggestions),
                 }
-
-                # 如果有字段映射，需要使用新的列名
-                if field_mappings and cleaning_params["column"] in field_mappings:
-                    old_column = cleaning_params["column"]
-                    new_column = field_mappings[old_column]
-                    cleaning_params["column"] = new_column
-                    logger.info(f"清洗操作列名映射: {old_column} -> {new_column}")
-
-                # 应用单个清洗操作
-                before_shape = df.shape
-                df = _apply_single_cleaning_enhanced(df, cleaning_params)
-                after_shape = df.shape
-
-                operation_result = {
-                    "type": cleaning_params["issue_type"],
-                    "column": cleaning_params["column"],
-                    "description": suggestion.get("description", ""),
-                    "suggested_action": cleaning_params["suggested_action"],
-                    "before_shape": before_shape,
-                    "after_shape": after_shape,
-                    "status": "success",
-                }
-                applied_operations.append(operation_result)
-
-                logger.info(f"应用清洗操作: {cleaning_params['issue_type']} on {cleaning_params['column']}")
-
-            except Exception as e:
-                logger.exception(f"应用清洗操作失败: {suggestion}")
-                applied_operations.append(
-                    {
-                        "type": suggestion.get("issue_type", "unknown"),
-                        "column": suggestion.get("column", "unknown"),
-                        "description": suggestion.get("description", ""),
-                        "error": str(e),
-                        "status": "error",
-                    }
-                )
-
-        final_shape = df.shape
-
-        # 生成清洗总结
-        successful_ops = [op for op in applied_operations if op["status"] == "success"]
-        failed_ops = [op for op in applied_operations if op["status"] == "error"]
+            })
 
         summary = {
             "original_shape": original_shape,
             "final_shape": final_shape,
             "rows_changed": original_shape[0] - final_shape[0],
             "columns_changed": original_shape[1] - final_shape[1],
-            "successful_operations": len(successful_ops),
-            "failed_operations": len(failed_ops),
-            "applied_field_mappings": bool(field_mappings),
-            "field_mappings_count": len(field_mappings) if field_mappings else 0,
+            "successful_operations": len(applied_operations),
+            "failed_operations": 0,
+            "applied_field_mappings": bool(field_mappings_applied),
+            "field_mappings_count": len(field_mappings_applied),
         }
 
-        logger.info(f"清洗完成: {summary}")
+        logger.info(f"=== AI驱动的清洗完成 ===")
+        logger.info(f"最终数据形状: {final_shape}")
+        logger.info(f"最终列名: {final_columns}")
+        logger.info(f"应用的字段映射: {field_mappings_applied}")
 
         return {
             "success": True,
-            "cleaned_data": df,
+            "cleaned_data": cleaned_df,
             "summary": summary,
             "applied_operations": applied_operations,
-            "final_columns": df.columns.tolist(),
-            "field_mappings_applied": field_mappings or {},
+            "final_columns": final_columns,
+            "field_mappings_applied": field_mappings_applied,
+            "generated_code": generated_code,
         }
 
     except Exception as e:
-        logger.exception("应用用户选择的清洗操作失败")
+        logger.exception("AI驱动的数据清洗失败")
         return {
             "success": False,
             "error": str(e),
@@ -361,6 +268,7 @@ def apply_user_selected_cleaning(
             "applied_operations": [],
             "final_columns": [],
             "field_mappings_applied": {},
+            "generated_code": None,
         }
 
 
@@ -391,7 +299,7 @@ def create_cleaning_suggestion(issue: dict[str, Any], df: pd.DataFrame) -> dict[
             "suggested_action": "删除重复行",
             "priority": "medium",
             "parameters": {"keep": "first"},
-            "auto_apply": True,
+            "auto_apply": False,  # 改为False，不自动应用
         }
 
     if issue_type == "column_name":
@@ -402,7 +310,7 @@ def create_cleaning_suggestion(issue: dict[str, Any], df: pd.DataFrame) -> dict[
             "suggested_action": "规范化列名",
             "priority": "low",
             "parameters": {"method": "normalize"},
-            "auto_apply": True,
+            "auto_apply": False,  # 改为False，不自动应用
         }
 
     if issue_type == "data_type":
@@ -542,3 +450,41 @@ def generate_cleaning_summary(state: CleaningState) -> CleaningState:
         logger.error(f"生成清洗总结失败: {e}")
         state["error_message"] = str(e)
         return state
+
+
+def apply_cleaning(state: CleaningState) -> CleaningState:
+    """应用清洗操作的节点函数 - 在分析阶段不执行实际清洗，只准备数据"""
+    try:
+        logger.info("准备清洗数据（分析阶段不执行实际清洗）")
+        
+        # 在分析阶段，我们不执行实际的清洗操作
+        # 只是将原数据复制到cleaned_df_data，为后续的总结生成做准备
+        state["cleaned_df_data"] = state["df_data"]
+        
+        logger.info("清洗数据准备完成")
+        return state
+        
+    except Exception as e:
+        logger.error(f"准备清洗数据失败: {e}")
+        state["error_message"] = str(e)
+        state["cleaned_df_data"] = state["df_data"]  # 使用原数据
+        return state
+
+
+def apply_cleaning_actions(
+    file_path: Path,
+    selected_suggestions: list[dict[str, Any]],
+    field_mappings: dict[str, str] | None = None,
+    user_requirements: str | None = None
+) -> dict[str, Any]:
+    """
+    应用清洗操作的公共接口函数
+    
+    这是对apply_user_selected_cleaning_with_ai的包装，提供更简洁的接口
+    """
+    return apply_user_selected_cleaning_with_ai(
+        file_path=file_path,
+        selected_suggestions=selected_suggestions,
+        field_mappings=field_mappings,
+        user_requirements=user_requirements
+    )
