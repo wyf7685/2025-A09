@@ -10,6 +10,8 @@ from app.core.executor import CodeExecutor, format_result
 from app.log import logger
 from app.utils import escape_tag
 
+from ._registry import register_tool
+
 if TYPE_CHECKING:
     from app.core.agent.schemas import DatasetID
 
@@ -54,6 +56,7 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
     analyzers: dict[DatasetID, NL2DataAnalysis] = {}
 
     @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
+    @register_tool("通用数据分析工具")
     def analyze_data(dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
         source = sources.get(dataset_id)
 

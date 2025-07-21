@@ -3,9 +3,12 @@ from langchain_core.tools import BaseTool, tool
 from app.core.agent.resume import resumable
 from app.core.agent.sources import Sources
 
+from ._registry import register_tool
+
 
 def sources_tools(sources: Sources) -> list[BaseTool]:
     @tool
+    @register_tool("列出所有数据集")
     def list_dataset_tool() -> str:
         """
         列出当前可用的所有数据集及其概览信息。
@@ -27,6 +30,7 @@ def sources_tools(sources: Sources) -> list[BaseTool]:
         )
 
     @tool
+    @register_tool("重命名数据集")
     def rename_dataset_tool(dataset_id: str, new_dataset_id: str) -> str:
         """
         重命名指定的数据集。

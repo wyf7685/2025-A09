@@ -9,6 +9,7 @@ from app.core.agent.sources import Sources
 from app.log import logger
 from app.utils import escape_tag
 
+from .._registry import register_tool
 from .analysis import corr_analys, detect_outliers, lag_analys
 from .clean import (
     CleanMisalignedDataResult,
@@ -44,6 +45,7 @@ from .multi import (
 
 def dataframe_tools(sources: Sources) -> list[BaseTool]:
     @tool
+    @register_tool("相关性分析")
     def correlation_analysis_tool(
         dataset_id: DatasetID,
         col1: str,
@@ -69,6 +71,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return corr_analys(sources.read(dataset_id), col1, col2, method)
 
     @tool
+    @register_tool("时滞分析")
     def lag_analysis_tool(
         dataset_id: DatasetID,
         time_col1: str,
@@ -91,6 +94,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return lag_analys(sources.read(dataset_id), time_col1, time_col2)
 
     @tool
+    @register_tool("检测异常值")
     def detect_outliers_tool(
         dataset_id: DatasetID,
         column: str,
@@ -119,6 +123,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return detect_outliers(sources.read(dataset_id), column, method, threshold)
 
     @tool
+    @register_tool("创建新列")
     def create_column_tool(
         dataset_id: DatasetID,
         column_name: str,
@@ -159,6 +164,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return create_column(sources, source_datasets, target_dataset_id, column_name, expression, description)
 
     @tool
+    @register_tool("创建交互项")
     def create_interaction_term_tool(
         dataset_id: DatasetID,
         column_name: str,
@@ -189,6 +195,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         )
 
     @tool
+    @register_tool("创建聚合特征")
     def create_aggregated_feature_tool(
         dataset_id: DatasetID,
         column_name: str,
@@ -220,6 +227,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         )
 
     @tool
+    @register_tool("查看数据集状态")
     def inspect_dataframe_tool(
         dataset_id: DatasetID,
         options: InspectDataframeOptions | None = None,
@@ -247,6 +255,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return inspect_dataframe(sources.read(dataset_id), options)
 
     @tool
+    @register_tool("推断并转换数据类型")
     def infer_and_convert_dtypes_tool(
         dataset_id: DatasetID,
         columns: list[str] | None = None,
@@ -294,6 +303,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         )
 
     @tool
+    @register_tool("修复数据错位")
     def fix_misaligned_data_tool(
         dataset_id: DatasetID,
         suspected_columns: list[str] | None = None,
@@ -321,6 +331,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return fix_misaligned_data(sources, dataset_id, suspected_columns, alignment_pattern, in_place, new_dataset_id)
 
     @tool
+    @register_tool("处理缺失值")
     def handle_missing_values_tool(
         dataset_id: DatasetID,
         column: str | None = None,
@@ -341,6 +352,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return handle_missing_values(sources, dataset_id, column, method)
 
     @tool
+    @register_tool("获取缺失值摘要")
     def get_missing_values_summary_tool(dataset_id: DatasetID) -> MissingValuesSummary:
         """
         获取缺失值摘要信息
@@ -354,6 +366,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return get_missing_values_summary(sources.read(dataset_id))
 
     @tool
+    @register_tool("连接数据集")
     def join_dataframes_tool(
         left_dataset_id: DatasetID,
         right_dataset_id: DatasetID,
@@ -380,6 +393,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return join_dataframes(sources, left_dataset_id, right_dataset_id, join_type, left_on, right_on, new_dataset_id)
 
     @tool
+    @register_tool("合并多个数据框")
     def combine_dataframes_tool(
         dataset_ids: list[DatasetID],
         operation: CombineDataframesOperation = "union",
@@ -407,6 +421,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return combine_dataframes(sources, dataset_ids, operation, match_columns, ignore_index, new_dataset_id)
 
     @tool
+    @register_tool("从查询创建数据集")
     def create_dataset_from_query_tool(
         dataset_id: DatasetID,
         query: str,
@@ -431,6 +446,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
         return create_dataset_from_query(sources, dataset_id, query, columns, reset_index, new_dataset_id)
 
     @tool
+    @register_tool("基于采样创建数据集")
     def create_dataset_by_sampling_tool(
         dataset_id: DatasetID,
         n: int | None = None,

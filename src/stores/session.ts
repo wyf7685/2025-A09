@@ -185,7 +185,7 @@ export const useSessionStore = defineStore('session', () => {
             if (data.type === 'llm_token') {
               onMessage(data.content);
             } else if (data.type === 'tool_call') {
-              onToolCall(data.id, data.name, data.args);
+              onToolCall(data.id, data.human_repr, data.args);
             } else if (data.type === 'tool_result') {
               onToolResult(data.id, data.result, data.artifact || null);
             } else if (data.type === 'tool_error') {

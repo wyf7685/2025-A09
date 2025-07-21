@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field, Tag
 
+from .tools._registry import TOOL_NAMES
+
 
 class LlmTokenEvent(BaseModel):
     """LLM 生成的单个 token"""
@@ -21,6 +23,7 @@ class ToolCallEvent(BaseModel):
     type: Literal["tool_call"] = "tool_call"
     id: str
     name: str
+    human_repr: str
     args: dict = Field(default_factory=dict)
 
 
@@ -70,7 +73,12 @@ def process_stream_event(event: Any) -> Iterable[StreamEvent]:
             for tool_call in tool_calls:
                 if tool_call["id"] is None:
                     continue
-                yield ToolCallEvent(name=tool_call["name"], id=tool_call["id"], args=tool_call["args"])
+                yield ToolCallEvent(
+                    id=tool_call["id"],
+                    name=tool_call["name"],
+                    human_repr=TOOL_NAMES[tool_call["name"]],
+                    args=tool_call["args"],
+                )
         case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):
             with contextlib.suppress(Exception):
                 success = json.loads(fix_message_content(content))["success"]

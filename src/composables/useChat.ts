@@ -60,6 +60,16 @@ const extractSuggestions = (content: string): string[] => {
   return suggestions;
 };
 
+const fakeFlowPanel = {
+  route1Steps: ref([]),
+  route2Steps: ref([]),
+  selectedModel: ref(''),
+  clearFlowSteps: () => {},
+  updateRouteStep: (_: number, __: 'active' | 'completed') => {},
+  autoSelectRoute: (_: string): 'route1' | 'route2' => 'route1',
+  logRouteStatus: (_: string) => {},
+} as FlowPanel;
+
 export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
   const sessionStore = useSessionStore();
   const messages = ref<ChatMessageWithSuggestions[]>([]);
@@ -129,29 +139,29 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
     }
 
     // 智能路线选择
-    const flowPanel = flowPanelRef?.();
-    const selectedRouteForThisMessage = flowPanel?.autoSelectRoute(userMessage);
+    const flowPanel = flowPanelRef?.() || fakeFlowPanel;
+    const selectedRouteForThisMessage = flowPanel.autoSelectRoute(userMessage);
 
     // 更新固定路线步骤状态
     // 第一步：用户输入
-    flowPanel?.logRouteStatus('开始处理用户输入');
-    flowPanel?.updateRouteStep(0, 'completed');
+    flowPanel.logRouteStatus('开始处理用户输入');
+    flowPanel.updateRouteStep(0, 'completed');
 
     // 第二步：AI分析处理
-    flowPanel?.updateRouteStep(1, 'active');
+    flowPanel.updateRouteStep(1, 'active');
 
     // 设置超时保护，防止流程图永远卡在AI分析阶段
     const timeoutId = setTimeout(() => {
       console.warn('AI分析处理超时，强制完成流程图步骤');
       if (selectedRouteForThisMessage === 'route1') {
-        flowPanel?.updateRouteStep(1, 'completed');
-        flowPanel?.updateRouteStep(2, 'completed');
+        flowPanel.updateRouteStep(1, 'completed');
+        flowPanel.updateRouteStep(2, 'completed');
       } else {
-        flowPanel?.updateRouteStep(1, 'completed');
-        flowPanel?.updateRouteStep(2, 'completed');
-        flowPanel?.updateRouteStep(4, 'completed');
+        flowPanel.updateRouteStep(1, 'completed');
+        flowPanel.updateRouteStep(2, 'completed');
+        flowPanel.updateRouteStep(4, 'completed');
       }
-      flowPanel?.logRouteStatus('超时保护：强制完成流程');
+      flowPanel.logRouteStatus('超时保护：强制完成流程');
     }, 30000); // 30秒超时
 
     messages.value.push({
@@ -206,14 +216,14 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           if (content.length > 20) {
             if (selectedRouteForThisMessage === 'route1') {
               // 路线1：渐进式推进流程
-              if (content.length > 50 && flowPanel?.route1Steps.value[1]?.status === 'active') {
+              if (content.length > 50 && flowPanel.route1Steps.value[1]?.status === 'active') {
                 console.log('路线1：AI分析达到50字符，标记为完成');
-                flowPanel?.updateRouteStep(1, 'completed'); // AI分析处理完成
-                flowPanel?.updateRouteStep(2, 'active'); // 开始生成报告
+                flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
+                flowPanel.updateRouteStep(2, 'active'); // 开始生成报告
               }
-              if (content.length > 200 && flowPanel?.route1Steps.value[2]?.status === 'active') {
+              if (content.length > 200 && flowPanel.route1Steps.value[2]?.status === 'active') {
                 console.log('路线1：内容达到200字符，报告生成完成');
-                flowPanel?.updateRouteStep(2, 'completed'); // 生成报告完成
+                flowPanel.updateRouteStep(2, 'completed'); // 生成报告完成
               }
             } else if (selectedRouteForThisMessage === 'route2') {
               // 路线2：如果还没有工具调用，可能是纯文本回复
@@ -223,8 +233,8 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
                   Object.keys(assistantMessage.tool_calls).length === 0)
               ) {
                 console.log('路线2：纯文本回复，完成相应步骤');
-                flowPanel?.updateRouteStep(1, 'completed'); // AI分析处理完成
-                flowPanel?.updateRouteStep(2, 'completed'); // 判断执行工具完成（决定不需要工具）
+                flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
+                flowPanel.updateRouteStep(2, 'completed'); // 判断执行工具完成（决定不需要工具）
               }
             }
           }
@@ -243,9 +253,9 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           // 更新路线步骤：工具调用开始
           if (selectedRouteForThisMessage === 'route2') {
-            flowPanel?.updateRouteStep(1, 'completed'); // AI分析处理完成
-            flowPanel?.updateRouteStep(2, 'completed'); // 判断执行工具完成
-            flowPanel?.updateRouteStep(3, 'active'); // 调用执行工具开始
+            flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
+            flowPanel.updateRouteStep(2, 'completed'); // 判断执行工具完成
+            flowPanel.updateRouteStep(3, 'active'); // 调用执行工具开始
           }
 
           nextTick(() => scrollToBottom?.());
@@ -262,12 +272,12 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           // 工具调用完成，更新路线步骤
           if (selectedRouteForThisMessage === 'route2') {
-            flowPanel?.updateRouteStep(3, 'completed'); // 调用执行工具完成
-            flowPanel?.updateRouteStep(4, 'active'); // 是否进行循环
+            flowPanel.updateRouteStep(3, 'completed'); // 调用执行工具完成
+            flowPanel.updateRouteStep(4, 'active'); // 是否进行循环
 
             // 自动完成循环判断步骤（默认不循环）
             setTimeout(() => {
-              flowPanel?.updateRouteStep(4, 'completed'); // 完成循环判断
+              flowPanel.updateRouteStep(4, 'completed'); // 完成循环判断
             }, 1000);
           }
 
@@ -294,14 +304,14 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           clearTimeout(timeoutId);
 
           assistantMessage.loading = false;
-          flowPanel?.logRouteStatus('对话处理完成');
+          flowPanel.logRouteStatus('对话处理完成');
 
           // 根据路线和当前状态更新步骤
           if (selectedRouteForThisMessage === 'route1') {
             console.log('执行路线1完成逻辑');
             // 路线1：如果AI分析还在进行中，先完成它，然后完成生成报告
-            flowPanel?.updateRouteStep(1, 'completed'); // AI分析处理完成
-            flowPanel?.updateRouteStep(2, 'completed'); // 生成报告完成
+            flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
+            flowPanel.updateRouteStep(2, 'completed'); // 生成报告完成
           } else if (selectedRouteForThisMessage === 'route2') {
             console.log('执行路线2完成逻辑');
             // 路线2：检查当前状态并完成剩余步骤
@@ -311,13 +321,13 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
             ) {
               console.log('路线2：没有工具调用');
               // 没有工具调用的情况
-              flowPanel?.updateRouteStep(1, 'completed'); // AI分析处理完成
-              flowPanel?.updateRouteStep(2, 'completed'); // 判断执行工具完成（决定不需要工具）
-              flowPanel?.updateRouteStep(4, 'completed'); // 直接完成，不进行循环
+              flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
+              flowPanel.updateRouteStep(2, 'completed'); // 判断执行工具完成（决定不需要工具）
+              flowPanel.updateRouteStep(4, 'completed'); // 直接完成，不进行循环
             } else {
               console.log('路线2：有工具调用');
               // 有工具调用的情况，确保最后一步完成
-              flowPanel?.updateRouteStep(4, 'completed'); // 完成循环判断
+              flowPanel.updateRouteStep(4, 'completed'); // 完成循环判断
             }
           }
 
@@ -352,17 +362,17 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           // 更新流程图状态为错误
           if (selectedRouteForThisMessage === 'route1') {
             // 如果当前在AI分析阶段出错
-            const route1Steps = flowPanel?.route1Steps.value || [];
+            const route1Steps = flowPanel.route1Steps.value || [];
             if (route1Steps[1]?.status === 'active') {
-              flowPanel?.updateRouteStep(1, 'completed'); // 标记AI分析完成（虽然有错误）
-              flowPanel?.updateRouteStep(2, 'completed'); // 尝试完成报告生成
+              flowPanel.updateRouteStep(1, 'completed'); // 标记AI分析完成（虽然有错误）
+              flowPanel.updateRouteStep(2, 'completed'); // 尝试完成报告生成
             }
           } else if (selectedRouteForThisMessage === 'route2') {
             // 根据当前进度更新状态
-            const route2Steps = flowPanel?.route2Steps.value || [];
+            const route2Steps = flowPanel.route2Steps.value || [];
             for (let i = 0; i < route2Steps.length; i++) {
               if (route2Steps[i]?.status === 'active') {
-                flowPanel?.updateRouteStep(i, 'completed');
+                flowPanel.updateRouteStep(i, 'completed');
                 break;
               }
             }
@@ -370,7 +380,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           nextTick(() => scrollToBottom?.());
         },
-        flowPanel?.selectedModel.value, // 传递选择的模型ID
+        flowPanel.selectedModel.value, // 传递选择的模型ID
       );
 
       assistantMessage.loading = false;
@@ -380,7 +390,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
       // 清除超时保护
       clearTimeout(timeoutId);
 
-      flowPanel?.logRouteStatus('发送消息出现错误');
+      flowPanel.logRouteStatus('发送消息出现错误');
 
       // 添加错误消息
       messages.value.push({
@@ -391,12 +401,12 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
       // 确保流程图状态正确结束
       if (selectedRouteForThisMessage === 'route1') {
-        flowPanel?.updateRouteStep(1, 'completed');
-        flowPanel?.updateRouteStep(2, 'completed');
+        flowPanel.updateRouteStep(1, 'completed');
+        flowPanel.updateRouteStep(2, 'completed');
       } else if (selectedRouteForThisMessage === 'route2') {
-        flowPanel?.updateRouteStep(1, 'completed');
-        flowPanel?.updateRouteStep(2, 'completed');
-        flowPanel?.updateRouteStep(4, 'completed');
+        flowPanel.updateRouteStep(1, 'completed');
+        flowPanel.updateRouteStep(2, 'completed');
+        flowPanel.updateRouteStep(4, 'completed');
       }
 
       nextTick(() => scrollToBottom?.());

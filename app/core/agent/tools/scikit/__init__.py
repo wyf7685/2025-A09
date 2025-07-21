@@ -16,6 +16,7 @@ from app.schemas.session import SessionID
 from app.services.model_registry import model_registry
 from app.utils import escape_tag
 
+from .._registry import register_tool
 from .feature_importance import FeatureImportanceResult, analyze_feature_importance
 from .feature_select import FeatureSelectionResult, select_features
 from .hyperparam import HyperparamOptResult, LearningCurveResult, optimize_hyperparameters, plot_learning_curve
@@ -112,6 +113,7 @@ def scikit_tools(
         return model_id
 
     @tool
+    @register_tool("创建机器学习模型")
     def create_model_tool(
         model_type: str = "linear_regression",
         hyperparams: dict[str, Any] | str | None = None,
@@ -175,6 +177,7 @@ def scikit_tools(
             return f"创建模型失败: {e}"
 
     @tool
+    @register_tool("拟合机器学习模型")
     def fit_model_tool(
         dataset_id: DatasetID,
         model_id: ModelID,
@@ -224,6 +227,7 @@ def scikit_tools(
             return f"训练模型失败: {e}"
 
     @tool
+    @register_tool("创建集成模型")
     def create_composite_model_tool(
         model_ids: list[ModelID],
         composite_type: str = "voting",
@@ -312,6 +316,7 @@ def scikit_tools(
         )
 
     @tool
+    @register_tool("评估机器学习模型性能")
     def evaluate_model_tool(trained_model_id: ModelID) -> EvaluateModelResult:
         """
         评估训练好的机器学习模型。
@@ -332,6 +337,7 @@ def scikit_tools(
         return evaluate_model(train_model_cache[trained_model_id])
 
     @tool
+    @register_tool("保存机器学习模型")
     def save_model_tool(model_id: ModelID) -> SaveModelResult:
         """
         保存训练好的机器学习模型及其元数据。
@@ -386,6 +392,7 @@ def scikit_tools(
         return result
 
     @tool
+    @register_tool("加载机器学习模型")
     def load_model_tool(dataset_id: DatasetID, model_id: ModelID) -> ModelMetadata:
         """
         从文件加载训练好的机器学习模型，恢复模型的使用能力。
@@ -417,6 +424,7 @@ def scikit_tools(
         return metadata
 
     @tool
+    @register_tool("列出所有已保存的模型")
     def list_saved_models_tool() -> dict[ModelID, ModelMetadata]:
         """
         列出所有已保存的模型元信息。
@@ -428,6 +436,7 @@ def scikit_tools(
         return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
 
     @tool
+    @register_tool("使用模型进行预测")
     def predict_with_model_tool(
         dataset_id: DatasetID,
         model_id: ModelID,
@@ -458,6 +467,7 @@ def scikit_tools(
         return result
 
     @tool(response_format="content_and_artifact")
+    @register_tool("自动选择特征")
     def select_features_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -501,6 +511,7 @@ def scikit_tools(
         return result, artifact
 
     @tool(response_format="content_and_artifact")
+    @register_tool("分析特征重要性")
     def analyze_feature_importance_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -536,6 +547,7 @@ def scikit_tools(
         return result, artifact
 
     @tool(response_format="content_and_artifact")
+    @register_tool("优化机器学习模型超参数")
     def optimize_hyperparameters_tool(
         dataset_id: DatasetID,
         features: list[str],
@@ -601,6 +613,7 @@ def scikit_tools(
         return result, artifact
 
     @tool(response_format="content_and_artifact")
+    @register_tool("绘制机器学习模型学习曲线")
     def plot_learning_curve_tool(
         dataset_id: DatasetID,
         features: list[str],

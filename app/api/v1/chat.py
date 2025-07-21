@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.const import REPORT_TEMPLATE_DIR
-from app.core.agent.agents.data_analyzer import DEFAULT_REPORT_TEMPLATE
+from app.core.agent import DEFAULT_REPORT_TEMPLATE
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
 from app.schemas.session import SessionID
