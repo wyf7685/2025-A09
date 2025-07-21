@@ -191,7 +191,52 @@ class DataSourceService:
         return source_id, source
 
 
+class TempFileService:
+    def __init__(self) -> None:
+        self._data: dict[str, Path] = {}
+
+    def register(self, file_path: Path) -> str:
+        """
+        注册临时文件
+
+        Args:
+            file_path: 临时文件路径
+
+        Returns:
+            str: 临时文件ID
+        """
+        file_id = str(uuid.uuid4())
+        self._data[file_id] = file_path
+        return file_id
+
+    def get(self, file_id: str) -> Path | None:
+        """
+        获取临时文件路径
+
+        Args:
+            file_id: 临时文件ID
+
+        Returns:
+            Path | None: 临时文件路径，如果不存在则返回None
+        """
+        return self._data.get(file_id)
+
+    def delete(self, file_id: str) -> None:
+        """
+        删除临时文件
+
+        Args:
+            file_id: 临时文件ID
+        """
+        if file_id in self._data:
+            file_path = self._data[file_id]
+            if file_path.exists():
+                file_path.unlink()
+            del self._data[file_id]
+
+
 datasource_service = DataSourceService()
+tempfile_service = TempFileService()
 
 
 @lifespan.on_startup

@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
-import pandas as pd
 from pydantic import BaseModel, Field
 
 
@@ -56,7 +55,7 @@ class ApplyCleaningResult(BaseModel):
     """应用清洗建议的结果"""
 
     success: Literal[True] = True
-    cleaned_data: pd.DataFrame  # 清洗后的数据
+    cleaned_data: Any  # 清洗后的数据
     summary: ApplyCleaningSummary  # 清洗总结信息
     applied_operations: list[dict[str, Any]]  # 应用的清洗操作
     final_columns: list[str]  # 最终的列名列表
@@ -75,7 +74,7 @@ class ProcessCleanFileResult(BaseModel):
     success: Literal[True] = True
     analysis_result: ProcessFileResult
     cleaning_result: ApplyCleaningResult  # 清洗结果
-    final_data: pd.DataFrame  # 清洗后的数据
+    final_data: Any  # 清洗后的数据
     field_mappings: dict[str, str]  # 字段映射
     applied_operations: list[dict[str, Any]]  # 应用的清洗操作
     summary: ProcessCleanFileSummary  # 包含分析和清洗的总结信息

@@ -18,7 +18,7 @@ from app.core.datasource import DataSourceMetadata, create_dremio_source
 from app.core.dremio import get_dremio_client
 from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
-from app.services.datasource import datasource_service
+from app.services.datasource import datasource_service, tempfile_service
 from app.services.session import session_service
 from app.utils import run_sync
 
@@ -36,7 +36,7 @@ async def upload_file(
     file: UploadFile = File(),
     source_name: str | None = Form(default=None),
     description: str | None = Form(default=None),
-    cleaned_file_path: str | None = Form(default=None),  # 清洗后文件路径（可选）
+    cleaned_file_id: str | None = Form(default=None),  # 清洗后文件ID（可选）
     field_mappings: str | None = Form(default=None),  # JSON格式的字段映射（可选）
     is_cleaned: bool = Form(default=False),  # 标识是否为清洗后的数据
 ) -> dict[str, Any]:
@@ -54,12 +54,13 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="Unsupported file format")
 
         # 如果提供了清洗后的文件路径，使用清洗后的数据
-        if cleaned_file_path and Path(cleaned_file_path).exists():
+        file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
+        if cleaned_file_id and (cleaned_file_path := tempfile_service.get(cleaned_file_id)):
             logger.info(f"使用清洗后的数据文件: {cleaned_file_path}")
-            file_path = Path(cleaned_file_path)
+            cleaned_file_path.rename(file_path)
+            tempfile_service.delete(cleaned_file_id)
         else:
             # 保存原始文件
-            file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
             file_path.write_bytes(await file.read())
             logger.info(f"保存原始数据文件: {file_path}")
 
@@ -85,20 +86,10 @@ async def upload_file(
 
         # 标记是否为清洗后的数据
         if is_cleaned:
-            if not source.metadata.description:
-                source.metadata.description = ""
             source.metadata.description += " [智能清洗后的数据]"
             logger.info("标记数据源为清洗后的数据")
 
         source_id, source = datasource_service.register(source)
-
-        # 如果使用了清洗后的文件，删除清洗后的临时文件
-        if cleaned_file_path and Path(cleaned_file_path).exists() and cleaned_file_path != str(file_path):
-            try:
-                Path(cleaned_file_path).unlink()
-                logger.info(f"清理清洗后的临时文件: {cleaned_file_path}")
-            except Exception as e:
-                logger.warning(f"清理临时文件失败: {e}")
 
         return {"source_id": source_id, "metadata": source.metadata}
 

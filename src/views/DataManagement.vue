@@ -8,8 +8,8 @@ import DataSourceUploadPanel from '@/components/data/DataSourceUploadPanel.vue';
 import EditDataSourceDialog from '@/components/data/EditDataSourceDialog.vue';
 import PreviewDataDialog from '@/components/data/PreviewDataDialog.vue';
 import { useDataSourceStore } from '@/stores/datasource';
-import { useSessionStore } from '@/stores/session';
 import { useModelStore } from '@/stores/model';
+import { useSessionStore } from '@/stores/session';
 import type { DataSourceMetadataWithID } from '@/types';
 import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { cleaningAPI, dataSourceAPI } from '@/utils/api';
@@ -328,7 +328,7 @@ const analyzeDataQualityWithAI = async () => {
       fieldMappings.value = result.field_mappings || {};
 
       // 记录字段映射信息，等待用户选择操作
-      if (result.field_mappings_applied && result.cleaned_file_path) {
+      if (result.field_mappings_applied && result.cleaned_file_id) {
         ElMessage.info('字段映射已准备完成，您可以选择直接上传或执行清洗操作');
       }
 
@@ -429,7 +429,7 @@ const applyCleaningActions = async () => {
       analysisResult.value = {
         ...analysisResult.value,
         cleaning_result: cleaningResult,
-        cleaned_file_path: cleaningResult.cleaned_file_path,
+        cleaned_file_id: cleaningResult.cleaned_file_id,
         cleaned_data_info: cleaningResult.cleaned_data_info
       };
 
@@ -441,7 +441,7 @@ const applyCleaningActions = async () => {
           currentUploadFile.value,
           fileMetadata.value.name,
           fileMetadata.value.description,
-          cleaningResult.cleaned_file_path,
+          cleaningResult.cleaned_file_id,
           fieldMappings.value,
           true  // 标记为清洗后的数据
         );
@@ -479,7 +479,7 @@ const skipCleaningAndUpload = async () => {
 
   isLoading.value = true;
   try {
-    const mappedFilePath = analysisResult.value?.cleaned_file_path;
+    const mappedFilePath = analysisResult.value?.cleaned_file_id;
     const fieldMappingsToApply = analysisResult.value?.field_mappings || fieldMappings.value;
 
     if (mappedFilePath && Object.keys(fieldMappingsToApply).length > 0) {

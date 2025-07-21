@@ -1,4 +1,4 @@
-import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import type { CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import type { DataSourceMetadata } from '@/types/dataSources';
 import type { ReportTemplate } from '@/types/report';
 import axios from 'axios';
@@ -103,7 +103,7 @@ export interface ApiResponse {
   summary?: string;
   quality_score?: number;
   field_mappings_applied?: boolean;
-  cleaned_file_path?: string;
+  cleaned_file_id?: string;
   data_uploaded?: boolean;
   upload_result?: any;
 }
@@ -146,7 +146,7 @@ export const cleaningAPI = {
     final_columns: string[];
     field_mappings_applied: Record<string, string>;
     cleaned_data_info: any;
-    cleaned_file_path: string;
+    cleaned_file_id: string;
     error?: string;
   }> => {
     const formData = new FormData();
@@ -184,7 +184,7 @@ export const cleaningAPI = {
     field_mappings: Record<string, string>;
     applied_operations: any[];
     summary: any;
-    cleaned_file_path?: string;
+    cleaned_file_id?: string;
     cleaned_data_info?: any;
     error?: string;
   }> => {
@@ -266,7 +266,7 @@ export const dataSourceAPI = {
     file: File,
     sourceName?: string,
     description?: string,
-    cleanedFilePath?: string,
+    cleanedFileId?: string,
     fieldMappings?: Record<string, string>,
     isCleaned?: boolean,
   ): Promise<UploadDataSourceResponse> => {
@@ -279,8 +279,8 @@ export const dataSourceAPI = {
     if (description) {
       formData.append('description', description);
     }
-    if (cleanedFilePath) {
-      formData.append('cleaned_file_path', cleanedFilePath);
+    if (cleanedFileId) {
+      formData.append('cleaned_file_id', cleanedFileId);
     }
     if (fieldMappings) {
       formData.append('field_mappings', JSON.stringify(fieldMappings));
