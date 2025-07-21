@@ -1,6 +1,6 @@
 from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NotRequired, Protocol, TypedDict, TypeGuard
 
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
@@ -48,3 +48,28 @@ class OperationFailed(TypedDict):
     success: Literal[False]
     message: str  # 错误信息
     error_type: NotRequired[str]  # 错误类型
+
+
+class OperationFailedModel(BaseModel):
+    """操作失败的结果模型"""
+
+    success: Literal[False] = False
+    message: str  # 错误信息
+    error_type: str | None = None  # 错误类型
+
+    @classmethod
+    def from_err(cls, err: Exception) -> "OperationFailedModel":
+        """从异常创建操作失败模型"""
+        return cls(message=str(err), error_type=type(err).__name__)
+
+
+class _Checkable(Protocol):
+    success: Literal[True]
+
+
+def is_failed(result: _Checkable | OperationFailedModel, /) -> TypeGuard[OperationFailedModel]:
+    return not result.success
+
+
+def is_success[T: _Checkable](result: T | OperationFailedModel, /) -> TypeGuard[T]:
+    return result.success

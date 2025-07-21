@@ -14,18 +14,27 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.log import logger
+from app.utils import run_sync
 
+from ...schemas import OperationFailedModel
 from ._clean import (
     apply_cleaning,
     apply_cleaning_actions,
-    apply_user_selected_cleaning_with_ai,  # 使用新的AI驱动的函数
+    apply_user_selected_cleaning_with_ai,
     generate_cleaning_summary,
     generate_suggestions,
 )
 from ._fields import guess_field_names
 from ._load_data import load_data
 from ._quality import analyze_quality, calculate_quality_score
-from .schemas import CleaningState, DataQualityReport
+from .schemas import (
+    ApplyCleaningResult,
+    CleaningState,
+    DataQualityReport,
+    ProcessCleanFileResult,
+    ProcessCleanFileSummary,
+    ProcessFileResult,
+)
 
 
 def _create_graph() -> CompiledStateGraph[CleaningState, CleaningState, CleaningState]:
@@ -59,16 +68,17 @@ class SmartCleanDataAgent:
 
     def __init__(self) -> None:
         self._graph = _create_graph()
-        # Export methods
-        self.apply_cleaning_actions = apply_cleaning_actions
-        self.apply_user_selected_cleaning = apply_user_selected_cleaning_with_ai
 
-    def process_and_clean_file(
+        # Export methods
+        self.apply_cleaning_actions = run_sync(apply_cleaning_actions)
+        self.apply_user_selected_cleaning = run_sync(apply_user_selected_cleaning_with_ai)
+
+    async def process_and_clean_file(
         self,
         file_path: Path,
         user_requirements: str | None = None,
         selected_suggestions: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ProcessCleanFileResult | OperationFailedModel:
         """
         分析并清洗数据文件的完整流程
 
@@ -82,50 +92,53 @@ class SmartCleanDataAgent:
         """
         try:
             # 1. 先进行标准的数据质量分析
-            analysis_result = self.process_file(file_path, user_requirements)
+            analysis_result = await self.process_file(file_path, user_requirements)
 
-            if not analysis_result["success"]:
-                return analysis_result
+            if not analysis_result.success:
+                return cast("OperationFailedModel", analysis_result)
+            assert isinstance(analysis_result, ProcessFileResult)
 
             # 2. 如果没有指定选择的建议，使用所有自动应用的建议
             if selected_suggestions is None:
                 selected_suggestions = [
                     suggestion
-                    for suggestion in analysis_result.get("cleaning_suggestions", [])
+                    for suggestion in analysis_result.cleaning_suggestions
                     if suggestion.get("auto_apply", False)
                 ]
 
             # 3. 应用用户选择的清洗操作
-            cleaning_result = apply_user_selected_cleaning_with_ai(
+            cleaning_result = await self.apply_user_selected_cleaning(
                 file_path=file_path,
                 selected_suggestions=selected_suggestions,
-                field_mappings=analysis_result.get("field_mappings", {}),
+                field_mappings=analysis_result.field_mappings,
             )
 
-            if not cleaning_result["success"]:
-                return {
-                    "success": False,
-                    "error": cleaning_result["error"],
-                    "analysis_result": analysis_result,
-                    "cleaning_result": None,
-                }
+            if not cleaning_result.success:
+                return cast("OperationFailedModel", cleaning_result)
+
+            cleaning_result = cast("ApplyCleaningResult", cleaning_result)
 
             # 4. 合并结果
-            return {
-                "success": True,
-                "analysis_result": analysis_result,
-                "cleaning_result": cleaning_result,
-                "final_data": cleaning_result["cleaned_data"],
-                "field_mappings": analysis_result.get("field_mappings", {}),
-                "applied_operations": cleaning_result["applied_operations"],
-                "summary": {"analysis": analysis_result.get("summary", ""), "cleaning": cleaning_result["summary"]},
-            }
+            return ProcessCleanFileResult(
+                analysis_result=analysis_result,
+                cleaning_result=cleaning_result,
+                final_data=cleaning_result.cleaned_data,
+                field_mappings=analysis_result.field_mappings,
+                applied_operations=cleaning_result.applied_operations,
+                summary=ProcessCleanFileSummary(
+                    analysis=analysis_result.summary,
+                    cleaning=cleaning_result.summary,
+                ),
+            )
 
-        except Exception as e:
-            logger.error(f"处理和清洗文件失败: {e}")
-            return {"success": False, "error": str(e), "analysis_result": None, "cleaning_result": None}
+        except Exception as err:
+            logger.error(f"处理和清洗文件失败: {err}")
+            return OperationFailedModel.from_err(err)
 
-    def process_file(self, file_path: Path, user_requirements: str | None = None) -> dict[str, Any]:
+    @run_sync
+    def process_file(
+        self, file_path: Path, user_requirements: str | None = None
+    ) -> ProcessFileResult | OperationFailedModel:
         """处理数据文件的主要入口"""
         try:
             # 初始化状态
@@ -147,48 +160,32 @@ class SmartCleanDataAgent:
 
             # 构建返回结果
             if error_message := result.get("error_message"):
-                return {
-                    "success": False,
-                    "error": error_message,
-                    "quality_report": None,
-                    "field_mappings": {},
-                    "cleaning_suggestions": [],
-                    "summary": "",
-                }
+                return OperationFailedModel(message=error_message, error_type="DataProcessingError")
 
             # 构建质量报告
             df_data = result.get("df_data")
-            quality_report = None
-            if df_data is not None:
-                df = pd.DataFrame(df_data)  # 反序列化DataFrame
-                quality_report = DataQualityReport(
-                    overall_score=calculate_quality_score(result["quality_issues"]),
-                    total_rows=len(df),
-                    total_columns=len(df.columns),
-                    missing_values_count=int(df.isna().sum().sum()),
-                    duplicate_rows_count=int(df.duplicated().sum()),
-                    issues=result["quality_issues"],
-                    recommendations=[s.get("suggested_action", "") for s in result["cleaning_suggestions"]],
-                ).model_dump()
+            assert df_data is not None, "DataFrame data should not be None"
+            df = pd.DataFrame(df_data)  # 反序列化DataFrame
+            quality_report = DataQualityReport(
+                overall_score=calculate_quality_score(result["quality_issues"]),
+                total_rows=len(df),
+                total_columns=len(df.columns),
+                missing_values_count=int(df.isna().sum().sum()),
+                duplicate_rows_count=int(df.duplicated().sum()),
+                issues=result["quality_issues"],
+                recommendations=[s.get("suggested_action", "") for s in result["cleaning_suggestions"]],
+            )
 
-            return {
-                "success": True,
-                "quality_report": quality_report,
-                "field_mappings": result["field_mappings"],
-                "cleaning_suggestions": result["cleaning_suggestions"],
-                "summary": result["cleaning_summary"],
-            }
+            return ProcessFileResult(
+                quality_report=quality_report,
+                field_mappings=result["field_mappings"],
+                cleaning_suggestions=result["cleaning_suggestions"],
+                summary=result["cleaning_summary"],
+            )
 
-        except Exception as e:
-            logger.error(f"处理文件失败: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "quality_report": None,
-                "field_mappings": {},
-                "cleaning_suggestions": [],
-                "summary": "",
-            }
+        except Exception as err:
+            logger.error(f"处理文件失败: {err}")
+            return OperationFailedModel.from_err(err)
 
 
 # 创建全局实例

@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
+import pandas as pd
 from pydantic import BaseModel, Field
 
 
@@ -28,3 +29,53 @@ class DataQualityReport(BaseModel):
     duplicate_rows_count: int = Field(description="重复行数")
     issues: list[dict[str, Any]] = Field(description="质量问题列表")
     recommendations: list[str] = Field(description="建议列表")
+
+
+class ProcessFileResult(BaseModel):
+    """处理文件的结果"""
+
+    success: Literal[True] = True
+    quality_report: DataQualityReport
+    field_mappings: dict[str, str]  # 字段映射
+    cleaning_suggestions: list[dict[str, Any]]  # 清洗建议
+    summary: str  # 清洗总结信息
+
+
+class ApplyCleaningSummary(BaseModel):
+    original_shape: tuple[int, int]
+    final_shape: tuple[int, int]
+    rows_changed: int
+    columns_changed: int
+    successful_operations: int
+    failed_operations: int
+    applied_field_mappings: bool
+    field_mappings_count: int
+
+
+class ApplyCleaningResult(BaseModel):
+    """应用清洗建议的结果"""
+
+    success: Literal[True] = True
+    cleaned_data: pd.DataFrame  # 清洗后的数据
+    summary: ApplyCleaningSummary  # 清洗总结信息
+    applied_operations: list[dict[str, Any]]  # 应用的清洗操作
+    final_columns: list[str]  # 最终的列名列表
+    field_mappings_applied: dict[str, str]  # 应用的字段映射
+    generated_code: str
+
+
+class ProcessCleanFileSummary(BaseModel):
+    analysis: str
+    cleaning: ApplyCleaningSummary
+
+
+class ProcessCleanFileResult(BaseModel):
+    """处理和清洗文件的结果"""
+
+    success: Literal[True] = True
+    analysis_result: ProcessFileResult
+    cleaning_result: ApplyCleaningResult  # 清洗结果
+    final_data: pd.DataFrame  # 清洗后的数据
+    field_mappings: dict[str, str]  # 字段映射
+    applied_operations: list[dict[str, Any]]  # 应用的清洗操作
+    summary: ProcessCleanFileSummary  # 包含分析和清洗的总结信息

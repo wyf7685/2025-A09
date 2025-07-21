@@ -208,18 +208,6 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 检查文件数据质量（保持向后兼容）
-  checkDataQuality: async (file: File): Promise<ApiResponse> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await api.post('/clean/check', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
   // 获取清洗建议（支持用户自定义要求）
   getCleaningSuggestions: async (
     file: File,
@@ -231,22 +219,6 @@ export const cleaningAPI = {
       formData.append('user_requirements', userRequirements);
     }
     const response = await api.post('/clean/suggestions', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
-  // 应用清洗动作（保持向后兼容）
-  applyCleaningActions: async (
-    file: File,
-    actions: CleaningAction[],
-  ): Promise<{ success: boolean; message: string; cleaned_file_path?: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('actions', JSON.stringify(actions));
-    const response = await api.post('/clean/apply-cleaning', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -269,44 +241,6 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 获取字段映射（LLM猜测字段名）
-  getFieldMapping: async (
-    file: File,
-    userRequirements?: string,
-    modelName?: string,
-  ): Promise<{
-    field_mappings: Record<string, string>;
-    summary: string;
-    status: string;
-  }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (userRequirements) {
-      formData.append('user_requirements', userRequirements);
-    }
-    if (modelName) {
-      formData.append('model_name', modelName);
-    }
-    const response = await api.post('/clean/field-mapping', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
-  // 健康检查
-  healthCheck: async (): Promise<{
-    status: string;
-    service: string;
-    agent_status: string;
-    timestamp: string;
-    version: string;
-  }> => {
-    const response = await api.get('/clean/health');
-    return response.data;
-  },
-
   // 保存字段映射到数据源
   saveFieldMappings: async (
     sourceId: string,
@@ -316,12 +250,6 @@ export const cleaningAPI = {
       source_id: sourceId,
       field_mappings: fieldMappings,
     });
-    return response.data;
-  },
-
-  // 获取数据源的字段映射
-  getFieldMappings: async (sourceId: string): Promise<ApiResponse> => {
-    const response = await api.get(`/clean/field-mappings/${sourceId}`);
     return response.data;
   },
 };

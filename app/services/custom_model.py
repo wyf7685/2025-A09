@@ -3,8 +3,6 @@
 管理用户自定义的API模型配置
 """
 
-import json
-from pathlib import Path
 from typing import Any
 
 from pydantic import TypeAdapter

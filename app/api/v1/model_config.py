@@ -62,14 +62,14 @@ async def update_custom_model(model_id: LLModelID, request: UpdateCustomModelReq
     try:
         # 过滤掉None值
         update_data = {k: v for k, v in request.model_dump().items() if v is not None}
-        
+
         if not update_data:
             raise HTTPException(status_code=400, detail="没有提供要更新的数据")
-        
+
         success = custom_model_manager.update_model(model_id, **update_data)
         if not success:
             raise HTTPException(status_code=404, detail="自定义模型未找到")
-        
+
         logger.info(f"更新自定义模型: {model_id}")
         return {"success": True, "message": "自定义模型更新成功", "model_id": model_id}
     except HTTPException:
@@ -99,65 +99,52 @@ async def get_available_models() -> ModelsResponse:
 
     # Google Models
     if settings.GOOGLE_API_KEY:
-        models.extend(
-            [
-                ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=True),
-                ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=True),
-            ]
-        )
+        models += [
+            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=True),
+            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=True),
+        ]
     else:
-        models.extend(
-            [
-                ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=False),
-                ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=False),
-            ]
-        )
+        models += [
+            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=False),
+            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=False),
+        ]
 
     # OpenAI Models (only if using real OpenAI API)
     if settings.OPENAI_API_KEY and not settings.OPENAI_API_BASE:
-        models.extend(
-            [
-                ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=True),
-                ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=True),
-            ]
-        )
+        models += [
+            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=True),
+            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=True),
+        ]
     else:
-        models.extend(
-            [
-                ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=False),
-                ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=False),
-            ]
-        )
+        models += [
+            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=False),
+            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=False),
+        ]
 
     # DeepSeek Models
     if settings.OPENAI_API_KEY and settings.OPENAI_API_BASE:
-        models.extend(
-            [
-                ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=True),
-                ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=True),
-            ]
-        )
+        models += [
+            ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=True),
+            ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=True),
+        ]
     else:
-        models.extend(
-            [
-                ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=False),
-                ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=False),
-            ]
-        )
+        models += [
+            ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=False),
+            ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=False),
+        ]
 
     # 添加自定义模型
     custom_models = custom_model_manager.list_models()
-    for model_id, model_config in custom_models.items():
+    for model_config in custom_models.values():
         # 检查自定义模型是否有有效的API密钥
         is_available = bool(model_config.api_key and model_config.api_key.strip())
-        models.append(
-            ModelInfo(
-                id=model_config.id,
-                name=model_config.name,
-                provider=model_config.provider,
-                available=is_available
-            )
+        model = ModelInfo(
+            id=model_config.id,
+            name=model_config.name,
+            provider=model_config.provider,
+            available=is_available,
         )
+        models.append(model)
 
     logger.info(f"返回 {len(models)} 个模型，其中 {len([m for m in models if m.available])} 个可用")
     return ModelsResponse(models=models)
@@ -170,7 +157,7 @@ async def delete_custom_model(model_id: LLModelID) -> dict:
         success = custom_model_manager.remove_model(model_id)
         if not success:
             raise HTTPException(status_code=404, detail="自定义模型未找到")
-        
+
         logger.info(f"删除自定义模型: {model_id}")
         return {"success": True, "message": "自定义模型删除成功", "model_id": model_id}
     except HTTPException:
@@ -192,7 +179,7 @@ async def list_custom_models() -> dict:
                 "provider": model_config.provider,
                 "api_url": model_config.api_url,
                 "model_name": model_config.model_name,
-                "available": True
+                "available": True,
             }
             for model_config in custom_models.values()
         ]

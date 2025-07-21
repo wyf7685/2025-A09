@@ -95,7 +95,7 @@ const fetchAvailableModels = async () => {
       value: model.id,
       label: `${model.name} (${model.provider})`
     }));
-    
+
     // 设置默认选中的模型
     if (availableModels.value.length > 0) {
       selectedModel.value = availableModels.value[0].value;
@@ -349,7 +349,7 @@ const analyzeDataQualityWithAI = async () => {
 const applyCleaningActions = async () => {
   // 检查是否有有效的字段映射
   const hasFieldMappings = fieldMappings.value && Object.keys(fieldMappings.value).length > 0;
-  
+
   if (selectedCleaningActions.value.length === 0 && !hasFieldMappings) {
     ElMessage.warning('请选择至少一个清洗建议或确认字段映射');
     return;
@@ -371,7 +371,7 @@ const applyCleaningActions = async () => {
 
       // 确保issue_type字段正确设置
       const issueType = action.type || originalSuggestion?.type || 'unknown';
-      
+
       return {
         title: originalSuggestion?.title || `清洗操作: ${issueType}`,
         type: issueType, // 保持向后兼容
@@ -385,7 +385,7 @@ const applyCleaningActions = async () => {
           description: `清洗列 ${action.column}`
         }],
         suggested_action: originalSuggestion?.description || `清洗列 ${action.column}`,
-        parameters: { 
+        parameters: {
           method: action.parameters || 'default',
           ...(originalSuggestion as any)?.parameters
         },
@@ -394,9 +394,9 @@ const applyCleaningActions = async () => {
     });
 
     // 过滤掉无效的清洗操作
-    const validSuggestions = preparedSuggestions.filter(suggestion => 
-      suggestion.issue_type && 
-      suggestion.issue_type !== 'None' && 
+    const validSuggestions = preparedSuggestions.filter(suggestion =>
+      suggestion.issue_type &&
+      suggestion.issue_type !== 'None' &&
       suggestion.issue_type !== 'null' &&
       suggestion.column
     );
@@ -413,10 +413,10 @@ const applyCleaningActions = async () => {
     console.log('选择的清洗建议:', validSuggestions);
     console.log('字段映射:', fieldMappings.value);
     console.log('用户要求:', userRequirements.value);
-    
+
     const cleaningResult = await cleaningAPI.executeCleaning(
       currentUploadFile.value,
-      validSuggestions as any,
+      validSuggestions,
       fieldMappings.value,
       userRequirements.value,
       selectedModel.value
