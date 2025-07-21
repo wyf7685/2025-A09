@@ -7,7 +7,7 @@ from typing import cast
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
-from langchain_core.runnables import Runnable, RunnableLambda, ensure_config
+from langchain_core.runnables import Runnable, ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import create_react_agent
 
@@ -92,7 +92,6 @@ def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object
 
 def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[str, list[str]]]:
     def params(report_template: str) -> dict[str, str]:
-        """返回包含报告模板的参数字典"""
         return {"conversation": conversation, "tool_intro": TOOL_INTRO, "report_template": report_template}
 
     conversation, figures = format_conversation(messages, include_figures=True)
@@ -109,7 +108,7 @@ class DataAnalyzerAgent:
         session_id: SessionID,
         *,
         # for rate limiting
-        pre_model_hook: RunnableLambda | None = None,
+        pre_model_hook: Runnable | None = None,
     ) -> None:
         self.sources = sources = Sources(sources_dict)
         self.llm = llm
@@ -117,7 +116,7 @@ class DataAnalyzerAgent:
 
         analyzer = analyzer_tool(sources, llm)
         df_tools = dataframe_tools(sources)
-        sk_tools, models, saved_models = scikit_tools(sources, session_id)
+        sk_tools, saved_models = scikit_tools(sources, session_id)
         sc_tools = sources_tools(sources)
         all_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
 
@@ -132,10 +131,9 @@ class DataAnalyzerAgent:
             pre_model_hook=pre_model_hook,
         )
         self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
-        self.trained_models = models
         self.saved_models = saved_models
 
-        logger.opt(colors=True).info(f"创建数据分析 Agent: <y>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
+        logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
 
     def get_messages(self) -> list[AnyMessage]:
         """获取当前 agent 的对话记录"""
@@ -169,21 +167,28 @@ class DataAnalyzerAgent:
             return
 
         self.agent.update_state(self.config, state.values)
+        self.saved_models.clear()
         self.saved_models.update(state.models)
+        self.sources.random_state = state.sources_random_state
+        self.sources.reset()
         resume_tool_calls(self.sources, state.values["messages"])
-        logger.opt(colors=True).info(f"已加载 agent 状态: <y>{len(state.values['messages'])}</>")
+
+        logger.opt(colors=True).info(f"已加载 agent 状态: {state.colorize()}")
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
         state = DataAnalyzerAgentState(
             values=cast("AgentValues", self.agent.get_state(self.config).values),
             models=self.saved_models,
+            sources_random_state=self.sources.random_state,
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
-        logger.opt(colors=True).info(f"已保存 agent 状态: <y>{len(state.values['messages'])}</>")
+        logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
+        logger.opt(colors=True).info(f"<c>{self.session_id}</> | 开始处理用户输入: <y>{escape_tag(user_input)}</>")
+
         for event in self.agent.stream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,
@@ -191,8 +196,12 @@ class DataAnalyzerAgent:
         ):
             yield from process_stream_event(event)
 
+        logger.opt(colors=True).success(f"<c>{self.session_id}</> | 处理完成")
+
     async def astream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """异步使用用户输入调用 agent，并以流式方式返回事件"""
+        logger.opt(colors=True).info(f"<c>{self.session_id}</> | 开始处理用户输入: <y>{escape_tag(user_input)}</>")
+
         async for event in self.agent.astream(
             {"messages": [{"role": "user", "content": user_input}]},
             self.config,
@@ -200,3 +209,5 @@ class DataAnalyzerAgent:
         ):
             for evt in process_stream_event(event):
                 yield evt
+
+        logger.opt(colors=True).success(f"<c>{self.session_id}</> | 处理完成")

@@ -1,10 +1,10 @@
 import contextlib
 import json
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AIMessage, ToolMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Tag
 
 
 class LlmTokenEvent(BaseModel):
@@ -41,7 +41,13 @@ class ToolErrorEvent(BaseModel):
     error: str
 
 
-type StreamEvent = LlmTokenEvent | ToolCallEvent | ToolResultEvent | ToolErrorEvent
+type StreamEvent = Annotated[
+    Annotated[LlmTokenEvent, Tag("llm_token")]
+    | Annotated[ToolCallEvent, Tag("tool_call")]
+    | Annotated[ToolResultEvent, Tag("tool_result")]
+    | Annotated[ToolErrorEvent, Tag("tool_error")],
+    Field(discriminator="type"),
+]
 
 
 def fix_message_content(content: str | list[Any]) -> str:

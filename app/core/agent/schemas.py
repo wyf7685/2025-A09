@@ -15,6 +15,14 @@ class AgentValues(TypedDict):
 class DataAnalyzerAgentState(BaseModel):
     values: AgentValues
     models: dict[str, Path]
+    sources_random_state: int
+
+    def colorize(self) -> str:
+        return (
+            f"消息数=<y>{len(self.values['messages'])}</>, "
+            f"模型数=<y>{len(self.models)}</>, "
+            f"随机状态=<y>{self.sources_random_state}</>"
+        )
 
 
 type DatasetID = str

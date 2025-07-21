@@ -98,7 +98,7 @@ type ModelID = str
 def scikit_tools(
     sources: Sources,
     session_id: SessionID,
-) -> tuple[list[BaseTool], dict[ModelID, TrainModelResult], dict[ModelID, Path]]:
+) -> tuple[list[BaseTool], dict[ModelID, Path]]:
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
     train_model_cache: dict[ModelID, TrainModelResult] = {}
     saved_models: dict[ModelID, Path] = {}
@@ -659,7 +659,7 @@ def scikit_tools(
         predict_with_model_tool,
     ]
 
-    return tools, train_model_cache, saved_models
+    return tools, saved_models
 
 
 __all__ = ["scikit_tools"]

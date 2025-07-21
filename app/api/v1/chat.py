@@ -81,7 +81,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
     except Exception as e:
         logger.exception("流式对话分析失败")
-        yield json.dumps({"error": str(e)})
+        yield json.dumps({"error": f"流式对话分析失败: {e!r}"})
 
 
 @router.post("/stream")
