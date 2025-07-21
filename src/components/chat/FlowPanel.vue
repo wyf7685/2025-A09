@@ -216,6 +216,22 @@ const getCurrentModelInfo = computed(() => {
   return modelStore.selectedModel || storeAvailableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' };
 });
 
+// 按提供商分组模型
+const getProviderGroups = () => {
+  const groups: { name: string; models: any[] }[] = [];
+  const providers = new Set(storeAvailableModels.value.map(m => m.provider));
+  
+  providers.forEach(provider => {
+    const models = storeAvailableModels.value.filter(m => m.provider === provider);
+    groups.push({
+      name: provider,
+      models: models
+    });
+  });
+  
+  return groups;
+};
+
 // 路线切换处理
 const handleRouteChange = (route: string) => {
   console.log('切换到路线:', route);
@@ -493,12 +509,13 @@ onMounted(async () => {
       </div>
       <div class="model-selector">
         <el-select v-model="selectedModel" @change="changeModel" placeholder="选择模型" size="small" class="model-select">
-          <el-option-group v-for="provider in ['Google', 'OpenAI', 'DeepSeek', 'Anthropic']" :key="provider"
-            :label="provider">
-            <el-option v-for="model in storeAvailableModels.filter(m => m.provider === provider)" :key="model.id"
+          <!-- 按提供商分组显示模型 -->
+          <el-option-group v-for="provider in getProviderGroups()" :key="provider.name" :label="provider.name">
+            <el-option v-for="model in provider.models" :key="model.id"
               :label="model.name" :value="model.id">
               <div class="model-option">
                 <span class="model-name">{{ model.name }}</span>
+                <span v-if="!model.available" class="model-status">(未配置)</span>
               </div>
             </el-option>
           </el-option-group>
@@ -800,6 +817,12 @@ onMounted(async () => {
       padding: 1px 4px;
       border-radius: 3px;
       margin-left: 8px;
+    }
+
+    .model-status {
+      font-size: 9px;
+      color: #ef4444;
+      font-style: italic;
     }
   }
 

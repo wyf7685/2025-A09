@@ -78,6 +78,63 @@ export const useModelStore = defineStore('model', () => {
     }
   };
 
+  // 删除自定义模型
+  const deleteCustomModel = async (modelId: string): Promise<{ success: boolean }> => {
+    try {
+      const response = await api.delete(`/models/custom/${modelId}`);
+      if (response.data.success) {
+        // 从本地列表中移除
+        const index = availableModels.value.findIndex(m => m.id === modelId);
+        if (index !== -1) {
+          availableModels.value.splice(index, 1);
+        }
+        
+        // 如果删除的是当前选中的模型，选择第一个可用模型
+        if (selectedModel.value?.id === modelId) {
+          selectedModel.value = availableModels.value[0] || null;
+        }
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Failed to delete custom model:', error);
+      throw error;
+    }
+  };
+
+  // 更新自定义模型
+  const updateCustomModel = async (modelId: string, params: {
+    name?: string;
+    provider?: string;
+    api_url?: string;
+    api_key?: string;
+    model_name?: string;
+  }) => {
+    try {
+      const response = await api.put(`/models/custom/${modelId}`, params);
+      if (response.data.success) {
+        // 更新本地列表中的模型
+        const index = availableModels.value.findIndex(m => m.id === modelId);
+        if (index !== -1) {
+          availableModels.value[index] = {
+            ...availableModels.value[index],
+            ...params,
+            apiUrl: params.api_url || availableModels.value[index].apiUrl,
+            apiKey: params.api_key || availableModels.value[index].apiKey,
+          };
+        }
+        
+        // 如果更新的是当前选中的模型，更新选中状态
+        if (selectedModel.value?.id === modelId) {
+          selectedModel.value = availableModels.value[index];
+        }
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update custom model:', error);
+      throw error;
+    }
+  };
+
   // 设置自定义模型
   const setCustomModel = (model: LLMModel) => {
     // 将自定义模型添加到可用模型列表中（如果不存在的话）
@@ -99,5 +156,7 @@ export const useModelStore = defineStore('model', () => {
     setSelectedModel,
     setCustomModel,
     submitCustomModel,
+    deleteCustomModel,
+    updateCustomModel,
   };
 });
