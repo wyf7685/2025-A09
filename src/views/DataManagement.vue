@@ -9,6 +9,7 @@ import EditDataSourceDialog from '@/components/data/EditDataSourceDialog.vue';
 import PreviewDataDialog from '@/components/data/PreviewDataDialog.vue';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
+import { useModelStore } from '@/stores/model';
 import type { DataSourceMetadataWithID } from '@/types';
 import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { cleaningAPI, dataSourceAPI } from '@/utils/api';
@@ -20,6 +21,7 @@ import { useRouter } from 'vue-router';
 const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
+const modelStore = useModelStore();
 
 // =============================================
 // 数据源列表状态
@@ -83,6 +85,25 @@ const availableModels = ref([
   { value: 'gpt-4', label: 'GPT-4' },
   { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
 ]);
+
+// 获取可用模型列表
+const fetchAvailableModels = async () => {
+  try {
+    await modelStore.fetchAvailableModels();
+    // 将store中的模型转换为组件需要的格式
+    availableModels.value = modelStore.availableModels.map(model => ({
+      value: model.id,
+      label: `${model.name} (${model.provider})`
+    }));
+    
+    // 设置默认选中的模型
+    if (availableModels.value.length > 0) {
+      selectedModel.value = availableModels.value[0].value;
+    }
+  } catch (error) {
+    console.error('获取可用模型失败:', error);
+  }
+};
 
 // =============================================
 // 多选相关状态
@@ -581,6 +602,7 @@ const createSessionWithSelectedSources = async () => {
 
 onMounted(() => {
   fetchDatasets();
+  fetchAvailableModels(); // 在组件挂载时获取可用模型
 });
 
 // 监听搜索查询变化，更新过滤结果

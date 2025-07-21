@@ -30,6 +30,7 @@ export interface LLMModel {
   description?: string;
   apiUrl?: string; // 自定义API URL
   apiKey?: string; // 自定义API Key
+  available?: boolean; // 是否已配置可用
 }
 
 /**
