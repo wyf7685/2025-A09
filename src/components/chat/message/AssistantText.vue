@@ -8,22 +8,16 @@ const props = defineProps<{
 
 const formatted = ref<string>('');
 
-onMounted(async () => {
-  if (props.md) {
-    formatted.value = await formatMessage(props.md);
-  }
-});
+const format = async (md: string): Promise<void> => {
+  formatted.value = md ? await formatMessage(md) : '';
+};
 
-watch(() => props.md, async (newVal) => {
-  if (newVal) {
-    formatted.value = await formatMessage(newVal);
-  } else {
-    formatted.value = '';
-  }
-}, {
-  immediate: true,
-  deep: true
-});
+onMounted(async () => await format(props.md));
+
+watch(() => props.md,
+  async (newVal) => await format(newVal),
+  { immediate: true, deep: true }
+);
 </script>
 
 <template>
@@ -122,9 +116,5 @@ watch(() => props.md, async (newVal) => {
     border-left: 4px solid #10b981;
     border-radius: 4px;
   }
-}
-
-.rotating {
-  animation: rotating 2s linear infinite;
 }
 </style>
