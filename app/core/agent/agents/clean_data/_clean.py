@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from langchain.prompts import PromptTemplate
+from langchain_core.runnables import Runnable
 
 from app.core.agent.schemas import OperationFailedModel
 from app.core.chain import get_llm
+from app.core.chain.nl_analysis import code_parser
 from app.core.datasource import create_df_source
 from app.core.executor import CodeExecutor
 from app.log import logger
@@ -18,14 +21,7 @@ CODE_GENERATION_PROMPT = """
 你是一位专业的数据清洗专家。基于用户的要求，为以下数据生成Python代码来执行数据清洗操作。
 
 数据信息:
-- 形状: {data_shape}
-- 列名: {columns}
-- 数据类型: {dtypes}
-- 数据预览:
-{data_preview}
-
-字段映射 (必须应用):
-{field_mappings}
+{data_overview}
 
 用户选择的清洗操作:
 {selected_suggestions}
@@ -34,9 +30,8 @@ CODE_GENERATION_PROMPT = """
 {user_requirements}
 
 请生成Python代码来执行以下操作:
-1. **首先应用字段映射** - 将列名从原始名称重命名为映射后的名称
-2. 执行用户选择的清洗操作
-3. 确保最终的DataFrame列名是映射后的名称
+1. 执行用户选择的清洗操作
+2. 确保最终的DataFrame列名是映射后的名称
 
 要求:
 - 使用变量名 `df` 来表示DataFrame
@@ -53,6 +48,14 @@ import numpy as np
 # 你的清洗代码
 ```
 """
+
+
+def _create_code_generator_chain() -> Runnable[dict[str, Any], str]:
+    prompt = PromptTemplate(
+        input_variables=["data_overview", "selected_suggestions", "user_requirements"],
+        template=CODE_GENERATION_PROMPT,
+    )
+    return prompt | get_llm() | code_parser
 
 
 def apply_user_selected_cleaning_with_ai(
@@ -153,59 +156,39 @@ def apply_user_selected_cleaning_with_ai(
                 # 查找映射后的列名
                 new_column = field_mappings_applied.get(old_column, old_column)
                 updated_suggestion["column"] = new_column
-                logger.info(f"更新清洗建议中的列名: {old_column} -> {new_column}")
+                logger.debug(f"更新清洗建议中的列名: {old_column} -> {new_column}")
             updated_suggestions.append(updated_suggestion)
 
-        # 准备数据信息给AI（使用映射后的数据）
+        # 创建数据源并执行代码
+        data_source = create_df_source(df, "temp_data", "临时数据用于清洗")
+
+        # 准备数据信息给AI
         data_info = {
-            "data_shape": f"{df.shape[0]} 行 × {df.shape[1]} 列",
-            "columns": df.columns.tolist(),  # 使用映射后的列名
-            "dtypes": df.dtypes.to_dict(),
-            "data_preview": df.head(3).to_string(),
-            "field_mappings": {},  # 字段映射已经应用，这里传空字典
+            "data_overview": data_source.format_overview(),
             "selected_suggestions": updated_suggestions,  # 使用更新后的建议
             "user_requirements": user_requirements or "无特殊要求",
         }
 
         # 生成清洗代码
-        prompt = CODE_GENERATION_PROMPT.format(**data_info)
         logger.info("开始生成清洗代码...")
-
-        llm = get_llm()
-        code_response = llm.invoke(prompt)
-
-        # 提取Python代码
-        code_match = re.search(r"```python\n(.*?)\n```", code_response, re.DOTALL)
-        if not code_match:
-            code_match = re.search(r"```\n(.*?)\n```", code_response, re.DOTALL)
-
-        if not code_match:
-            raise ValueError("AI未能生成有效的Python代码")
-
-        generated_code = code_match.group(1).strip()
+        generated_code = _create_code_generator_chain().invoke(data_info)
         logger.info(f"生成的清洗代码:\n{generated_code}")
 
-        # 创建数据源并执行代码
-        data_source = create_df_source(df, "temp_data", "临时数据用于清洗")
-
         with CodeExecutor(data_source) as executor:
-            # 添加返回结果的代码
-            full_code = generated_code + "\n\nresult = df"
+            exec_result = executor.execute(generated_code + "\n\nresult = df")
+        del df, data_source
 
-            # 执行生成的代码
-            exec_result = executor.execute(full_code)
+        if not exec_result["success"]:
+            raise ValueError(f"代码执行失败: {exec_result['error']}")
 
-            if not exec_result["success"]:
-                raise ValueError(f"代码执行失败: {exec_result['error']}")
+        # 获取执行结果
+        if exec_result["result"] is None:
+            raise ValueError("代码执行没有返回结果")
 
-            # 获取执行结果
-            if exec_result["result"] is None:
-                raise ValueError("代码执行没有返回结果")
+        cleaned_df = exec_result["result"]
 
-            cleaned_df = exec_result["result"]
-
-            if not isinstance(cleaned_df, pd.DataFrame):
-                raise TypeError(f"代码执行结果不是DataFrame: {type(cleaned_df)}")
+        if not isinstance(cleaned_df, pd.DataFrame):
+            raise TypeError(f"代码执行结果不是DataFrame: {type(cleaned_df)}")
 
         final_shape = cleaned_df.shape
         final_columns = cleaned_df.columns.tolist()
