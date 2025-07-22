@@ -4,7 +4,8 @@
     "editor.formatOnType": true,
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "always"
+      "source.organizeImports": "always",
+      "source.organizeImports.ruff": "always"
     }
   },
   "[json]": {
@@ -21,12 +22,17 @@
   "editor.formatOnType": true,
   "editor.formatOnSave": true,
 
+  "python.envFile": "",
+
   // file nesting
   "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {
     "tsconfig.json": "tsconfig.*.json, env.d.ts",
-    "vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*",
-    "package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .prettier*, prettier*, .editorconfig"
+    "vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*, auto-imports.d.ts, components.d.ts",
+    "package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .prettier*, prettier*, .editorconfig",
+    "pyproject.toml": "pyproject.toml, poetry.lock, pdm.lock, uv.lock, requirements.txt, Pipfile, Pipfile.lock"
   },
+
   "typescript.format.semicolons": "insert"
 }
