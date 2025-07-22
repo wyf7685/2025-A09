@@ -23,10 +23,16 @@ const routes = [
     meta: { title: '对话分析' },
   },
   {
-    path: '/models',
-    name: 'Models',
-    component: () => import('../views/Models.vue'),
-    meta: { title: '模型管理' },
+    path: '/llm-models',
+    name: 'LLMModels',
+    component: () => import('../views/LLMModels.vue'),
+    meta: { title: '大语言模型管理' },
+  },
+  {
+    path: '/trained-models',
+    name: 'TrainedModels',
+    component: () => import('../views/TrainedModels.vue'),
+    meta: { title: '训练模型管理' },
   },
 ];
 

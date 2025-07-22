@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
+import AddDatabaseDialog from '@/components/data/AddDatabaseDialog.vue';
 import DataCleaningDialog from '@/components/data/DataCleaningDialog.vue';
 import DataSourceHeader from '@/components/data/DataSourceHeader.vue';
 import DataSourceSearchBar from '@/components/data/DataSourceSearchBar.vue';

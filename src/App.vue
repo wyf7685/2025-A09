@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
 import { checkHealth as checkHealthApi } from '@/utils/api';
+import { ChatDotRound, Collection, Connection, DataAnalysis, House, Menu, Monitor } from '@element-plus/icons-vue';
+import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElMenu, ElMenuItem } from 'element-plus';
+import { onMounted, ref } from 'vue';
+import { RouterView } from 'vue-router';
 
 // 响应式数据
 const sidebarCollapsed = ref(false);
-const healthStatus = ref({ status: '' });
+const healthStatus = ref(false);
 
 // 方法
 const toggleSidebar = () => {
@@ -13,10 +16,11 @@ const toggleSidebar = () => {
 
 const checkHealth = async () => {
   try {
-    const status = await checkHealthApi();
-    healthStatus.value = status;
+    await checkHealthApi();
+    healthStatus.value = true;
   } catch (error) {
     console.error('健康检查失败:', error);
+    healthStatus.value = false;
   }
 };
 
@@ -45,7 +49,7 @@ onMounted(async () => {
 
         <div style="display: flex; align-items: center; gap: 16px;">
           <!-- 系统状态 -->
-          <el-badge :value="healthStatus.status ? '正常' : '异常'" :type="healthStatus.status ? 'success' : 'danger'">
+          <el-badge :value="healthStatus ? '正常' : '异常'" :type="healthStatus ? 'success' : 'danger'">
             <el-icon style="color: white; font-size: 20px;">
               <Monitor />
             </el-icon>
@@ -82,18 +86,26 @@ onMounted(async () => {
             <span>对话分析</span>
           </el-menu-item>
 
-          <el-menu-item index="/models">
+          <el-menu-item index="/llm-models">
             <el-icon>
-              <Setting />
+              <Connection />
             </el-icon>
-            <span>模型管理</span>
+            <span>大语言模型</span>
           </el-menu-item>
+
+          <el-menu-item index="/trained-models">
+            <el-icon>
+              <DataAnalysis />
+            </el-icon>
+            <span>机器学习模型</span>
+          </el-menu-item>
+
         </el-menu>
       </el-aside>
 
       <!-- 内容区域 -->
       <main class="layout-content">
-        <router-view />
+        <RouterView />
       </main>
     </div>
   </div>

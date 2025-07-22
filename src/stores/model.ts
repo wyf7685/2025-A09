@@ -1,7 +1,7 @@
-import type { Model, ModelsResponse, LLMModel } from '@/types';
+import type { LLMModel, ModelsResponse } from '@/types';
 import api from '@/utils/api';
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 
 export const useModelStore = defineStore('model', () => {
   const selectedModel = ref<LLMModel | null>(null);
@@ -88,7 +88,7 @@ export const useModelStore = defineStore('model', () => {
         if (index !== -1) {
           availableModels.value.splice(index, 1);
         }
-        
+
         // 如果删除的是当前选中的模型，选择第一个可用模型
         if (selectedModel.value?.id === modelId) {
           selectedModel.value = availableModels.value[0] || null;
@@ -122,7 +122,7 @@ export const useModelStore = defineStore('model', () => {
             apiKey: params.api_key || availableModels.value[index].apiKey,
           };
         }
-        
+
         // 如果更新的是当前选中的模型，更新选中状态
         if (selectedModel.value?.id === modelId) {
           selectedModel.value = availableModels.value[index];

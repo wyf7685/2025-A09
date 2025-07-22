@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
-import { useSessionStore } from '@/stores/session';
 import { useDataSourceStore } from '@/stores/datasource';
+import { useSessionStore } from '@/stores/session';
+import { computed, onMounted } from 'vue';
 
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();

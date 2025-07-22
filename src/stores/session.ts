@@ -1,8 +1,8 @@
 import type { ChatEntry, Session, SessionListItem, ToolCallArtifact } from '@/types';
+import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
-import { ElMessage } from 'element-plus';
 
 export const useSessionStore = defineStore('session', () => {
   const currentSession = ref<Session | null>(null);

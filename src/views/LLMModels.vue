@@ -1,0 +1,377 @@
+<script setup lang="ts">
+import { useModelStore } from '@/stores/model';
+import type { LLMModel } from '@/types';
+import { Delete, Edit, Plus, Setting } from '@element-plus/icons-vue';
+import {
+  ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElIcon,
+  ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTag
+} from 'element-plus';
+import { onMounted, ref } from 'vue';
+
+const modelStore = useModelStore();
+
+// 响应式数据
+const llmModels = ref<LLMModel[]>([]);
+const showAddLLMDialog = ref<boolean>(false);
+const showEditLLMDialog = ref<boolean>(false);
+const currentEditLLMModel = ref<LLMModel | null>(null);
+
+// LLM模型表单数据
+const llmModelForm = ref({
+  name: '',
+  provider: '',
+  apiKey: '',
+  apiUrl: '',
+  modelName: ''
+});
+
+// 预设的模型提供商
+const modelProviders = [
+  {
+    name: 'OpenAI',
+    models: ['gpt-4', 'gpt-3.5-turbo', 'gpt-4-turbo'],
+    defaultUrl: 'https://api.openai.com/v1'
+  },
+  {
+    name: 'Google',
+    models: ['gemini-2.0-flash', 'gemini-1.5-pro'],
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta'
+  },
+  {
+    name: 'DeepSeek',
+    models: ['deepseek-chat', 'deepseek-coder'],
+    defaultUrl: 'https://api.deepseek.com/v1'
+  }
+];
+
+// LLM模型管理方法
+const fetchLLMModels = async (): Promise<void> => {
+  try {
+    await modelStore.fetchAvailableModels();
+    llmModels.value = modelStore.availableModels;
+  } catch (error) {
+    console.error('获取LLM模型失败:', error);
+    ElMessage.error('获取LLM模型列表失败');
+  }
+};
+
+const editLLMModel = (model: any): void => {
+  currentEditLLMModel.value = model;
+  llmModelForm.value = {
+    name: model.name,
+    provider: model.provider,
+    apiKey: model.apiKey || '',
+    apiUrl: model.apiUrl || '',
+    modelName: model.name
+  };
+  showEditLLMDialog.value = true;
+};
+
+const deleteLLMModel = async (modelId: string): Promise<void> => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这个LLM模型配置吗？',
+      '确认删除',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+
+    // 调用store的删除方法
+    await modelStore.deleteCustomModel(modelId);
+    ElMessage.success('LLM模型配置删除成功');
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除LLM模型失败:', error);
+      ElMessage.error('删除LLM模型失败');
+    }
+  }
+};
+
+const saveLLMModel = async (): Promise<void> => {
+  try {
+    if (!llmModelForm.value.name || !llmModelForm.value.provider || !llmModelForm.value.apiKey) {
+      ElMessage.error('请填写完整的模型信息');
+      return;
+    }
+
+    await modelStore.submitCustomModel({
+      name: llmModelForm.value.name,
+      provider: llmModelForm.value.provider,
+      api_key: llmModelForm.value.apiKey,
+      api_url: llmModelForm.value.apiUrl,
+      model_name: llmModelForm.value.modelName
+    });
+
+    ElMessage.success('LLM模型配置保存成功');
+    showAddLLMDialog.value = false;
+    showEditLLMDialog.value = false;
+    await fetchLLMModels();
+  } catch (error) {
+    console.error('保存LLM模型失败:', error);
+    ElMessage.error('保存LLM模型配置失败');
+  }
+};
+
+const resetLLMForm = (): void => {
+  llmModelForm.value = {
+    name: '',
+    provider: '',
+    apiKey: '',
+    apiUrl: '',
+    modelName: ''
+  };
+  currentEditLLMModel.value = null;
+};
+
+// 生命周期
+onMounted(async () => {
+  await fetchLLMModels();
+});
+</script>
+
+<template>
+  <div class="llm-models-page">
+    <div class="page-header">
+      <div class="header-content">
+        <h1>大语言模型管理</h1>
+        <p class="header-subtitle">配置和管理您的大语言模型API</p>
+      </div>
+      <div class="header-actions">
+        <el-button type="primary" @click="showAddLLMDialog = true">
+          <el-icon>
+            <Plus />
+          </el-icon>
+          添加模型
+        </el-button>
+      </div>
+    </div>
+
+    <div class="llm-models-container">
+      <!-- LLM模型列表 -->
+      <div class="llm-models-grid">
+        <el-card v-for="llmModel in llmModels" :key="llmModel.id" class="llm-model-card" shadow="hover">
+          <div class="llm-model-header">
+            <div class="model-icon">
+              <el-icon>
+                <Setting />
+              </el-icon>
+            </div>
+            <div class="model-info">
+              <h3>{{ llmModel.name }}</h3>
+              <p class="model-provider">{{ llmModel.provider }}</p>
+            </div>
+            <div class="model-status">
+              <el-tag :type="llmModel.available ? 'success' : 'danger'" size="small">
+                {{ llmModel.available ? '已配置' : '未配置' }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="llm-model-actions">
+            <el-button size="small" @click="editLLMModel(llmModel)">
+              <el-icon>
+                <Edit />
+              </el-icon>
+              配置
+            </el-button>
+            <el-button size="small" type="danger" @click="deleteLLMModel(llmModel.id)"
+              v-if="llmModel.id.startsWith('custom-')">
+              <el-icon>
+                <Delete />
+              </el-icon>
+              删除
+            </el-button>
+          </div>
+        </el-card>
+      </div>
+
+      <!-- 添加LLM模型对话框 -->
+      <el-dialog v-model="showAddLLMDialog" title="添加LLM模型" width="600px" @close="resetLLMForm">
+        <el-form :model="llmModelForm" label-width="120px">
+          <el-form-item label="提供商" required>
+            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
+              <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
+                :value="provider.name" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模型名称" required>
+            <el-select v-model="llmModelForm.modelName" placeholder="选择或输入模型名称" style="width: 100%" filterable
+              allow-create>
+              <el-option v-for="model in modelProviders.find(p => p.name === llmModelForm.provider)?.models || []"
+                :key="model" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="API Key" required>
+            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password />
+          </el-form-item>
+          <el-form-item label="API URL">
+            <el-input v-model="llmModelForm.apiUrl" placeholder="留空使用默认URL" />
+            <div class="form-tip">
+              默认URL: {{modelProviders.find(p => p.name === llmModelForm.provider)?.defaultUrl || '请选择提供商'}}
+            </div>
+          </el-form-item>
+          <el-form-item label="显示名称">
+            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="showAddLLMDialog = false">取消</el-button>
+            <el-button type="primary" @click="saveLLMModel">保存</el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <!-- 编辑LLM模型对话框 -->
+      <el-dialog v-model="showEditLLMDialog" title="编辑LLM模型" width="600px" @close="resetLLMForm">
+        <el-form :model="llmModelForm" label-width="120px">
+          <el-form-item label="提供商" required>
+            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
+              <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
+                :value="provider.name" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模型名称" required>
+            <el-select v-model="llmModelForm.modelName" placeholder="选择或输入模型名称" style="width: 100%" filterable
+              allow-create>
+              <el-option v-for="model in modelProviders.find(p => p.name === llmModelForm.provider)?.models || []"
+                :key="model" :label="model" :value="model" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="API Key" required>
+            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password />
+          </el-form-item>
+          <el-form-item label="API URL">
+            <el-input v-model="llmModelForm.apiUrl" placeholder="留空使用默认URL" />
+            <div class="form-tip">
+              默认URL: {{modelProviders.find(p => p.name === llmModelForm.provider)?.defaultUrl || '请选择提供商'}}
+            </div>
+          </el-form-item>
+          <el-form-item label="显示名称">
+            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="showEditLLMDialog = false">取消</el-button>
+            <el-button type="primary" @click="saveLLMModel">保存</el-button>
+          </div>
+        </template>
+      </el-dialog>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.llm-models-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 0 8px;
+}
+
+.header-content h1 {
+  margin: 0 0 8px 0;
+  font-size: 32px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.header-subtitle {
+  margin: 0;
+  color: #6b7280;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.llm-models-container {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.llm-models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.llm-model-card {
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.llm-model-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.llm-model-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.model-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.model-info {
+  flex: 1;
+}
+
+.model-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.model-provider {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.model-status {
+  flex-shrink: 0;
+}
+
+.llm-model-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+</style>
