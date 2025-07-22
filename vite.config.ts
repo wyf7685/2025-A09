@@ -1,10 +1,22 @@
-import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { fileURLToPath, URL } from 'node:url';
+import AutoImport from 'unplugin-auto-import/vite';
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
+import { defineConfig } from 'vite';
 import vueDevTools from 'vite-plugin-vue-devtools';
 
 export default defineConfig({
-  plugins: [vue(), vueDevTools()],
+  plugins: [
+    vue(),
+    vueDevTools(),
+    AutoImport({
+      resolvers: [ElementPlusResolver()],
+    }),
+    Components({
+      resolvers: [ElementPlusResolver()],
+    }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -25,7 +37,7 @@ export default defineConfig({
         },
         manualChunks: {
           vendor: ['vue', 'vue-router', 'axios', 'pinia'],
-          echarts: ['echarts'],
+          // echarts: ['echarts'],  // unused
           'element-plus': ['element-plus'],
           'element-plus-icons': ['@element-plus/icons-vue'],
         },
