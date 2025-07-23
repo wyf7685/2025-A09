@@ -64,10 +64,12 @@ declare module 'vue' {
     FlowPanel: typeof import('./src/components/chat/FlowPanel.vue')['default']
     PreviewDataDialog: typeof import('./src/components/data/PreviewDataDialog.vue')['default']
     QualitySummaryCards: typeof import('./src/components/data/cleaning/QualitySummaryCards.vue')['default']
+    ReportGenerationDialog: typeof import('./src/components/chat/report/ReportGenerationDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SessionEditDialog: typeof import('./src/components/chat/SessionEditDialog.vue')['default']
     SessionSidebar: typeof import('./src/components/chat/SessionSidebar.vue')['default']
+    TemplateUploadDialog: typeof import('./src/components/chat/report/TemplateUploadDialog.vue')['default']
     UploadStepComponent: typeof import('./src/components/data/cleaning/UploadStepComponent.vue')['default']
     UserMessage: typeof import('./src/components/chat/message/UserMessage.vue')['default']
   }

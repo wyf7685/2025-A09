@@ -92,33 +92,4 @@ watch(() => visible.value, (newVisible) => {
     }
   }
 }
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-
-  .el-button {
-    border-radius: 8px;
-    padding: 8px 20px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-
-    &--primary {
-      background-color: #10b981;
-      border-color: #10b981;
-
-      &:hover {
-        background-color: #059669;
-        border-color: #059669;
-        transform: translateY(-1px);
-      }
-
-      &:disabled {
-        background-color: #d1fae5;
-        border-color: #d1fae5;
-      }
-    }
-  }
-}
 </style>

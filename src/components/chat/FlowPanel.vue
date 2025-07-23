@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
-import type { FlowStep, FlowRoute, FlowPanel } from '@/types';
+import type { FlowStep, FlowRoute, FlowPanel, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Edit, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
@@ -218,9 +218,9 @@ const getCurrentModelInfo = computed(() => {
 
 // 按提供商分组模型
 const getProviderGroups = () => {
-  const groups: { name: string; models: any[] }[] = [];
+  const groups: { name: string; models: LLMModel[] }[] = [];
   const providers = new Set(storeAvailableModels.value.map(m => m.provider));
-  
+
   providers.forEach(provider => {
     const models = storeAvailableModels.value.filter(m => m.provider === provider);
     groups.push({
@@ -228,7 +228,7 @@ const getProviderGroups = () => {
       models: models
     });
   });
-  
+
   return groups;
 };
 
