@@ -29,11 +29,18 @@ DREMIO_EXTERNAL_NAME=external
 
 # LLM
 TEST_MODEL_NAME=xxx
+# 可选: 根据调试使用的 API 自行配置
 GOOGLE_API_KEY=xxx
 OPENAI_API_KEY=xxx
 OPENAI_API_BASE=xxx
 OLLAMA_API_URL=xxx
 ```
+
+## 启动调试
+
+推荐使用 `VS Code` (或 `Cursor` 等) 侧边栏调试，一键启动前端+后端
+
+其他 IDE 请自行配置运行和调试
 
 ## 说明
 
