@@ -1,12 +1,10 @@
 import json
 import re
 
-import pandas as pd
-
 from app.core.chain import get_llm
 from app.log import logger
 
-from .schemas import CleaningState
+from .schemas import CleaningState, load_source
 
 PROMPT_FIELD_MAPPING = """
 你是一位专业的数据分析师，擅长理解数据结构和字段含义。
@@ -44,11 +42,7 @@ PROMPT_FIELD_MAPPING = """
 
 def create_field_mapping_prompt(state: CleaningState) -> str:
     """创建字段映射提示词"""
-    df_data = state["df_data"]
-    if df_data is None:
-        raise ValueError("数据未加载")
-
-    df = pd.DataFrame(df_data)  # 反序列化DataFrame
+    df = load_source(state, "source_id").get_full()
 
     # 准备数据样本和列信息
     sample_data = df.head(5).to_dict("records")

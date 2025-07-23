@@ -5,7 +5,7 @@ import pandas as pd
 
 from app.log import logger
 
-from .schemas import CleaningState
+from .schemas import CleaningState, load_source
 
 PATTERN_EMAIL = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 PATTERN_PHONE = re.compile(r"^[\+]?[1-9]?\d{1,14}$")
@@ -146,11 +146,7 @@ def _check_outliers(df: pd.DataFrame) -> list[dict[str, Any]]:
 def analyze_quality(state: CleaningState) -> CleaningState:
     """分析数据质量"""
     try:
-        df_data = state["df_data"]
-        if df_data is None:
-            raise ValueError("数据未加载")
-
-        df = pd.DataFrame(df_data)  # 反序列化DataFrame
+        df = load_source(state, "source_id").get_full()
 
         logger.info("开始分析数据质量")
 

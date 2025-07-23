@@ -3,7 +3,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from app.const import DATASOURCE_DIR
+from app.const import DATASOURCE_DIR, TEMP_DIR
 from app.core.config import settings
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
 from app.core.datasource.dremio import DremioDataSource
@@ -206,7 +206,9 @@ class TempFileService:
             str: 临时文件ID
         """
         file_id = str(uuid.uuid4())
-        self._data[file_id] = file_path
+        temp_path = TEMP_DIR / f"{file_id}{file_path.suffix}"
+        file_path.rename(temp_path)
+        self._data[file_id] = temp_path
         return file_id
 
     def get(self, file_id: str) -> Path | None:
@@ -228,15 +230,64 @@ class TempFileService:
         Args:
             file_id: 临时文件ID
         """
-        if file_id in self._data:
-            file_path = self._data[file_id]
-            if file_path.exists():
+        if (file_path := self._data.get(file_id)) and file_path.exists():
+            try:
                 file_path.unlink()
+            except Exception as e:
+                logger.warning(f"删除临时文件失败: {file_path} - {e}")
             del self._data[file_id]
+
+    def delete_all(self) -> None:
+        """
+        删除所有临时文件
+        """
+        for file_id in list(self._data):
+            self.delete(file_id)
+
+
+class TempSourceService:
+    def __init__(self) -> None:
+        self._data: dict[str, DataSource] = {}
+
+    def register(self, source: DataSource) -> str:
+        """
+        注册临时数据源
+
+        Args:
+            source: 数据源对象
+
+        Returns:
+            str: 临时数据源ID
+        """
+        source_id = str(uuid.uuid4())
+        self._data[source_id] = source
+        return source_id
+
+    def get(self, source_id: str) -> DataSource | None:
+        """
+        获取临时数据源
+
+        Args:
+            source_id: 临时数据源ID
+
+        Returns:
+            DataSource | None: 数据源对象，如果不存在则返回None
+        """
+        return self._data.get(source_id)
+
+    def delete(self, source_id: str) -> None:
+        """
+        删除临时数据源
+
+        Args:
+            source_id: 临时数据源ID
+        """
+        self._data.pop(source_id, None)
 
 
 datasource_service = DataSourceService()
-tempfile_service = TempFileService()
+temp_file_service = TempFileService()
+temp_source_service = TempSourceService()
 
 
 @lifespan.on_startup
@@ -255,3 +306,6 @@ def _() -> None:
             logger.success("成功从 Dremio 同步数据源")
 
     threading.Thread(target=sync, daemon=True).start()
+
+
+lifespan.on_shutdown(temp_file_service.delete_all)

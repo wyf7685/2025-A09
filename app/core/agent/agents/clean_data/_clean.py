@@ -13,8 +13,9 @@ from app.core.chain.nl_analysis import code_parser
 from app.core.datasource import create_df_source
 from app.core.executor import CodeExecutor
 from app.log import logger
+from app.services.datasource import temp_source_service
 
-from .schemas import ApplyCleaningResult, ApplyCleaningSummary, CleaningState
+from .schemas import ApplyCleaningResult, ApplyCleaningSummary, CleaningState, load_source
 
 # AI代码生成的提示模板
 CODE_GENERATION_PROMPT = """
@@ -360,14 +361,13 @@ def _chain_parse(response: str) -> list[dict[str, Any]]:
 def generate_suggestions(state: CleaningState) -> CleaningState:
     """生成清洗建议"""
     try:
-        df_data = state["df_data"]
+        if (source_id := state.get("source_id")) is None or (source := temp_source_service.get(source_id)) is None:
+            raise ValueError("数据未加载")
+
         issues = state["quality_issues"]
         user_requirements = state.get("user_requirements", "")
 
-        if df_data is None:
-            raise ValueError("数据未加载")
-
-        df = pd.DataFrame(df_data)  # 反序列化DataFrame
+        df = source.get_full()  # 反序列化DataFrame
 
         logger.info("开始生成清洗建议")
 
@@ -392,8 +392,6 @@ def generate_suggestions(state: CleaningState) -> CleaningState:
 def generate_cleaning_summary(state: CleaningState) -> CleaningState:
     """生成清洗总结"""
     try:
-        df_data = state["df_data"]
-        cleaned_df_data = state["cleaned_df_data"]
         suggestions = state["cleaning_suggestions"]
         field_mappings = state["field_mappings"]
 
@@ -403,11 +401,10 @@ def generate_cleaning_summary(state: CleaningState) -> CleaningState:
         summary_parts = []
 
         # 基本信息对比
-        if df_data is not None and cleaned_df_data is not None:
-            df = pd.DataFrame(df_data)  # 反序列化DataFrame
-            cleaned_df = pd.DataFrame(cleaned_df_data)  # 反序列化DataFrame
-            summary_parts.append(f"原始数据: {len(df)} 行, {len(df.columns)} 列")
-            summary_parts.append(f"清洗后数据: {len(cleaned_df)} 行, {len(cleaned_df.columns)} 列")
+        df = load_source(state, "source_id").get_full()
+        cleaned_df = load_source(state, "cleaned_source_id").get_full()
+        summary_parts.append(f"原始数据: {len(df)} 行, {len(df.columns)} 列")
+        summary_parts.append(f"清洗后数据: {len(cleaned_df)} 行, {len(cleaned_df.columns)} 列")
 
         # 字段映射信息
         if field_mappings:
@@ -431,21 +428,16 @@ def generate_cleaning_summary(state: CleaningState) -> CleaningState:
 
 def apply_cleaning(state: CleaningState) -> CleaningState:
     """应用清洗操作的节点函数 - 在分析阶段不执行实际清洗，只准备数据"""
-    try:
-        logger.info("准备清洗数据（分析阶段不执行实际清洗）")
+    source = load_source(state, "source_id")
 
-        # 在分析阶段，我们不执行实际的清洗操作
-        # 只是将原数据复制到cleaned_df_data，为后续的总结生成做准备
-        state["cleaned_df_data"] = state["df_data"]
+    logger.info("准备清洗数据（分析阶段不执行实际清洗）")
 
-        logger.info("清洗数据准备完成")
-        return state
+    # 在分析阶段，我们不执行实际的清洗操作
+    # 只是将原数据复制到cleaned_df_data，为后续的总结生成做准备
+    state["cleaned_source_id"] = temp_source_service.register(source.copy_with_data())
 
-    except Exception as e:
-        logger.error(f"准备清洗数据失败: {e}")
-        state["error_message"] = str(e)
-        state["cleaned_df_data"] = state["df_data"]  # 使用原数据
-        return state
+    logger.info("清洗数据准备完成")
+    return state
 
 
 def apply_cleaning_actions(

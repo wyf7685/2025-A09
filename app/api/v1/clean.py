@@ -16,7 +16,7 @@ from app.const import UPLOAD_DIR
 from app.core.agent import smart_clean_agent
 from app.core.agent.schemas import is_failed, is_success
 from app.log import logger
-from app.services.datasource import datasource_service, tempfile_service
+from app.services.datasource import datasource_service, temp_file_service
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -104,7 +104,7 @@ async def analyze_data_quality(
                     "cleaning_suggestions": result.cleaning_suggestions,
                     "summary": result.summary,
                     "field_mappings_applied": bool(field_mappings),
-                    "cleaned_file_id": tempfile_service.register(cleaned_file_path) if cleaned_file_path else None,
+                    "cleaned_file_id": temp_file_service.register(cleaned_file_path) if cleaned_file_path else None,
                 }
                 quality_score = result.quality_report.overall_score
                 logger.info(
@@ -250,7 +250,7 @@ async def execute_cleaning(
                 cleaned_df.to_excel(cleaned_file_path, index=False)
                 logger.info("数据已保存为Excel文件")
 
-            response["cleaned_file_id"] = tempfile_service.register(cleaned_file_path)
+            response["cleaned_file_id"] = temp_file_service.register(cleaned_file_path)
 
             # 记录日志
             logger.info(
@@ -353,7 +353,7 @@ async def analyze_and_clean(
             elif file_extension in [".xlsx", ".xls"]:
                 cleaned_df.to_excel(cleaned_file_path, index=False)
 
-            response["cleaned_file_id"] = tempfile_service.register(cleaned_file_path)
+            response["cleaned_file_id"] = temp_file_service.register(cleaned_file_path)
             response["cleaned_data_info"] = {
                 "shape": cleaned_df.shape,
                 "rows": len(cleaned_df),

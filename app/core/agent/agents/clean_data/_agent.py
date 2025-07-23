@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.log import logger
+from app.services.datasource import temp_source_service
 from app.utils import run_sync
 
 from ...schemas import OperationFailedModel
@@ -140,20 +141,21 @@ class SmartCleanDataAgent:
         self, file_path: Path, user_requirements: str | None = None
     ) -> ProcessFileResult | OperationFailedModel:
         """处理数据文件的主要入口"""
-        try:
-            # 初始化状态
-            initial_state = CleaningState(
-                file_path=file_path,
-                df_data=None,
-                user_requirements=user_requirements,
-                quality_issues=[],
-                field_mappings={},
-                cleaning_suggestions=[],
-                cleaned_df_data=None,
-                cleaning_summary="",
-                error_message=None,
-            )
+        # 初始化状态
+        initial_state = CleaningState(
+            file_path=file_path,
+            source_id=None,
+            user_requirements=user_requirements,
+            quality_issues=[],
+            field_mappings={},
+            cleaning_suggestions=[],
+            cleaned_source_id=None,
+            cleaning_summary="",
+            error_message=None,
+        )
+        result = None
 
+        try:
             # 执行工作流
             config = ensure_config({"configurable": {"thread_id": threading.get_ident()}})
             result = cast("CleaningState", self._graph.invoke(initial_state, config))
@@ -187,6 +189,12 @@ class SmartCleanDataAgent:
             logger.error(f"处理文件失败: {err}")
             return OperationFailedModel.from_err(err)
 
+        finally:
+            if result is not None:
+                if source_id := result.get("source_id"):
+                    temp_source_service.delete(source_id)
+                if cleaned_source_id := result.get("cleaned_source_id"):
+                    temp_source_service.delete(cleaned_source_id)
 
 # 创建全局实例
 smart_clean_agent = SmartCleanDataAgent()

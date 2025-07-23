@@ -192,6 +192,11 @@ class DataSource(abc.ABC):
     def copy[S](self: S) -> S:
         raise NotImplementedError("子类必须实现copy方法")
 
+    def copy_with_data(self) -> "DataSource":
+        from . import create_df_source
+
+        return create_df_source(self.get_full(), self.metadata.name, self.metadata.description)
+
     @property
     @abc.abstractmethod
     def unique_id(self) -> str:

@@ -18,7 +18,7 @@ from app.core.datasource import DataSourceMetadata, create_dremio_source
 from app.core.dremio import get_dremio_client
 from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
-from app.services.datasource import datasource_service, tempfile_service
+from app.services.datasource import datasource_service, temp_file_service
 from app.services.session import session_service
 from app.utils import run_sync
 
@@ -55,10 +55,10 @@ async def upload_file(
 
         # 如果提供了清洗后的文件路径，使用清洗后的数据
         file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
-        if cleaned_file_id and (cleaned_file_path := tempfile_service.get(cleaned_file_id)):
+        if cleaned_file_id and (cleaned_file_path := temp_file_service.get(cleaned_file_id)):
             logger.info(f"使用清洗后的数据文件: {cleaned_file_path}")
             cleaned_file_path.rename(file_path)
-            tempfile_service.delete(cleaned_file_id)
+            temp_file_service.delete(cleaned_file_id)
         else:
             # 保存原始文件
             file_path.write_bytes(await file.read())

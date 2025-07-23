@@ -3,19 +3,32 @@ from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
+from app.core.datasource import DataSource
+from app.services.datasource import temp_source_service
+
 
 class CleaningState(TypedDict):
     """数据清洗状态"""
 
     file_path: Path
-    df_data: dict[str, Any] | None  # 存储DataFrame的序列化数据而不是DataFrame本身
+    source_id: str | None
     user_requirements: str | None
     quality_issues: list[dict[str, Any]]
     field_mappings: dict[str, str]
     cleaning_suggestions: list[dict[str, Any]]
-    cleaned_df_data: dict[str, Any] | None  # 存储清洗后DataFrame的序列化数据
+    cleaned_source_id: str | None
     cleaning_summary: str
     error_message: str | None
+
+
+def load_source(state: CleaningState, key: Literal["source_id", "cleaned_source_id"]) -> DataSource:
+    if (source_id := state.get(key)) is None:
+        raise ValueError(f"数据未设置: {key}")
+
+    if (source := temp_source_service.get(source_id)) is None:
+        raise ValueError(f"数据源未找到: {source_id}")
+
+    return source
 
 
 class DataQualityReport(BaseModel):

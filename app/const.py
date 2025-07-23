@@ -8,6 +8,7 @@ MODEL_DIR = DATA_DIR / "models"
 SESSION_DIR = DATA_DIR / "sessions"
 DATASOURCE_DIR = DATA_DIR / "datasources"
 REPORT_TEMPLATE_DIR = DATA_DIR / "report_templates"
+TEMP_DIR = DATA_DIR / "temp"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -16,3 +17,4 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 DATASOURCE_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_TEMPLATE_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
