@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.const import SESSION_DIR
 from app.core.lifespan import lifespan
+from app.exception import SessionDeleteFailed, SessionLoadFailed, SessionNotFound
 from app.log import logger
 from app.schemas.session import Session, SessionID, SessionListItem
 
@@ -47,14 +48,15 @@ class SessionService:
     def load_session(self, session_id: SessionID | Path) -> Session:
         fp = (SESSION_DIR / f"{session_id}.json") if isinstance(session_id, str) else session_id
         if not fp.exists():
-            raise KeyError(f"Session with id {session_id} not found")
+            raise SessionNotFound(session_id if isinstance(session_id, str) else "<Unknown>")
+
         try:
             session = Session.model_validate_json(fp.read_bytes())
             self.sessions[session.id] = session
             return session
         except Exception as e:
             logger.opt(exception=True).warning(f"Failed to load session from {fp}")
-            raise KeyError(f"Session with id {session_id} could not be loaded") from e
+            raise SessionLoadFailed(session_id if isinstance(session_id, str) else session_id.stem) from e
 
     def save_sessions(self) -> None:
         for session in self.sessions.values():
@@ -83,20 +85,20 @@ class SessionService:
         fp = SESSION_DIR / f"{session_id}.json"
         if session_id not in self.sessions:
             # 检查文件是否存在，如果存在则尝试加载后再删除
-            if fp.exists():
+            if not fp.exists():
+                raise SessionNotFound(session_id)
+
+            try:
+                self.load_session(session_id)
+            except Exception:
+                # 如果加载失败，但文件存在，则直接删除文件
                 try:
-                    self.load_session(session_id)
-                except Exception:
-                    # 如果加载失败，但文件存在，则直接删除文件
-                    try:
-                        fp.unlink()
-                        logger.info(f"直接删除会话文件: {session_id}")
-                        return
-                    except Exception as e:
-                        logger.exception(f"删除会话文件失败: {e}")
-                        raise KeyError(f"Session with id {session_id} could not be deleted") from e
-            else:
-                raise KeyError(f"Session with id {session_id} not found")
+                    fp.unlink()
+                    logger.info(f"直接删除会话文件: {session_id}")
+                    return
+                except Exception as e:
+                    logger.exception(f"删除会话文件失败: {e}")
+                    raise SessionDeleteFailed(session_id) from e
 
         # 从内存中删除会话
         self.sessions.pop(session_id, None)

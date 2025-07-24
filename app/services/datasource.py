@@ -9,6 +9,7 @@ from app.core.datasource import DataSource, create_dremio_source, deserialize_da
 from app.core.datasource.dremio import DremioDataSource
 from app.core.dremio import get_dremio_client
 from app.core.lifespan import lifespan
+from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
 
 _dremio_sync_sem = threading.Semaphore(1)
@@ -40,16 +41,17 @@ class DataSourceService:
     def load_source(self, source_id: str | Path) -> DataSource:
         fp = DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
         if not fp.exists():
-            raise FileNotFoundError(f"Data source file {fp} does not exist")
+            raise DataSourceNotFound(source_id if isinstance(source_id, str) else "<Unknown>")
 
         source_id = source_id.stem if isinstance(source_id, Path) else source_id
         try:
             data = json.loads(fp.read_text())
             source = deserialize_data_source(data["type"], data["data"])
-            self.sources[source_id] = source
-            return source
         except Exception as e:
-            raise ValueError(f"Failed to load data source from {fp}: {e}") from e
+            raise DataSourceLoadFailed(source_id) from e
+
+        self.sources[source_id] = source
+        return source
 
     def save_source(self, source_id: str, source: DataSource) -> None:
         fp = DATASOURCE_DIR / f"{source_id}.json"
@@ -63,12 +65,20 @@ class DataSourceService:
         return self.load_source(source_id)
 
     def delete_source(self, source_id: str) -> None:
+        if not self.source_exists(source_id):
+            raise DataSourceNotFound(source_id)
+
         if (fp := DATASOURCE_DIR / f"{source_id}.json").exists():
-            fp.unlink()
+            try:
+                fp.unlink()
+            except Exception as e:
+                logger.warning(f"删除数据源文件失败: {fp} - {e}")
+
         self.sources.pop(source_id, None)
 
     def sync_from_dremio(self) -> None:
         with _dremio_sync_sem:
+            logger.info("从 Dremio 同步数据源...")
             try:
                 dss = get_dremio_client().list_sources()
             except Exception as e:
@@ -82,7 +92,7 @@ class DataSourceService:
         }
 
         # 记录从Dremio获取的数据源
-        dremio_unique_ids = set()
+        dremio_unique_ids: set[str] = set()
 
         # 添加从Dremio获取的数据源
         for dremio_source in dss:
@@ -128,37 +138,6 @@ class DataSourceService:
                     logger.warning(f"处理数据源删除失败: {source_id}, 错误: {e}")
 
         self._check_unique()
-
-    def cleanup_deleted_sources(self) -> None:
-        """
-        清理已删除的数据源，检查文件是否存在
-        """
-        sources_to_delete = []
-
-        for source_id, source in self.sources.items():
-            if isinstance(source, DremioDataSource):
-                try:
-                    dremio_source = source.get_source()
-                    if (
-                        len(dremio_source.path) == 2
-                        and dremio_source.path[0] == settings.DREMIO_EXTERNAL_NAME
-                        and dremio_source.type == "FILE"
-                    ):
-                        file_name = dremio_source.path[1]
-                        file_path = settings.DREMIO_EXTERNAL_DIR / file_name
-                        if not file_path.exists():
-                            logger.info(f"发现已删除的文件，将清理数据源: {source_id} -> {file_name}")
-                            sources_to_delete.append(source_id)
-                except Exception as e:
-                    logger.warning(f"检查数据源文件时出错: {source_id}, {e}")
-
-        # 删除已删除的数据源
-        for source_id in sources_to_delete:
-            try:
-                self.delete_source(source_id)
-                logger.info(f"已清理删除的数据源: {source_id}")
-            except Exception as e:
-                logger.warning(f"清理数据源失败: {source_id}, {e}")
 
     def _check_unique(self) -> None:
         """检查数据源的唯一性"""
@@ -308,4 +287,8 @@ def _() -> None:
     threading.Thread(target=sync, daemon=True).start()
 
 
-lifespan.on_shutdown(temp_file_service.delete_all)
+@lifespan.on_shutdown
+def _() -> None:
+    """在应用关闭时清理临时文件和数据源"""
+    logger.info("清理所有临时文件...")
+    temp_file_service.delete_all()
