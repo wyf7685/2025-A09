@@ -3,3 +3,4 @@ export * from './model';
 export * from './chat';
 export * from './dataSources';
 export * from './flow';
+export * from './mcp';
