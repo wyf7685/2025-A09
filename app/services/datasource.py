@@ -1,5 +1,4 @@
 import json
-import threading
 import uuid
 from pathlib import Path
 
@@ -14,23 +13,21 @@ from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
 from app.schemas.dremio import DremioSource
-from app.utils import run_sync
+from app.utils import run_sync, with_semaphore
 
 _DATASOURCE_DIR = anyio.Path(DATASOURCE_DIR)
 _TEMP_DIR = anyio.Path(TEMP_DIR)
 
-_dremio_sync_sem = threading.Semaphore(1)
-
 
 @run_sync
+@with_semaphore(1)
 def _fetch_dremio_source() -> list[DremioSource]:
-    with _dremio_sync_sem:
-        logger.info("从 Dremio 同步数据源...")
-        try:
-            return get_dremio_client().list_sources()
-        except Exception as e:
-            logger.warning(f"从Dremio获取数据源列表失败: {e}")
-            return []
+    logger.info("从 Dremio 同步数据源...")
+    try:
+        return get_dremio_client().list_sources()
+    except Exception as e:
+        logger.warning(f"从Dremio获取数据源列表失败: {e}")
+        return []
 
 
 class DataSourceService:
@@ -48,7 +45,7 @@ class DataSourceService:
 
     async def load_sources(self) -> None:
         async for fp in _DATASOURCE_DIR.iterdir():
-            if not (fp.is_file() and fp.suffix == ".json"):
+            if not (await fp.is_file() and fp.suffix == ".json"):
                 continue
             try:
                 await self.load_source(fp)
@@ -58,7 +55,7 @@ class DataSourceService:
 
     async def load_source(self, source_id: str | anyio.Path) -> DataSource:
         fp = _DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
-        if not fp.exists():
+        if not await fp.exists():
             raise DataSourceNotFound(source_id if isinstance(source_id, str) else "<Unknown>")
 
         source_id = source_id.stem if isinstance(source_id, anyio.Path) else source_id
@@ -127,7 +124,7 @@ class DataSourceService:
         for unique_id, source_id in current_ds.items():
             if unique_id not in dremio_unique_ids:
                 try:
-                    source = self.get_source(source_id)
+                    source = await self.get_source(source_id)
                     # 如果是文件类型的数据源，检查文件是否还存在
                     if isinstance(source, DremioDataSource):
                         dremio_source = source.get_source()
@@ -221,7 +218,7 @@ class TempFileService:
         Args:
             file_id: 临时文件ID
         """
-        if (file_path := self._data.get(file_id)) and file_path.exists():
+        if (file_path := self._data.get(file_id)) and await file_path.exists():
             try:
                 await file_path.unlink()
             except Exception as e:

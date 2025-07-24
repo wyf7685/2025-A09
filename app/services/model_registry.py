@@ -29,7 +29,7 @@ class ModelRegistry:
 
     async def _load_registry(self) -> None:
         """加载模型注册表"""
-        if self.registry_file.exists():
+        if await self.registry_file.exists():
             try:
                 data = _models_ta.validate_json(await self.registry_file.read_bytes())
                 self._models.update(data)

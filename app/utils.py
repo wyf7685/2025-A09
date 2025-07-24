@@ -4,8 +4,9 @@ import importlib
 import inspect
 import platform
 import re
+import threading
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import Any, cast
 
 import anyio.to_thread
 import matplotlib as mpl
@@ -103,3 +104,29 @@ def escape_tag(s: object) -> str:
         s: 需要转义的字符串
     """
     return re.sub(r"</?((?:[fb]g\s)?[^<>\s]*)>", r"\\\g<0>", str(s))
+
+
+def with_semaphore[T: Callable](initial_value: int) -> Callable[[T], T]:
+    def decorator(func: T) -> T:
+        if inspect.iscoroutinefunction(func):
+            sem = anyio.Semaphore(initial_value)
+
+            @functools.wraps(func)
+            async def wrapper_async(*args: Any, **kwargs: Any) -> Any:
+                async with sem:
+                    return await func(*args, **kwargs)
+
+            wrapper = wrapper_async
+        else:
+            sem = threading.Semaphore(initial_value)
+
+            @functools.wraps(func)
+            def wrapper_sync(*args: Any, **kwargs: Any) -> Any:
+                with sem:
+                    return func(*args, **kwargs)
+
+            wrapper = wrapper_sync
+
+        return cast("T", functools.update_wrapper(wrapper, func))
+
+    return decorator

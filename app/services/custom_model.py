@@ -25,7 +25,7 @@ class CustomModelManager:
 
     async def _load_config(self) -> None:
         """加载自定义模型配置"""
-        if self.config_file.exists():
+        if await self.config_file.exists():
             try:
                 data = _models_ta.validate_json(await self.config_file.read_bytes())
                 self._models.update(data)
