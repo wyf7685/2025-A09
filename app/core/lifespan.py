@@ -33,15 +33,15 @@ class Lifespan:
             raise RuntimeError("Lifespan already started")
         self._task_group = task_group
 
-    def on_startup(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_startup[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._startup_funcs.append(func)
         return func
 
-    def on_shutdown(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_shutdown[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._shutdown_funcs.append(func)
         return func
 
-    def on_ready(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_ready[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._ready_funcs.append(func)
         return func
 

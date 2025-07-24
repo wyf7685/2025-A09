@@ -3,6 +3,8 @@ import threading
 import uuid
 from pathlib import Path
 
+import anyio
+
 from app.const import DATASOURCE_DIR, TEMP_DIR
 from app.core.config import settings
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
@@ -11,41 +13,57 @@ from app.core.dremio import get_dremio_client
 from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
+from app.schemas.dremio import DremioSource
+from app.utils import run_sync
+
+_DATASOURCE_DIR = anyio.Path(DATASOURCE_DIR)
+_TEMP_DIR = anyio.Path(TEMP_DIR)
 
 _dremio_sync_sem = threading.Semaphore(1)
+
+
+@run_sync
+def _fetch_dremio_source() -> list[DremioSource]:
+    with _dremio_sync_sem:
+        logger.info("从 Dremio 同步数据源...")
+        try:
+            return get_dremio_client().list_sources()
+        except Exception as e:
+            logger.warning(f"从Dremio获取数据源列表失败: {e}")
+            return []
 
 
 class DataSourceService:
     def __init__(self) -> None:
         self.sources: dict[str, DataSource] = {}
 
-    def source_exists(self, source_id: str) -> bool:
+    async def source_exists(self, source_id: str) -> bool:
         if source_id in self.sources:
             return True
         try:
-            self.load_source(source_id)
+            await self.load_source(source_id)
             return True
         except FileNotFoundError:
             return False
 
-    def load_sources(self) -> None:
-        for fp in DATASOURCE_DIR.iterdir():
+    async def load_sources(self) -> None:
+        async for fp in _DATASOURCE_DIR.iterdir():
             if not (fp.is_file() and fp.suffix == ".json"):
                 continue
             try:
-                self.load_source(fp)
+                await self.load_source(fp)
             except Exception as e:
                 logger.opt(exception=True).warning(f"Failed to load data source from {fp}: {e}")
         self._check_unique()
 
-    def load_source(self, source_id: str | Path) -> DataSource:
-        fp = DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
+    async def load_source(self, source_id: str | anyio.Path) -> DataSource:
+        fp = _DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
         if not fp.exists():
             raise DataSourceNotFound(source_id if isinstance(source_id, str) else "<Unknown>")
 
-        source_id = source_id.stem if isinstance(source_id, Path) else source_id
+        source_id = source_id.stem if isinstance(source_id, anyio.Path) else source_id
         try:
-            data = json.loads(fp.read_text())
+            data = json.loads(await fp.read_text())
             source = deserialize_data_source(data["type"], data["data"])
         except Exception as e:
             raise DataSourceLoadFailed(source_id) from e
@@ -53,37 +71,31 @@ class DataSourceService:
         self.sources[source_id] = source
         return source
 
-    def save_source(self, source_id: str, source: DataSource) -> None:
-        fp = DATASOURCE_DIR / f"{source_id}.json"
+    async def save_source(self, source_id: str, source: DataSource) -> None:
+        fp = _DATASOURCE_DIR / f"{source_id}.json"
         type_, data_ = source.serialize()
-        fp.write_text(json.dumps({"type": type_, "data": data_}, ensure_ascii=False, indent=2))
+        await fp.write_text(json.dumps({"type": type_, "data": data_}, ensure_ascii=False, indent=2))
         self.sources[source_id] = source
 
-    def get_source(self, source_id: str) -> DataSource:
+    async def get_source(self, source_id: str) -> DataSource:
         if source_id in self.sources:
             return self.sources[source_id]
-        return self.load_source(source_id)
+        return await self.load_source(source_id)
 
-    def delete_source(self, source_id: str) -> None:
-        if not self.source_exists(source_id):
+    async def delete_source(self, source_id: str) -> None:
+        if not await self.source_exists(source_id):
             raise DataSourceNotFound(source_id)
 
-        if (fp := DATASOURCE_DIR / f"{source_id}.json").exists():
+        if (fp := _DATASOURCE_DIR / f"{source_id}.json").exists():
             try:
-                fp.unlink()
+                await fp.unlink()
             except Exception as e:
                 logger.warning(f"删除数据源文件失败: {fp} - {e}")
 
         self.sources.pop(source_id, None)
 
-    def sync_from_dremio(self) -> None:
-        with _dremio_sync_sem:
-            logger.info("从 Dremio 同步数据源...")
-            try:
-                dss = get_dremio_client().list_sources()
-            except Exception as e:
-                logger.warning(f"从Dremio获取数据源列表失败: {e}")
-                return
+    async def sync_from_dremio(self) -> None:
+        dss = await _fetch_dremio_source()
 
         current_ds = {
             source.unique_id: source_id
@@ -102,7 +114,7 @@ class DataSourceService:
 
                 if source.unique_id not in current_ds:
                     source_id = str(uuid.uuid4())
-                    self.save_source(source_id, source)
+                    await self.save_source(source_id, source)
                     logger.debug(f"添加新的Dremio数据源: {source.unique_id}")
                 else:
                     # 数据源已存在，从待删除列表中移除
@@ -132,7 +144,7 @@ class DataSourceService:
                                 continue
 
                     # 如果文件不存在，删除数据源
-                    self.delete_source(source_id)
+                    await self.delete_source(source_id)
                     logger.info(f"删除不存在的Dremio数据源: {source_id}")
                 except Exception as e:
                     logger.warning(f"处理数据源删除失败: {source_id}, 错误: {e}")
@@ -147,7 +159,7 @@ class DataSourceService:
                 del self.sources[source_id]
             unique_ids.add(source.unique_id)
 
-    def register(self, source: DataSource) -> tuple[str, DataSource]:
+    async def register(self, source: DataSource) -> tuple[str, DataSource]:
         """
         注册数据源
 
@@ -165,16 +177,16 @@ class DataSourceService:
 
         # 生成新的数据源ID
         source_id = str(uuid.uuid4())
-        self.save_source(source_id, source)
+        await self.save_source(source_id, source)
         logger.info(f"注册新数据源: {source_id} -> {source.unique_id}")
         return source_id, source
 
 
 class TempFileService:
     def __init__(self) -> None:
-        self._data: dict[str, Path] = {}
+        self._data: dict[str, anyio.Path] = {}
 
-    def register(self, file_path: Path) -> str:
+    async def register(self, file_path: Path) -> str:
         """
         注册临时文件
 
@@ -185,8 +197,8 @@ class TempFileService:
             str: 临时文件ID
         """
         file_id = str(uuid.uuid4())
-        temp_path = TEMP_DIR / f"{file_id}{file_path.suffix}"
-        file_path.rename(temp_path)
+        temp_path = _TEMP_DIR / f"{file_id}{file_path.suffix}"
+        await anyio.Path(file_path).rename(temp_path)
         self._data[file_id] = temp_path
         return file_id
 
@@ -200,9 +212,9 @@ class TempFileService:
         Returns:
             Path | None: 临时文件路径，如果不存在则返回None
         """
-        return self._data.get(file_id)
+        return Path(self._data[file_id]) if file_id in self._data else None
 
-    def delete(self, file_id: str) -> None:
+    async def delete(self, file_id: str) -> None:
         """
         删除临时文件
 
@@ -211,17 +223,17 @@ class TempFileService:
         """
         if (file_path := self._data.get(file_id)) and file_path.exists():
             try:
-                file_path.unlink()
+                await file_path.unlink()
             except Exception as e:
                 logger.warning(f"删除临时文件失败: {file_path} - {e}")
             del self._data[file_id]
 
-    def delete_all(self) -> None:
+    async def delete_all(self) -> None:
         """
         删除所有临时文件
         """
         for file_id in list(self._data):
-            self.delete(file_id)
+            await self.delete(file_id)
 
 
 class TempSourceService:
@@ -270,25 +282,24 @@ temp_source_service = TempSourceService()
 
 
 @lifespan.on_startup
-def _() -> None:
+async def _() -> None:
     """在应用启动时加载数据源"""
 
-    datasource_service.load_sources()
+    await datasource_service.load_sources()
     logger.opt(colors=True).success(f"加载 <y>{len(datasource_service.sources)}</> 个数据源")
 
-    def sync() -> None:
+    @lifespan.task_group.start_soon
+    async def _() -> None:
         try:
-            datasource_service.sync_from_dremio()
+            await datasource_service.sync_from_dremio()
         except Exception:
             logger.exception("从 Dremio 同步数据源失败")
         else:
             logger.success("成功从 Dremio 同步数据源")
 
-    threading.Thread(target=sync, daemon=True).start()
-
 
 @lifespan.on_shutdown
-def _() -> None:
+async def _() -> None:
     """在应用关闭时清理临时文件和数据源"""
     logger.info("清理所有临时文件...")
-    temp_file_service.delete_all()
+    await temp_file_service.delete_all()

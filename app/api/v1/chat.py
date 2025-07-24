@@ -40,7 +40,7 @@ class ChatRequest(BaseModel):
 
 async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     """生成聊天流响应"""
-    session = session_service.get_session(request.session_id)
+    session = await session_service.get_session(request.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     session_id = session.id
@@ -70,7 +70,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
         # 记录对话历史
         session.chat_history.append(chat_entry)
-        session_service.save_session(session)
+        await session_service.save_session(session)
 
         # 发送完成信号
         yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()})
@@ -105,7 +105,7 @@ class SummaryResponse(BaseModel):
 @router.post("/summary")
 async def chat_summary(request: SummaryRequest) -> SummaryResponse:
     """获取对话摘要"""
-    session = session_service.get_session(request.session_id)
+    session = await session_service.get_session(request.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -256,7 +256,7 @@ class GenerateReportResponse(BaseModel):
 @router.post("/generate-report")
 async def generate_report(request: GenerateReportRequest) -> GenerateReportResponse:
     """生成分析报告（基于现有的summary功能）"""
-    session = session_service.get_session(request.session_id)
+    session = await session_service.get_session(request.session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 

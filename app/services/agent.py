@@ -5,6 +5,7 @@ from typing import NamedTuple
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm
+from app.core.datasource import DataSource
 from app.exception import AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.custom_model import LLModelID
@@ -18,13 +19,24 @@ class AgentTuple(NamedTuple):
     agent: DataAnalyzerAgent
 
 
+@run_sync
+def _create_agent(
+    model_id: LLModelID | None,
+    sources: dict[str, DataSource],
+    session_id: SessionID,
+) -> DataAnalyzerAgent:
+    """创建一个新的数据分析 Agent"""
+    llm = get_llm(model_id)
+    chat_model = get_chat_model(model_id)
+    return DataAnalyzerAgent(sources, llm, chat_model, session_id)
+
+
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
         self.agents: dict[SessionID, AgentTuple] = {}
         self.in_use: dict[SessionID, bool] = {}
 
-    @run_sync
-    def create_agent(
+    async def create_agent(
         self,
         session: Session,
         model_id: LLModelID | None = None,
@@ -32,13 +44,13 @@ class DataAnalyzerAgentService:
         """创建新的数据分析 Agent"""
         state_file = STATE_DIR / f"{session.id}.json"
         if agent := self.get_agent(session, None):
-            agent.save_state(state_file)
+            await agent.asave_state(state_file)
 
-        llm = get_llm(model_id)
-        chat_model = get_chat_model(model_id)
-        sources = {source_id: datasource_service.get_source(source_id).copy() for source_id in session.dataset_ids}
-        agent = DataAnalyzerAgent(sources, llm, chat_model, session.id)
-        agent.load_state(state_file)
+        sources = {
+            source_id: (await datasource_service.get_source(source_id)).copy() for source_id in session.dataset_ids
+        }
+        agent = await _create_agent(model_id, sources, session.id)
+        await agent.aload_state(state_file)
         self.agents[session.id] = AgentTuple(model_id, agent)
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
@@ -92,7 +104,7 @@ class DataAnalyzerAgentService:
         try:
             yield agent
         finally:
-            agent.save_state(STATE_DIR / f"{session.id}.json")
+            await agent.asave_state(STATE_DIR / f"{session.id}.json")
             self.release(session.id)
 
 

@@ -520,7 +520,7 @@ async def save_field_mappings(request: FieldMappingRequest) -> dict[str, Any]:
     """
     try:
         # 获取数据源
-        source = datasource_service.get_source(request.source_id)
+        source = await datasource_service.get_source(request.source_id)
         if not source:
             raise HTTPException(status_code=404, detail="数据源不存在")
 

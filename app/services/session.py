@@ -1,6 +1,7 @@
 import contextlib
 import uuid
-from pathlib import Path
+
+import anyio
 
 from app.const import SESSION_DIR
 from app.core.lifespan import lifespan
@@ -8,65 +9,74 @@ from app.exception import SessionDeleteFailed, SessionLoadFailed, SessionNotFoun
 from app.log import logger
 from app.schemas.session import Session, SessionID, SessionListItem
 
+_SESSION_DIR = anyio.Path(SESSION_DIR)
+
 
 class SessionService:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
 
-    def session_exists(self, session_id: SessionID) -> bool:
+    async def session_exists(self, session_id: SessionID) -> bool:
         if session_id in self.sessions:
             return True
         try:
-            self.load_session(session_id)
+            await self.load_session(session_id)
             return True
         except Exception:
             return False
 
-    def create_session(self, dataset_ids: list[str], name: str | None = None) -> Session:
+    async def create_session(self, dataset_ids: list[str], name: str | None = None) -> Session:
         session_id = str(uuid.uuid4())
         session = Session(id=session_id, dataset_ids=dataset_ids, name=name)
-        self.save_session(session)
+        await self.save_session(session)
         self.sessions[session_id] = session
         return session
 
-    def get_session(self, session_id: SessionID) -> Session | None:
+    async def get_session(self, session_id: SessionID) -> Session | None:
         if session_id in self.sessions:
             return self.sessions[session_id]
         with contextlib.suppress(Exception):
-            return self.load_session(session_id)
+            return await self.load_session(session_id)
         return None
 
-    def load_sessions(self) -> None:
-        for fp in SESSION_DIR.iterdir():
-            if not (fp.is_file() and fp.suffix == ".json"):
-                continue
-            try:
-                self.load_session(fp)
-            except Exception:
-                logger.opt(exception=True).warning(f"Failed to load session from {fp}")
+    async def load_sessions(self) -> None:
+        async def load(fp: anyio.Path) -> None:
+            if not (await fp.is_file() and fp.suffix == ".json"):
+                return
 
-    def load_session(self, session_id: SessionID | Path) -> Session:
-        fp = (SESSION_DIR / f"{session_id}.json") if isinstance(session_id, str) else session_id
-        if not fp.exists():
+            try:
+                await self.load_session(fp)
+            except Exception as e:
+                logger.opt(exception=True).warning(f"Failed to load session from {fp}: {e}")
+
+        async with anyio.create_task_group() as tg:
+            async for fp in _SESSION_DIR.iterdir():
+                tg.start_soon(load, fp)
+
+    async def load_session(self, session_id: SessionID | anyio.Path) -> Session:
+        fp = (_SESSION_DIR / f"{session_id}.json") if isinstance(session_id, str) else session_id
+        if not await fp.exists():
             raise SessionNotFound(session_id if isinstance(session_id, str) else "<Unknown>")
 
         try:
-            session = Session.model_validate_json(fp.read_bytes())
-            self.sessions[session.id] = session
-            return session
+            session = Session.model_validate_json(await fp.read_bytes())
         except Exception as e:
             logger.opt(exception=True).warning(f"Failed to load session from {fp}")
             raise SessionLoadFailed(session_id if isinstance(session_id, str) else session_id.stem) from e
+        else:
+            self.sessions[session.id] = session
+            return session
 
-    def save_sessions(self) -> None:
-        for session in self.sessions.values():
-            self.save_session(session)
+    async def save_sessions(self) -> None:
+        async with anyio.create_task_group() as tg:
+            for session in self.sessions.values():
+                tg.start_soon(self.save_session, session)
 
-    def save_session(self, session: Session) -> None:
+    async def save_session(self, session: Session) -> None:
         self.sessions[session.id] = session
-        fp = SESSION_DIR / f"{session.id}.json"
+        fp = _SESSION_DIR / f"{session.id}.json"
         try:
-            fp.write_bytes(session.model_dump_json().encode("utf-8"))
+            await fp.write_bytes(session.model_dump_json().encode("utf-8"))
         except Exception:
             logger.opt(exception=True).warning(f"Failed to save session {session.id} to {fp}")
 
@@ -81,19 +91,19 @@ class SessionService:
             for session in self.sessions.values()
         ]
 
-    def delete_session(self, session_id: SessionID) -> None:
-        fp = SESSION_DIR / f"{session_id}.json"
+    async def delete_session(self, session_id: SessionID) -> None:
+        fp = _SESSION_DIR / f"{session_id}.json"
         if session_id not in self.sessions:
             # 检查文件是否存在，如果存在则尝试加载后再删除
-            if not fp.exists():
+            if not await fp.exists():
                 raise SessionNotFound(session_id)
 
             try:
-                self.load_session(session_id)
+                await self.load_session(session_id)
             except Exception:
                 # 如果加载失败，但文件存在，则直接删除文件
                 try:
-                    fp.unlink()
+                    await fp.unlink()
                     logger.info(f"直接删除会话文件: {session_id}")
                     return
                 except Exception as e:
@@ -105,19 +115,14 @@ class SessionService:
 
         # 删除文件
         try:
-            if fp.exists():
-                fp.unlink()
+            if await fp.exists():
+                await fp.unlink()
                 logger.info(f"删除会话文件成功: {session_id}")
         except Exception as e:
-            logger.exception(f"删除会话文件失败: {e}")
             # 即使文件删除失败，也不抛出异常，因为内存中的会话已经被删除
             # 这样前端仍然可以认为删除成功
+            logger.exception(f"删除会话文件失败: {e}")
 
 
 session_service = SessionService()
-
-
-@lifespan.on_startup
-def _() -> None:
-    """在应用启动时加载会话"""
-    session_service.load_sessions()
+lifespan.on_startup(session_service.load_sessions)

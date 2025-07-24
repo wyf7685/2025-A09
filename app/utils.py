@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import functools
 import importlib
@@ -8,6 +7,7 @@ import re
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+import anyio.to_thread
 import matplotlib as mpl
 
 mpl.use("Agg")  # 使用非交互式后端以避免GUI依赖
@@ -75,7 +75,7 @@ def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, 
 
     @functools.wraps(call)
     async def _wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        return await asyncio.to_thread(functools.partial(call, *args, **kwargs))
+        return await anyio.to_thread.run_sync(functools.partial(call, *args, **kwargs), abandon_on_cancel=True)
 
     return _wrapper
 

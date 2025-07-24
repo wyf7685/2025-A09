@@ -58,7 +58,7 @@ async def upload_file(
         if cleaned_file_id and (cleaned_file_path := temp_file_service.get(cleaned_file_id)):
             logger.info(f"使用清洗后的数据文件: {cleaned_file_path}")
             cleaned_file_path.rename(file_path)
-            temp_file_service.delete(cleaned_file_id)
+            await temp_file_service.delete(cleaned_file_id)
         else:
             # 保存原始文件
             file_path.write_bytes(await file.read())
@@ -89,7 +89,7 @@ async def upload_file(
             source.metadata.description += " [智能清洗后的数据]"
             logger.info("标记数据源为清洗后的数据")
 
-        source_id, source = datasource_service.register(source)
+        source_id, source = await datasource_service.register(source)
 
         return {"source_id": source_id, "metadata": source.metadata}
 
@@ -159,7 +159,7 @@ async def upload_cleaned_file(
         else:
             source.metadata.description = clean_description
 
-        source_id, source = datasource_service.register(source)
+        source_id, source = await datasource_service.register(source)
 
         logger.info(f"成功上传清洗后的数据: {source_name}, 应用了 {len(parsed_field_mappings)} 个字段映射")
 
@@ -188,12 +188,12 @@ async def add_data_source_database(request: AddDataSourceDatabaseRequest) -> Reg
         client = get_dremio_client()
         dremio_source = await run_sync(client.add_data_source_database)(request.database_type, request.connection)
         source = create_dremio_source(dremio_source)
-        source_id, source = datasource_service.register(source)
+        source_id, source = await datasource_service.register(source)
         if request.name:
             source.metadata.name = request.name
         if request.description:
             source.metadata.description = request.description
-        datasource_service.save_source(source_id, source)
+        await datasource_service.save_source(source_id, source)
         return RegisterDataSourceResponse(source_id=source_id, metadata=source.metadata)
     except Exception as e:
         logger.exception("添加数据库数据源失败")
@@ -213,10 +213,10 @@ async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> Da
     支持修改数据源的名称和描述
     """
     try:
-        if not datasource_service.source_exists(source_id):
+        if not await datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
 
-        source = datasource_service.get_source(source_id)
+        source = await datasource_service.get_source(source_id)
 
         # 更新元数据
         if data.name is not None:
@@ -225,7 +225,7 @@ async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> Da
         if data.description is not None:
             source.metadata.description = data.description
 
-        datasource_service.save_source(source_id, source)
+        await datasource_service.save_source(source_id, source)
         return source.metadata
     except HTTPException:
         raise
@@ -260,9 +260,9 @@ async def get_datasource(source_id: str) -> DataSourceMetadata:
     获取数据源详情
     """
     try:
-        if not datasource_service.source_exists(source_id):
+        if not await datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
-        return datasource_service.get_source(source_id).metadata
+        return (await datasource_service.get_source(source_id)).metadata
 
     except HTTPException:
         raise
@@ -290,10 +290,10 @@ async def get_datasource_data(
     支持分页获取数据
     """
     try:
-        if not datasource_service.source_exists(source_id):
+        if not await datasource_service.source_exists(source_id):
             raise HTTPException(status_code=404, detail="Datasource not found")
 
-        source = datasource_service.get_source(source_id)
+        source = await datasource_service.get_source(source_id)
         logger.info(f"获取数据源数据: {source_id}, 类型: {source.metadata.source_type}")
 
         # 检查数据源是否可用
@@ -314,7 +314,7 @@ async def get_datasource_data(
                         if not file_path.exists():
                             logger.error(f"数据源文件不存在: {file_path}")
                             # 立即清理这个数据源
-                            datasource_service.delete_source(source_id)
+                            await datasource_service.delete_source(source_id)
                             raise HTTPException(status_code=404, detail=f"数据源文件已被删除: {file_name}")
 
             # 获取形状信息
@@ -363,11 +363,11 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
     """
     删除数据源
     """
-    if not datasource_service.source_exists(source_id):
+    if not await datasource_service.source_exists(source_id):
         raise HTTPException(status_code=404, detail="Datasource not found")
 
     try:
-        source = datasource_service.get_source(source_id)
+        source = await datasource_service.get_source(source_id)
 
         # 如果是Dremio数据源，尝试从Dremio中删除
         if source.metadata.source_type.startswith("dremio"):
@@ -420,13 +420,13 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
                 logger.warning(f"从Dremio中删除数据源失败: {e}")
 
         # 从数据源字典中删除
-        datasource_service.delete_source(source_id)
+        await datasource_service.delete_source(source_id)
 
         # 删除关联的会话
         # TODO: 考虑其他删除方式
         for session in list(session_service.sessions.values()):
             if source_id in session.dataset_ids:
-                session_service.delete_session(session.id)
+                await session_service.delete_session(session.id)
 
         return {"success": True, "message": f"Datasource {source_id} deleted"}
 
