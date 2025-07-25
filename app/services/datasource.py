@@ -8,23 +8,22 @@ from app.const import DATASOURCE_DIR, TEMP_DIR
 from app.core.config import settings
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
 from app.core.datasource.dremio import DremioDataSource
-from app.core.dremio import get_dremio_client
+from app.core.dremio import get_async_dremio_client
 from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
 from app.schemas.dremio import DremioSource
-from app.utils import run_sync, with_semaphore
+from app.utils import with_semaphore
 
 _DATASOURCE_DIR = anyio.Path(DATASOURCE_DIR)
 _TEMP_DIR = anyio.Path(TEMP_DIR)
 
 
-@run_sync
 @with_semaphore(1)
-def _fetch_dremio_source() -> list[DremioSource]:
+async def _fetch_dremio_source() -> list[DremioSource]:
     logger.info("从 Dremio 同步数据源...")
     try:
-        return get_dremio_client().list_sources()
+        return await get_async_dremio_client().list_sources()
     except Exception as e:
         logger.warning(f"从Dremio获取数据源列表失败: {e}")
         return []
@@ -83,7 +82,7 @@ class DataSourceService:
         if not await self.source_exists(source_id):
             raise DataSourceNotFound(source_id)
 
-        if (fp := _DATASOURCE_DIR / f"{source_id}.json").exists():
+        if await (fp := _DATASOURCE_DIR / f"{source_id}.json").exists():
             try:
                 await fp.unlink()
             except Exception as e:

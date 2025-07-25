@@ -7,13 +7,14 @@ import pandas as pd
 from dremio import Dremio, FlightConfig, JobResult, path_to_dotted
 
 from app.core.config import settings
-from app.core.dremio.abstract import AbstractDremioClient
-from app.core.dremio.rest import DremioRestClient
+from app.core.dremio.abstract import AbstractAsyncDremioClient
+from app.core.dremio.arest import AsyncDremioRestClient
 from app.log import logger
 from app.schemas.dremio import BaseDatabaseConnection, DremioDatabaseType, DremioSource
+from app.utils import run_sync
 
 
-class DremioFlightClient(AbstractDremioClient):
+class AsyncDremioFlightClient(AbstractAsyncDremioClient):
     def __init__(self) -> None:
         self._client = Dremio(
             hostname=settings.DREMIO_BASE_URL,
@@ -21,12 +22,12 @@ class DremioFlightClient(AbstractDremioClient):
             password=settings.DREMIO_PASSWORD.get_secret_value(),
             flight_config=FlightConfig(port=settings.DREMIO_FLIGHT_PORT),
         )
-        self._rest = DremioRestClient()
+        self._rest = AsyncDremioRestClient()
         self.external_dir = settings.DREMIO_EXTERNAL_DIR
         self.external_name = settings.DREMIO_EXTERNAL_NAME
 
     @override
-    def _add_data_source_csv(self, file: Path) -> DremioSource:
+    async def _add_data_source_csv(self, file: Path) -> DremioSource:
         """
         添加 CSV 数据源到 Dremio 外部目录
 
@@ -39,22 +40,22 @@ class DremioFlightClient(AbstractDremioClient):
         Raises:
             ValueError: 如果未设置 external_dir
         """
-        return self._rest.add_data_source_file(file, "csv")
+        return await self._rest.add_data_source_file(file, "csv")
 
     @override
-    def _add_data_source_excel(self, file: Path) -> DremioSource:
-        return self._rest.add_data_source_file(file, "excel")
+    async def _add_data_source_excel(self, file: Path) -> DremioSource:
+        return await self._rest.add_data_source_file(file, "excel")
 
     @override
-    def add_data_source_database(
+    async def add_data_source_database(
         self,
         database_type: DremioDatabaseType,
         connection: BaseDatabaseConnection,
     ) -> DremioSource:
-        return self._rest.add_data_source_database(database_type, connection)
+        return await self._rest.add_data_source_database(database_type, connection)
 
     @override
-    def read_source(
+    async def read_source(
         self,
         source_name: str | list[str],
         limit: int | None = None,
@@ -75,19 +76,20 @@ class DremioFlightClient(AbstractDremioClient):
         formatted = path_to_dotted(source_name)
         try:
             count_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
-            count_df = self.execute_sql_to_dataframe(count_query)
+            count_df = await self.execute_sql_to_dataframe(count_query)
             total_rows = int(count_df.iloc[0]["row_count"])
             logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
             n_rows = total_rows if fetch_all or limit is None else min(limit, total_rows)
             query = f"SELECT * FROM {formatted} FETCH NEXT {n_rows} ROWS ONLY"
-            return self.execute_sql_to_dataframe(query)
+            return await self.execute_sql_to_dataframe(query)
         except Exception:
             logger.opt(exception=True).warning(f"读取数据源 {source_name} 时出错")
 
         logger.warning("回退到使用 REST API 读取数据源")
-        return self._rest.read_source(source_name, limit=limit, fetch_all=fetch_all)
+        return await self._rest.read_source(source_name, limit=limit, fetch_all=fetch_all)
 
+    @run_sync
     def execute_sql_to_dataframe(self, sql_query: str) -> pd.DataFrame:
         """
         执行 SQL 查询并返回 DataFrame
@@ -103,7 +105,7 @@ class DremioFlightClient(AbstractDremioClient):
         return JobResult.from_arrow_table(table).to_pandas()
 
     @override
-    def shape(self, source_name: str | list[str]) -> tuple[int, int]:
+    async def shape(self, source_name: str | list[str]) -> tuple[int, int]:
         """
         获取数据源的形状（行数和列数）
 
@@ -116,24 +118,24 @@ class DremioFlightClient(AbstractDremioClient):
         try:
             formatted = path_to_dotted(source_name)
             sql_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
-            result = self.execute_sql_to_dataframe(sql_query)
+            result = await self.execute_sql_to_dataframe(sql_query)
             row_count = int(result.iloc[0]["row_count"])
 
-            first_line = self.read_source(source_name, limit=1)
+            first_line = await self.read_source(source_name, limit=1)
             col_count = len(first_line.columns) if not first_line.empty else 0
 
             return row_count, col_count
         except Exception as e:
             logger.warning(f"Flight客户端获取形状失败: {e}")
             logger.info("回退到使用REST API获取形状")
-            return self._rest.shape(source_name)
+            return await self._rest.shape(source_name)
 
     @override
-    def list_sources(self) -> list[DremioSource]:
-        return self._rest.list_sources()
+    async def list_sources(self) -> list[DremioSource]:
+        return await self._rest.list_sources()
 
     @override
-    def delete_data_source(self, source_path: list[str]) -> bool:
+    async def delete_data_source(self, source_path: list[str]) -> bool:
         """
         删除Dremio中的数据源，委托给REST客户端
 
@@ -143,14 +145,14 @@ class DremioFlightClient(AbstractDremioClient):
         Returns:
             bool: 是否删除成功
         """
-        return self._rest.delete_data_source(source_path)
+        return await self._rest.delete_data_source(source_path)
 
     @override
-    def refresh_external_source(self) -> bool:
+    async def refresh_external_source(self) -> bool:
         """
         刷新external数据源，委托给REST客户端
 
         Returns:
             bool: 是否刷新成功
         """
-        return self._rest.refresh_external_source()
+        return await self._rest.refresh_external_source()

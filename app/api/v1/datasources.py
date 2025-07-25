@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from app.const import UPLOAD_DIR
 from app.core.config import settings
 from app.core.datasource import DataSourceMetadata, create_dremio_source
-from app.core.dremio import get_dremio_client
+from app.core.dremio import get_async_dremio_client
 from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
 from app.services.datasource import datasource_service, temp_file_service
@@ -73,8 +73,7 @@ async def upload_file(
             except json.JSONDecodeError as e:
                 logger.warning(f"字段映射解析失败: {e}")
 
-        client = get_dremio_client()
-        dremio_source = await run_sync(client.add_data_source_file)(file_path)
+        dremio_source = await get_async_dremio_client().add_data_source_file(file_path)
 
         # 创建数据源，如果有字段映射则应用到描述中
         source = create_dremio_source(dremio_source, source_name, description)
@@ -140,8 +139,7 @@ async def upload_cleaned_file(
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=400, detail=f"字段映射格式错误: {e}") from e
 
-        client = get_dremio_client()
-        dremio_source = await run_sync(client.add_data_source_file)(file_path)
+        dremio_source = await get_async_dremio_client().add_data_source_file(file_path)
 
         # 创建数据源
         source = create_dremio_source(dremio_source, source_name, description)
@@ -185,8 +183,9 @@ async def add_data_source_database(request: AddDataSourceDatabaseRequest) -> Reg
     添加数据库数据源
     """
     try:
-        client = get_dremio_client()
-        dremio_source = await run_sync(client.add_data_source_database)(request.database_type, request.connection)
+        dremio_source = await get_async_dremio_client().add_data_source_database(
+            request.database_type, request.connection
+        )
         source = create_dremio_source(dremio_source)
         source_id, source = await datasource_service.register(source)
         if request.name:
@@ -392,18 +391,17 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
                         else:
                             logger.warning(f"文件不存在: {file_path}")
 
-                        # 使用新的Dremio客户端方法删除数据源
-                        client = get_dremio_client()
+                        client = get_async_dremio_client()
 
                         # 方法1：尝试直接删除数据源
-                        delete_success = await run_sync(client.delete_data_source)(dremio_source.path)
+                        delete_success = await client.delete_data_source(dremio_source.path)
                         if delete_success:
                             logger.info(f"成功从Dremio中删除数据源: {dremio_source.path}")
                         else:
                             logger.warning(f"从Dremio中删除数据源失败: {dremio_source.path}")
 
                         # 方法2：刷新external数据源，让Dremio重新扫描
-                        refresh_success = await run_sync(client.refresh_external_source)()
+                        refresh_success = await client.refresh_external_source()
                         if refresh_success:
                             logger.info("成功刷新external数据源")
                         else:
