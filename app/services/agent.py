@@ -2,10 +2,13 @@ import contextlib
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
+import anyio
+
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm
 from app.core.datasource import DataSource
+from app.core.lifespan import lifespan
 from app.exception import AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.custom_model import LLModelID
@@ -45,6 +48,7 @@ class DataAnalyzerAgentService:
         state_file = STATE_DIR / f"{session.id}.json"
         if agent := self.get_agent(session, None):
             await agent.asave_state(state_file)
+            await agent.adestroy()
 
         sources = {
             source_id: (await datasource_service.get_source(source_id)).copy() for source_id in session.dataset_ids
@@ -109,3 +113,18 @@ class DataAnalyzerAgentService:
 
 
 daa_service = DataAnalyzerAgentService()
+
+
+@lifespan.on_shutdown
+async def _() -> None:
+    async def destroy(session_id: str, agent: DataAnalyzerAgent) -> None:
+        try:
+            await agent.adestroy()
+            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+        except Exception as e:
+            logger.opt(colors=True).error(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败: {e}")
+
+    async with anyio.create_task_group() as tg:
+        while daa_service.agents:
+            session_id, (_, agent) = daa_service.agents.popitem()
+            tg.start_soon(destroy, session_id, agent)

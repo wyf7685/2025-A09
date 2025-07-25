@@ -1,3 +1,4 @@
+import concurrent.futures
 import itertools
 import threading
 from collections.abc import AsyncIterator, Iterator
@@ -115,7 +116,7 @@ class DataAnalyzerAgent:
         self.llm = llm
         self.session_id = session_id
 
-        analyzer = analyzer_tool(sources, llm)
+        analyzer, executors = analyzer_tool(sources, llm)
         df_tools = dataframe_tools(sources)
         sk_tools, saved_models = scikit_tools(sources, session_id)
         sc_tools = sources_tools(sources)
@@ -134,6 +135,7 @@ class DataAnalyzerAgent:
             pre_model_hook=pre_model_hook,
         )
         self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
+        self.executors = executors
         self.saved_models = saved_models
 
         logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
@@ -215,6 +217,18 @@ class DataAnalyzerAgent:
         )
         await anyio.Path(state_file).write_bytes(state.model_dump_json().encode("utf-8"))
         logger.opt(colors=True).info(f"已异步保存 agent 状态: {state.colorize()}")
+
+    def destroy(self) -> None:
+        """销毁 agent，释放资源"""
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            [executor.submit(e.stop) for e in self.executors]
+        logger.opt(colors=True).info(f"已销毁数据分析 Agent: <c>{self.session_id}</>")
+
+    async def adestroy(self) -> None:
+        """异步销毁 agent，释放资源"""
+        async with anyio.create_task_group() as tg:
+            [tg.start_soon(run_sync(e.stop)) for e in self.executors]
+        logger.opt(colors=True).info(f"已异步销毁数据分析 Agent: <c>{self.session_id}</>")
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
