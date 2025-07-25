@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Refresh } from '@element-plus/icons-vue';
+import { DocumentAdd, Refresh } from '@element-plus/icons-vue';
 
 // 定义组件属性，带类型标注
 defineProps<{
@@ -10,11 +10,6 @@ defineProps<{
 const emit = defineEmits<{
   refresh: [];
 }>();
-
-// 刷新数据的处理函数
-const handleRefresh = () => {
-  emit('refresh');
-};
 </script>
 
 <template>
@@ -24,7 +19,10 @@ const handleRefresh = () => {
       <p>上传、管理和分析您的数据源</p>
     </div>
     <div class="header-actions">
-      <el-button type="primary" :icon="Refresh" @click="handleRefresh" :loading="isLoading">
+      <el-button type="primary" :icon="DocumentAdd" @click="$router.push('/data-upload')">
+        添加数据源
+      </el-button>
+      <el-button type="primary" :icon="Refresh" @click="emit('refresh')" :loading="isLoading">
         刷新列表
       </el-button>
     </div>

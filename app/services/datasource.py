@@ -228,12 +228,11 @@ class TempFileService:
         Args:
             file_id: 临时文件ID
         """
-        if (file_path := self._data.get(file_id)) and await file_path.exists():
+        if (file_path := self._data.pop(file_id, None)) and await file_path.exists():
             try:
                 await file_path.unlink()
             except Exception as e:
                 logger.warning(f"删除临时文件失败: {file_path} - {e}")
-            del self._data[file_id]
 
     async def delete_all(self) -> None:
         """

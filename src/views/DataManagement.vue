@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import AddDatabaseDialog from '@/components/data/AddDatabaseDialog.vue';
-import DataCleaningDialog from '@/components/data/DataCleaningDialog.vue';
 import DataSourceHeader from '@/components/data/DataSourceHeader.vue';
 import DataSourceSearchBar from '@/components/data/DataSourceSearchBar.vue';
 import DataSourceTable from '@/components/data/DataSourceTable.vue';
-import DataSourceUploadPanel from '@/components/data/DataSourceUploadPanel.vue';
 import EditDataSourceDialog from '@/components/data/EditDataSourceDialog.vue';
 import PreviewDataDialog from '@/components/data/PreviewDataDialog.vue';
 import { useDataSourceStore } from '@/stores/datasource';
@@ -12,7 +9,6 @@ import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { DataSourceMetadataWithID } from '@/types';
 import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
-import { cleaningAPI, dataSourceAPI } from '@/utils/api';
 import type { ElTable } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, ref, watch } from 'vue';
@@ -161,42 +157,6 @@ const getDatasourceNameMap = (): Record<string, string> => {
   return nameMap;
 };
 
-// =============================================
-// 文件上传与数据库连接相关方法
-// =============================================
-
-// 处理文件上传
-const handleFileUpload = async (options: { file: File; }) => {
-  const file = options.file;
-  if (!file) return;
-
-  // 存储文件信息并显示清洗弹窗
-  currentUploadFile.value = file;
-  fileMetadata.value.name = file.name.replace(/\.[^/.]+$/, ''); // 移除文件扩展名
-  fileMetadata.value.description = '';
-  userRequirements.value = '';
-  selectedModel.value = availableModels.value[0].value;
-  dataCleaningDialogVisible.value = true;
-  cleaningStep.value = 'upload';
-
-  // 重置状态
-  dataQualityReport.value = null;
-  cleaningSuggestions.value = [];
-  fieldMappings.value = {};
-  selectedCleaningActions.value = [];
-  analysisResult.value = null;
-};
-
-// 打开添加数据库对话框
-const openAddDatabase = () => {
-  addDatabaseDialogVisible.value = true;
-};
-
-// 添加数据库成功回调
-const onDatabaseAddSuccess = async () => {
-  ElMessage.success('数据库连接添加成功');
-  await fetchDatasets(); // 刷新数据源列表
-};
 
 // =============================================
 // 数据源操作方法
@@ -303,266 +263,6 @@ const loadPreviewData = async (page: number = 1) => {
 };
 
 // =============================================
-// 数据清洗相关方法
-// =============================================
-
-// 智能数据质量分析
-const analyzeDataQualityWithAI = async () => {
-  if (!currentUploadFile.value) return;
-
-  isSmartAnalyzing.value = true;
-  cleaningStep.value = 'analysis';
-
-  try {
-    // 使用智能Agent API
-    const result = await cleaningAPI.analyzeDataQuality(
-      currentUploadFile.value,
-      userRequirements.value || undefined,
-      selectedModel.value || undefined
-    );
-
-    if (result.success) {
-      analysisResult.value = result;
-      dataQualityReport.value = result.quality_report || null;
-      cleaningSuggestions.value = result.cleaning_suggestions || [];
-      fieldMappings.value = result.field_mappings || {};
-
-      // 记录字段映射信息，等待用户选择操作
-      if (result.field_mappings_applied && result.cleaned_file_id) {
-        ElMessage.info('字段映射已准备完成，您可以选择直接上传或执行清洗操作');
-      }
-
-      ElMessage.success('智能数据质量分析完成！');
-    } else {
-      throw new Error(result.error || '分析失败');
-    }
-  } catch (error) {
-    ElMessage.error('智能数据质量分析失败');
-    console.error(error);
-    cleaningStep.value = 'upload';
-  } finally {
-    isSmartAnalyzing.value = false;
-  }
-};
-
-// 应用清洗动作
-const applyCleaningActions = async () => {
-  // 检查是否有有效的字段映射
-  const hasFieldMappings = fieldMappings.value && Object.keys(fieldMappings.value).length > 0;
-
-  if (selectedCleaningActions.value.length === 0 && !hasFieldMappings) {
-    ElMessage.warning('请选择至少一个清洗建议或确认字段映射');
-    return;
-  }
-
-  isCleaning.value = true;
-  try {
-    // 确保当前文件存在
-    if (!currentUploadFile.value) {
-      throw new Error('当前文件不存在');
-    }
-
-    // 准备清洗建议，确保格式正确
-    const preparedSuggestions = selectedCleaningActions.value.map((action: any) => {
-      // 从原始建议中获取更多信息
-      const originalSuggestion = cleaningSuggestions.value.find((s: any) =>
-        s.type === action.type && s.column === action.column
-      );
-
-      // 确保issue_type字段正确设置
-      const issueType = action.type || originalSuggestion?.type || 'unknown';
-
-      return {
-        title: originalSuggestion?.title || `清洗操作: ${issueType}`,
-        type: issueType, // 保持向后兼容
-        issue_type: issueType, // 新的字段名
-        column: action.column || '',
-        description: originalSuggestion?.description || `应用清洗操作: ${issueType} on ${action.column}`,
-        severity: originalSuggestion?.severity || 'medium',
-        priority: originalSuggestion?.priority || 'medium',
-        options: originalSuggestion?.options || [{
-          method: action.parameters || 'default',
-          description: `清洗列 ${action.column}`
-        }],
-        suggested_action: originalSuggestion?.description || `清洗列 ${action.column}`,
-        parameters: {
-          method: action.parameters || 'default',
-          ...(originalSuggestion as any)?.parameters
-        },
-        method: action.parameters || (originalSuggestion as any)?.method || 'default'
-      };
-    });
-
-    // 过滤掉无效的清洗操作
-    const validSuggestions = preparedSuggestions.filter(suggestion =>
-      suggestion.issue_type &&
-      suggestion.issue_type !== 'None' &&
-      suggestion.issue_type !== 'null' &&
-      suggestion.column
-    );
-
-    if (validSuggestions.length === 0 && hasFieldMappings) {
-      ElMessage.info('没有有效的清洗操作，将只应用字段映射');
-    } else if (validSuggestions.length === 0 && !hasFieldMappings) {
-      ElMessage.warning('没有有效的清洗操作和字段映射');
-      return;
-    }
-
-    // 执行清洗操作
-    console.log('=== 调用清洗API ===');
-    console.log('选择的清洗建议:', validSuggestions);
-    console.log('字段映射:', fieldMappings.value);
-    console.log('用户要求:', userRequirements.value);
-
-    const cleaningResult = await cleaningAPI.executeCleaning(
-      currentUploadFile.value,
-      validSuggestions,
-      fieldMappings.value,
-      userRequirements.value,
-      selectedModel.value
-    );
-
-    if (cleaningResult.success) {
-      ElMessage.success(`清洗操作执行成功！应用了 ${cleaningResult.applied_operations.length} 个清洗操作`);
-
-      // 保存清洗结果
-      analysisResult.value = {
-        ...analysisResult.value,
-        cleaning_result: cleaningResult,
-        cleaned_file_id: cleaningResult.cleaned_file_id,
-        cleaned_data_info: cleaningResult.cleaned_data_info
-      };
-
-      // 执行清洗后，自动上传清洗后的数据到Dremio
-      try {
-        ElMessage.info('正在上传清洗后的数据到Dremio...');
-
-        const uploadResult = await dataSourceAPI.uploadFile(
-          currentUploadFile.value,
-          fileMetadata.value.name,
-          fileMetadata.value.description,
-          cleaningResult.cleaned_file_id,
-          fieldMappings.value,
-          true  // 标记为清洗后的数据
-        );
-
-        ElMessage.success('清洗后的数据已成功上传到Dremio！');
-
-        // 标记数据已上传
-        analysisResult.value.data_uploaded = true;
-        analysisResult.value.upload_result = uploadResult;
-
-        // 上传成功后刷新数据源列表
-        await fetchDatasets();
-        ElMessage.success('数据源列表已更新');
-
-        cleaningStep.value = 'complete';
-      } catch (uploadError: any) {
-        ElMessage.error('清洗操作成功，但上传到Dremio失败: ' + (uploadError?.message || uploadError));
-        console.error('上传清洗后数据失败:', uploadError);
-        cleaningStep.value = 'complete';
-      }
-    } else {
-      throw new Error(cleaningResult.error || '清洗执行失败');
-    }
-  } catch (error: any) {
-    ElMessage.error('清洗操作执行失败: ' + (error?.message || error));
-    console.error('清洗操作详细错误:', error);
-  } finally {
-    isCleaning.value = false;
-  }
-};
-
-// 跳过清洗直接上传
-const skipCleaningAndUpload = async () => {
-  if (!currentUploadFile.value) return;
-
-  isLoading.value = true;
-  try {
-    const mappedFilePath = analysisResult.value?.cleaned_file_id;
-    const fieldMappingsToApply = analysisResult.value?.field_mappings || fieldMappings.value;
-
-    if (mappedFilePath && Object.keys(fieldMappingsToApply).length > 0) {
-      // 使用应用了字段映射的文件
-      await dataSourceAPI.uploadFile(
-        currentUploadFile.value,
-        fileMetadata.value.name,
-        fileMetadata.value.description,
-        mappedFilePath,
-        fieldMappingsToApply,
-        true  // 标记为已处理的数据
-      );
-      ElMessage.success('字段映射已应用，数据上传成功！');
-    } else {
-      // 没有字段映射，使用原始文件
-      await dataSourceStore.uploadFileSource(
-        currentUploadFile.value,
-        fileMetadata.value.description,
-        fileMetadata.value.name
-      );
-      ElMessage.success('原始文件上传成功！');
-    }
-
-    dataCleaningDialogVisible.value = false;
-    // 上传成功后刷新数据源列表
-    await fetchDatasets();
-    ElMessage.success('数据源列表已更新');
-  } catch (error: any) {
-    ElMessage.error('文件上传失败: ' + (error?.message || error));
-    console.error(error);
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-// 完成处理（数据已经上传，关闭对话框）
-const completeCleaningAndUpload = async () => {
-  if (analysisResult.value?.data_uploaded) {
-    // 数据已经上传，直接关闭对话框并刷新列表
-    dataCleaningDialogVisible.value = false;
-    await fetchDatasets();
-    ElMessage.success('数据处理完成！数据源列表已刷新');
-  } else {
-    // 数据还没有上传（理论上不应该到这里）
-    ElMessage.warning('请先选择跳过清洗或执行清洗操作');
-  }
-};
-
-// 切换清洗动作选择
-const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
-  const action: CleaningAction = {
-    type: suggestion.type,
-    column: suggestion.column,
-    parameters: suggestion.options?.[0]?.method || '' // 默认选择第一个选项的方法
-  };
-
-  const index = selectedCleaningActions.value.findIndex(a =>
-    a.type === action.type && a.column === action.column
-  );
-
-  if (index >= 0) {
-    selectedCleaningActions.value.splice(index, 1);
-  } else {
-    selectedCleaningActions.value.push(action);
-  }
-};
-
-// 关闭清洗弹窗
-const closeCleaningDialog = () => {
-  dataCleaningDialogVisible.value = false;
-  currentUploadFile.value = null;
-  dataQualityReport.value = null;
-  cleaningSuggestions.value = [];
-  fieldMappings.value = {};
-  selectedCleaningActions.value = [];
-  cleaningStep.value = 'upload';
-  fileMetadata.value = { name: '', description: '' };
-  userRequirements.value = '';
-  analysisResult.value = null;
-  showAdvancedOptions.value = false;
-};
-
-// =============================================
 // 多选相关方法
 // =============================================
 
@@ -620,9 +320,6 @@ watch([currentPage, pageSize], updatePaginatedDataSources);
     <!-- 顶部操作区域 -->
     <DataSourceHeader :isLoading="isLoading" @refresh="fetchDatasets" />
 
-    <!-- 上传区域 -->
-    <DataSourceUploadPanel @fileUpload="handleFileUpload" @openDatabaseDialog="openAddDatabase" />
-
     <!-- 搜索和过滤区域 -->
     <DataSourceSearchBar v-model:searchQuery="searchQuery" :selectedSources="selectedSources"
       :sourceNames="getDatasourceNameMap()" @createSession="createSessionWithSelectedSources" />
@@ -640,19 +337,6 @@ watch([currentPage, pageSize], updatePaginatedDataSources);
     <PreviewDataDialog v-model:visible="previewDialogVisible" :datasource="currentEditSource" :previewData="previewData"
       :previewColumns="previewColumns" :pagination="previewPagination" :loading="previewLoading"
       @loadPage="loadPreviewData" />
-
-    <!-- 数据清洗对话框 -->
-    <DataCleaningDialog v-model:visible="dataCleaningDialogVisible" v-model:step="cleaningStep"
-      v-model:userRequirements="userRequirements" v-model:selectedModel="selectedModel"
-      v-model:fileMetadata="fileMetadata" :file="currentUploadFile" :dataQualityReport="dataQualityReport"
-      :cleaningSuggestions="cleaningSuggestions" :fieldMappings="fieldMappings" :isAnalyzing="isSmartAnalyzing"
-      :isCleaning="isCleaning" :selectedCleaningActions="selectedCleaningActions" :analysisResult="analysisResult"
-      :availableModels="availableModels" @analyze="analyzeDataQualityWithAI" @skipAndUpload="skipCleaningAndUpload"
-      @applyCleaningActions="applyCleaningActions" @complete="completeCleaningAndUpload" @close="closeCleaningDialog"
-      @toggleCleaningAction="toggleCleaningAction" />
-
-    <!-- 添加数据库对话框 -->
-    <AddDatabaseDialog v-model:visible="addDatabaseDialogVisible" @success="onDatabaseAddSuccess" />
   </div>
 </template>
 

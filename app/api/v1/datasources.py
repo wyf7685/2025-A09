@@ -31,7 +31,7 @@ class RegisterDataSourceResponse(BaseModel):
 
 @router.post("/upload", response_model=RegisterDataSourceResponse)
 async def upload_file(
-    file: UploadFile = File(),
+    file: UploadFile | None = File(default=None),
     source_name: str | None = Form(default=None),
     description: str | None = Form(default=None),
     cleaned_file_id: str | None = Form(default=None),  # 清洗后文件ID（可选）
@@ -43,22 +43,20 @@ async def upload_file(
     支持上传原始数据或清洗后的数据
     """
     try:
-        if not file or not file.filename:
-            raise HTTPException(status_code=400, detail="No file provided")
-
-        file_ext = Path(file.filename).suffix.lower()
-
-        if file_ext not in {".csv", ".xlsx", ".xls"}:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
-
         # 如果提供了清洗后的文件路径，使用清洗后的数据
-        file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
         if cleaned_file_id and (cleaned_file_path := temp_file_service.get(cleaned_file_id)):
             logger.info(f"使用清洗后的数据文件: {cleaned_file_path}")
+            file_path = (UPLOAD_DIR / str(uuid.uuid4())).with_suffix(cleaned_file_path.suffix)
             cleaned_file_path.rename(file_path)
             await temp_file_service.delete(cleaned_file_id)
+        elif not file or not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
         else:
-            # 保存原始文件
+            file_ext = Path(file.filename).suffix.lower()
+            if file_ext not in {".csv", ".xlsx", ".xls"}:
+                raise HTTPException(status_code=400, detail="Unsupported file format")
+
+            file_path = UPLOAD_DIR / f"{uuid.uuid4()}{file_ext}"
             file_path.write_bytes(await file.read())
             logger.info(f"保存原始数据文件: {file_path}")
 
@@ -97,58 +95,40 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
 
 
+class UploadCleanedFileRequest(BaseModel):
+    cleaned_file_id: str
+    source_name: str
+    description: str | None = None
+    field_mappings: dict[str, str] | None = None
+    cleaning_summary: str | None = None  # 清洗操作总结
+
+
 @router.post("/upload-cleaned", response_model=RegisterDataSourceResponse)
-async def upload_cleaned_file(
-    file: UploadFile = File(),
-    source_name: str = Form(...),
-    description: str | None = Form(None),
-    field_mappings: str = Form(...),  # JSON格式的字段映射
-    cleaning_summary: str | None = Form(None),  # 清洗操作总结
-) -> dict[str, Any]:
+async def upload_cleaned_file(request: UploadCleanedFileRequest) -> dict[str, Any]:
     """
     上传智能清洗后的数据文件
-
-    Args:
-        file: 清洗后的数据文件
-        source_name: 数据源名称
-        description: 数据源描述
-        field_mappings: JSON格式的字段映射
-        cleaning_summary: 清洗操作总结
-
-    Returns:
-        创建的数据源信息
     """
     try:
-        if not file or not file.filename:
-            raise HTTPException(status_code=400, detail="No file provided")
-
-        file_ext = Path(file.filename).suffix.lower()
-
-        if file_ext not in {".csv", ".xlsx", ".xls"}:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
+        if not request.cleaned_file_id or not (cleaned_file_path := temp_file_service.get(request.cleaned_file_id)):
+            raise HTTPException(status_code=400, detail="No cleaned file provided")
 
         # 保存清洗后的文件
-        file_path = UPLOAD_DIR / f"{uuid.uuid4()}_cleaned{file_ext}"
-        file_path.write_bytes(await file.read())
-
-        # 解析字段映射
-        try:
-            parsed_field_mappings = TypeAdapter(dict[str, str]).validate_json(field_mappings)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"字段映射格式错误: {e}") from e
+        file_path = UPLOAD_DIR / f"{uuid.uuid4()}{cleaned_file_path.suffix}"
+        cleaned_file_path.rename(file_path)
+        await temp_file_service.delete(request.cleaned_file_id)
 
         dremio_source = await get_async_dremio_client().add_data_source_file(file_path)
 
         # 创建数据源
-        source = create_dremio_source(dremio_source, source_name, description)
+        source = create_dremio_source(dremio_source, request.source_name, request.description)
 
         # 应用字段映射
-        source.metadata.column_description = parsed_field_mappings
+        source.metadata.column_description = request.field_mappings
 
         # 添加清洗标记和总结
         clean_description = "[智能清洗后的数据]"
-        if cleaning_summary:
-            clean_description += f" 清洗总结: {cleaning_summary}"
+        if request.cleaning_summary:
+            clean_description += f" 清洗总结: {request.cleaning_summary}"
 
         if source.metadata.description:
             source.metadata.description += " " + clean_description
@@ -157,7 +137,9 @@ async def upload_cleaned_file(
 
         source_id, source = await datasource_service.register(source)
 
-        logger.info(f"成功上传清洗后的数据: {source_name}, 应用了 {len(parsed_field_mappings)} 个字段映射")
+        logger.info(
+            f"成功上传清洗后的数据: {request.source_name}, 应用了 {len(request.field_mappings or {})} 个字段映射"
+        )
 
         return {"source_id": source_id, "metadata": source.metadata}
 

@@ -93,10 +93,9 @@ export interface ApiResponse {
     upload_time: string;
     file_size: number;
   };
-  quality_check?: DataQualityReport;
-  quality_report?: DataQualityReport;
-  cleaning_suggestions?: CleaningSuggestion[];
-  field_mappings?: Record<string, string>;
+  quality_report: DataQualityReport;
+  cleaning_suggestions: CleaningSuggestion[];
+  field_mappings: Record<string, string>;
   status: string;
   success?: boolean;
   error?: string;
@@ -299,30 +298,18 @@ export const dataSourceAPI = {
 
   // 上传清洗后的数据文件
   uploadCleanedFile: async (
-    file: File,
+    cleanedFileId: string,
     sourceName: string,
     description?: string,
     fieldMappings?: Record<string, string>,
     cleaningSummary?: string,
   ): Promise<UploadDataSourceResponse> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('source_name', sourceName);
-
-    if (description) {
-      formData.append('description', description);
-    }
-    if (fieldMappings) {
-      formData.append('field_mappings', JSON.stringify(fieldMappings));
-    }
-    if (cleaningSummary) {
-      formData.append('cleaning_summary', cleaningSummary);
-    }
-
-    const response = await api.post('/datasources/upload-cleaned', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    const response = await api.post('/datasources/upload-cleaned', {
+      cleaned_file_id: cleanedFileId,
+      source_name: sourceName,
+      description,
+      field_mappings: fieldMappings,
+      cleaning_summary: cleaningSummary,
     });
     return response.data;
   },

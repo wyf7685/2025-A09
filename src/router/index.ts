@@ -15,6 +15,13 @@ const routes = [
     path: '/data-management',
     name: 'DataManagement',
     component: () => import('../views/DataManagement.vue'),
+    meta: { title: '数据管理' },
+  },
+  {
+    path: '/data-upload',
+    name: 'DataUpload',
+    component: () => import('../views/DataUpload.vue'),
+    meta: { title: '数据上传' },
   },
   {
     path: '/chat-analysis',
