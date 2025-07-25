@@ -121,13 +121,15 @@ class DataAnalyzerAgent:
         sc_tools = sources_tools(sources)
         all_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
 
+        system_prompt = SYSTEM_PROMPT.format(
+            overview=format_sources_overview(sources_dict),
+            tool_intro=TOOL_INTRO,
+        )
+
         self.agent = create_react_agent(
             model=chat_model,
             tools=all_tools,
-            prompt=SYSTEM_PROMPT.format(
-                overview=format_sources_overview(sources_dict),
-                tool_intro=TOOL_INTRO,
-            ),
+            prompt=system_prompt,
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
         )
@@ -135,6 +137,7 @@ class DataAnalyzerAgent:
         self.saved_models = saved_models
 
         logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
+        # logger.debug("SYSTEM PROMPT\n" + system_prompt)
 
     def get_messages(self) -> list[AnyMessage]:
         """获取当前 agent 的对话记录"""

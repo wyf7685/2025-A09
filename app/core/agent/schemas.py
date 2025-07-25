@@ -39,7 +39,7 @@ def format_sources_overview(sources: SourcesDict) -> str:
     Returns:
         str: 格式化后的概览信息。
     """
-    return "\n\n".join(f"数据集ID: {source_id}\n{source.format_overview()}" for source_id, source in sources.items())
+    return "\n\n".join(f"- 数据集ID: {source_id}\n{source.format_overview()}" for source_id, source in sources.items())
 
 
 class OperationFailed(TypedDict):
