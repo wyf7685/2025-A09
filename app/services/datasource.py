@@ -1,8 +1,8 @@
-import json
 import uuid
 from pathlib import Path
 
 import anyio
+from pydantic import BaseModel
 
 from app.const import DATASOURCE_DIR, TEMP_DIR
 from app.core.config import settings
@@ -13,7 +13,7 @@ from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
 from app.schemas.dremio import DremioSource
-from app.utils import with_semaphore
+from app.utils import escape_tag, with_semaphore
 
 _DATASOURCE_DIR = anyio.Path(DATASOURCE_DIR)
 _TEMP_DIR = anyio.Path(TEMP_DIR)
@@ -29,6 +29,19 @@ async def _fetch_dremio_source() -> list[DremioSource]:
         return []
 
 
+class _DataSourceStruct(BaseModel):
+    type: str
+    data: dict
+
+    @classmethod
+    def from_data_source(cls, source: DataSource) -> "_DataSourceStruct":
+        type_, data_ = source.serialize()
+        return cls(type=type_, data=data_)
+
+    def to_data_source(self) -> DataSource:
+        return deserialize_data_source(self.type, self.data)
+
+
 class DataSourceService:
     def __init__(self) -> None:
         self.sources: dict[str, DataSource] = {}
@@ -37,7 +50,7 @@ class DataSourceService:
         if source_id in self.sources:
             return True
         try:
-            await self.load_source(source_id)
+            await self._load_source(source_id)
             return True
         except FileNotFoundError:
             return False
@@ -47,20 +60,19 @@ class DataSourceService:
             if not (await fp.is_file() and fp.suffix == ".json"):
                 continue
             try:
-                await self.load_source(fp)
-            except Exception as e:
-                logger.opt(exception=True).warning(f"Failed to load data source from {fp}: {e}")
+                await self._load_source(fp)
+            except Exception:
+                logger.opt(colors=True, exception=True).warning(f"从文件 <y><u>{escape_tag(fp)}</></> 读取数据源失败")
         self._check_unique()
 
-    async def load_source(self, source_id: str | anyio.Path) -> DataSource:
+    async def _load_source(self, source_id: str | anyio.Path) -> DataSource:
         fp = _DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
         if not await fp.exists():
             raise DataSourceNotFound(source_id if isinstance(source_id, str) else "<Unknown>")
 
         source_id = source_id.stem if isinstance(source_id, anyio.Path) else source_id
         try:
-            data = json.loads(await fp.read_text())
-            source = deserialize_data_source(data["type"], data["data"])
+            source = _DataSourceStruct.model_validate_json(await fp.read_text()).to_data_source()
         except Exception as e:
             raise DataSourceLoadFailed(source_id) from e
 
@@ -69,14 +81,13 @@ class DataSourceService:
 
     async def save_source(self, source_id: str, source: DataSource) -> None:
         fp = _DATASOURCE_DIR / f"{source_id}.json"
-        type_, data_ = source.serialize()
-        await fp.write_text(json.dumps({"type": type_, "data": data_}, ensure_ascii=False, indent=2))
+        await fp.write_text(_DataSourceStruct.from_data_source(source).model_dump_json())
         self.sources[source_id] = source
 
     async def get_source(self, source_id: str) -> DataSource:
         if source_id in self.sources:
             return self.sources[source_id]
-        return await self.load_source(source_id)
+        return await self._load_source(source_id)
 
     async def delete_source(self, source_id: str) -> None:
         if not await self.source_exists(source_id):

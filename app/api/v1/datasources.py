@@ -20,7 +20,6 @@ from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
 from app.services.datasource import datasource_service, temp_file_service
 from app.services.session import session_service
-from app.utils import run_sync
 
 # 创建路由
 router = APIRouter(prefix="/datasources")
@@ -244,7 +243,7 @@ async def list_datasources() -> list[str]:
     try:
         with contextlib.suppress(Exception):
             async with list_ds_sem:
-                await run_sync(datasource_service.sync_from_dremio)()
+                await datasource_service.sync_from_dremio()
         return list(datasource_service.sources)
     except HTTPException:
         raise
