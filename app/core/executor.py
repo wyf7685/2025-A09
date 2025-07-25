@@ -86,8 +86,7 @@ def deserialize_result(data: dict) -> ExecuteResult:
 
 def parse_result(data: bytes) -> ExecuteResult:
     try:
-        execution_result: dict = json.loads(data.decode("utf-8"))
-        return deserialize_result(execution_result)
+        return deserialize_result(json.loads(data.decode("utf-8")))
     except Exception as e:
         return {
             "success": False,

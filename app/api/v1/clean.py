@@ -3,7 +3,6 @@
 """
 
 import contextlib
-import json
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -174,8 +173,8 @@ async def execute_cleaning(
             selected_suggestions = cleaning_request_data.selected_suggestions
             field_mappings = cleaning_request_data.field_mappings
             user_requirements = cleaning_request_data.user_requirements
-            # model_name = cleaning_request_data.get("model_name")
-        except json.JSONDecodeError as e:
+            # model_name = cleaning_request_data.model_name
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=f"清洗请求数据格式错误: {e}") from e
 
         # 验证文件类型
@@ -275,6 +274,13 @@ async def execute_cleaning(
         raise HTTPException(status_code=500, detail=f"数据清洗执行失败: {e}") from e
 
 
+class CleaningData(BaseModel):
+    selected_suggestions: list[dict[str, Any]] | None = None
+    field_mappings: dict[str, str] | None = None
+    user_requirements: str | None = None
+    model_name: str | None = None
+
+
 @router.post("/analyze-and-clean")
 async def analyze_and_clean(
     file: UploadFile = File(...),
@@ -293,12 +299,10 @@ async def analyze_and_clean(
     try:
         # 解析清洗请求数据
         try:
-            cleaning_request_data = json.loads(cleaning_data)
-            selected_suggestions = cleaning_request_data.get("selected_suggestions", [])
-            # field_mappings = cleaning_request_data.get("field_mappings", {})
-            user_requirements = cleaning_request_data.get("user_requirements")
-            # model_name = cleaning_request_data.get("model_name")
-        except json.JSONDecodeError as e:
+            cleaning_request_data = CleaningData.model_validate_json(cleaning_data)
+            selected_suggestions = cleaning_request_data.selected_suggestions
+            user_requirements = cleaning_request_data.user_requirements
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=f"清洗请求数据格式错误: {e}") from e
 
         # 验证文件类型

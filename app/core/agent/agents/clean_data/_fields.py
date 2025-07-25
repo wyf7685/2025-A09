@@ -1,6 +1,8 @@
 import json
 import re
 
+from pydantic import BaseModel
+
 from app.core.chain import get_llm
 from app.log import logger
 
@@ -43,26 +45,36 @@ PROMPT_FIELD_MAPPING = """
 def create_field_mapping_prompt(state: CleaningState) -> str:
     """创建字段映射提示词"""
     df = load_source(state, "source_id").get_full()
-
-    # 准备数据样本和列信息
-    sample_data = df.head(5).to_dict("records")
-    columns_info = []
-
-    for col in df.columns:
-        col_info = {
+    columns_info = [
+        {
             "original_name": col,
             "dtype": str(df[col].dtype),
             "null_count": int(df[col].isna().sum()),
             "unique_count": int(df[col].nunique()),
             "sample_values": df[col].dropna().head(3).tolist(),
         }
-        columns_info.append(col_info)
-
+        for col in df.columns
+    ]
     return PROMPT_FIELD_MAPPING.format(
         columns_info=json.dumps(columns_info, ensure_ascii=False, indent=2),
-        sample_data=json.dumps(sample_data, ensure_ascii=False, indent=2),
+        sample_data=json.dumps(df.head(5).to_dict("records"), ensure_ascii=False, indent=2),
         user_requirements=state.get("user_requirements") or "无特殊要求",
     )
+
+
+class LLMFieldMappingResponse(BaseModel):
+    """LLM返回的字段映射响应模型"""
+
+    class FieldMapping(BaseModel):
+        """单个字段映射"""
+
+        original_name: str
+        suggested_name: str
+        confidence: float
+        field_type: str
+        description: str
+
+    field_mappings: list[FieldMapping] = []
 
 
 def parse_field_mappings(response: str) -> dict[str, str]:
@@ -73,12 +85,12 @@ def parse_field_mappings(response: str) -> dict[str, str]:
             logger.warning("无法从LLM响应中提取JSON格式的字段映射")
             return {}
 
-        parsed: dict[str, list[dict[str, str]]] = json.loads(json_match.group(0))
+        parsed = LLMFieldMappingResponse.model_validate_json(json_match.group(0))
 
         return {
             original: suggested
-            for mapping in parsed.get("field_mappings", [])
-            if (original := mapping.get("original_name")) and (suggested := mapping.get("suggested_name"))
+            for mapping in parsed.field_mappings
+            if (original := mapping.original_name) and (suggested := mapping.suggested_name)
         }
 
     except Exception as e:

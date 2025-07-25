@@ -4,13 +4,12 @@
 
 import asyncio
 import contextlib
-import json
 import uuid
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from app.const import UPLOAD_DIR
 from app.core.config import settings
@@ -67,9 +66,9 @@ async def upload_file(
         parsed_field_mappings = {}
         if field_mappings:
             try:
-                parsed_field_mappings = json.loads(field_mappings)
+                parsed_field_mappings = TypeAdapter(dict[str, str]).validate_json(field_mappings)
                 logger.info(f"应用字段映射: {parsed_field_mappings}")
-            except json.JSONDecodeError as e:
+            except ValueError as e:
                 logger.warning(f"字段映射解析失败: {e}")
 
         dremio_source = await get_async_dremio_client().add_data_source_file(file_path)
@@ -134,8 +133,8 @@ async def upload_cleaned_file(
 
         # 解析字段映射
         try:
-            parsed_field_mappings = json.loads(field_mappings)
-        except json.JSONDecodeError as e:
+            parsed_field_mappings = TypeAdapter(dict[str, str]).validate_json(field_mappings)
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=f"字段映射格式错误: {e}") from e
 
         dremio_source = await get_async_dremio_client().add_data_source_file(file_path)
