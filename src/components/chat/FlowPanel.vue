@@ -1,6 +1,53 @@
+// 扩展 FlowRoute 类型，支持 nextLoop 和 toolName 字段
+type FlowRouteEx = FlowRoute & { nextLoop?: FlowRouteEx[]; toolName?: string };
+type FlowRouteEx = FlowRoute & { nextLoop?: FlowRouteEx[]; toolName?: string };
 <script setup lang="ts">
+// 只显示已执行的步骤（直接暴露给模板）
+// 动态流程节点，支持循环追加
+const executedSteps = computed(() => {
+  if (selectedRoute.value === 'route1') {
+    // 只显示已执行的步骤
+    return route1Steps.value.filter(step => step.status !== 'pending');
+  } else {
+    // 路线2支持循环追加
+    const steps = [];
+    for (let i = 0; i < route2Steps.value.length; i++) {
+      const step = route2Steps.value[i];
+      if (step.status !== 'pending') {
+        // 判断是否进行循环节点特殊处理
+        if (step.title === '是否进行循环') {
+          // 没有调用新工具时，nextLoop为空，显示“否”且不追加新节点
+          steps.push({
+            ...step,
+            nextLoop: [], // 保证模板判断为否
+          });
+          // 只有在 nextLoop 节点已被激活或完成时追加新工具节点
+          if (
+            step.nextLoop &&
+            step.nextLoop.length > 0 &&
+            ['active', 'completed', 'error'].includes(step.nextLoop[0].status)
+          ) {
+            steps.push(...step.nextLoop);
+          }
+        } else {
+          steps.push(step);
+        }
+      }
+    }
+    return steps;
+  }
+});
 import { useModelStore } from '@/stores/model';
-import type { FlowStep, FlowRoute, FlowPanel, LLMModel } from '@/types';
+import type { FlowStep, FlowPanel, LLMModel } from '@/types';
+// 扩展 FlowRoute 类型，支持 nextLoop
+// 扩展 FlowRoute 类型，支持 nextLoop 和 toolName 字段
+type FlowRouteEx = {
+  title: string;
+  description: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  nextLoop?: FlowRouteEx[];
+  toolName?: string;
+};
 import { CircleCheck, Clock, DArrowRight, Edit, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
@@ -15,19 +62,19 @@ const selectedRoute = ref<string>('route1'); // 当前选中的路线
 const currentRouteReason = ref<string>(''); // 当前路线选择的原因
 
 // 路线1：生成总体报告的步骤
-const route1Steps = ref<FlowRoute[]>([
+const route1Steps = ref<FlowRouteEx[]>([
   { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
   { title: 'AI分析处理', description: '智能分析用户需求和数据', status: 'pending' },
   { title: '生成报告', description: '生成完整的数据分析报告', status: 'pending' }
 ]);
 
 // 路线2：其他处理的步骤
-const route2Steps = ref<FlowRoute[]>([
-  { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
-  { title: 'AI分析处理', description: '智能分析用户需求', status: 'pending' },
-  { title: '判断执行工具', description: '分析并选择合适的处理工具', status: 'pending' },
-  { title: '调用执行工具', description: '执行相应的数据处理工具', status: 'pending' },
-  { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending' }
+const route2Steps = ref<FlowRouteEx[]>([
+  { title: '用户输入', description: '接收用户的查询请求', status: 'pending', toolName: '' },
+  { title: 'AI分析处理', description: '智能分析用户需求', status: 'pending', toolName: '' },
+  { title: '判断执行工具', description: '分析并选择合适的处理工具', status: 'pending', toolName: '' },
+  { title: '调用执行工具', description: '执行相应的数据处理工具', status: 'pending', toolName: '' },
+  { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending', nextLoop: [], toolName: '' }
 ]);
 
 // 流程图相关状态 (保留原有的flowSteps以兼容现有代码)
@@ -243,10 +290,10 @@ const handleRouteChange = (route: string) => {
 
 // 重置所有路线步骤状态
 const resetAllSteps = () => {
-  route1Steps.value.forEach(step => {
+  route1Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
   });
-  route2Steps.value.forEach(step => {
+  route2Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
   });
 };
@@ -261,8 +308,63 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
     route1Steps.value[stepIndex].status = status;
     console.log(`[流程图] 路线1步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`);
   } else if (selectedRoute.value === 'route2' && route2Steps.value[stepIndex]) {
-    route2Steps.value[stepIndex].status = status;
-    console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`);
+    // 允许 updateRouteStep 控制 nextLoop 节点状态
+    if (stepIndex === 3 && route2Steps.value[4]?.nextLoop && route2Steps.value[4].nextLoop.length > 0) {
+      // 旧节点强制 completed
+      route2Steps.value[stepIndex].status = 'completed';
+    } else if (stepIndex === 4 && route2Steps.value[stepIndex].nextLoop && route2Steps.value[stepIndex].nextLoop.length > 0) {
+      // 如果是“是否进行循环”节点，允许通过 status 控制 nextLoop 节点状态
+      // 只更新 nextLoop 的第一个节点（即新追加的调用工具节点）
+      route2Steps.value[stepIndex].nextLoop[0].status = status;
+    } else {
+      route2Steps.value[stepIndex].status = status;
+    }
+    console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${route2Steps.value[stepIndex].status}`);
+    // 如果是“是否进行循环”节点且需要循环，追加新节点
+    if (route2Steps.value[stepIndex].title === '是否进行循环' && status === 'completed') {
+      // 只追加一次循环节点，且工具名与左侧对话栏一致
+      if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
+        let toolName = route2Steps.value[3]?.toolName;
+
+        // 旧的调用执行工具节点直接设为 completed
+        if (route2Steps.value[3]) {
+          route2Steps.value[3].status = 'completed';
+        }
+        // 追加新的循环节点，反映工具运行状况（只有新节点显示 active）
+        route2Steps.value[stepIndex].nextLoop = [
+          {
+            title: '调用执行工具',
+            description: `执行相应的数据处理工具（循环）：${toolName}`,
+            status: 'active',
+            toolName: toolName
+          }
+        ];
+      } else {
+        // 如果已存在循环节点，确保旧节点不是 active
+        if (route2Steps.value[3] && route2Steps.value[3].status === 'active') {
+          route2Steps.value[3].status = 'completed';
+        }
+      }
+    }
+
+    // 如果所有对话已完成，则将所有流程节点状态设为 completed
+    // 这里假设对话完成时会调用 updateRouteStep 并传入 status = 'completed'
+    if (status === 'completed') {
+      if (selectedRoute.value === 'route2') {
+        // 主流程节点
+        route2Steps.value.forEach((step: FlowRouteEx) => {
+          if (step.status === 'active') step.status = 'completed';
+        });
+        // 循环追加的节点
+        route2Steps.value.forEach((step: FlowRouteEx) => {
+          if (step.nextLoop && step.nextLoop.length > 0) {
+            step.nextLoop.forEach((loopStep: FlowRouteEx) => {
+              if (loopStep.status === 'active') loopStep.status = 'completed';
+            });
+          }
+        });
+      }
+    }
   }
 
   logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`);
@@ -273,9 +375,9 @@ const logRouteStatus = (message: string) => {
   console.log(`[流程图调试] ${message}`);
   console.log('当前路线:', selectedRoute.value);
   if (selectedRoute.value === 'route1') {
-    console.log('路线1状态:', route1Steps.value.map(step => `${step.title}: ${step.status}`));
+    console.log('路线1状态:', route1Steps.value.map((step: FlowRouteEx) => `${step.title}: ${step.status}`));
   } else {
-    console.log('路线2状态:', route2Steps.value.map(step => `${step.title}: ${step.status}`));
+    console.log('路线2状态:', route2Steps.value.map((step: FlowRouteEx) => `${step.title}: ${step.status}`));
   }
 };
 
@@ -418,9 +520,9 @@ const toggleRouteManually = () => {
 // 检查是否有活跃步骤
 const hasActiveSteps = computed(() => {
   if (selectedRoute.value === 'route1') {
-    return route1Steps.value.some(step => step.status === 'active');
+    return route1Steps.value.some((step: FlowRouteEx) => step.status === 'active');
   } else {
-    return route2Steps.value.some(step => step.status === 'active');
+    return route2Steps.value.some((step: FlowRouteEx) => step.status === 'active');
   }
 });
 
@@ -429,13 +531,13 @@ const forceCompleteFlow = () => {
   console.log('用户强制完成流程');
 
   if (selectedRoute.value === 'route1') {
-    route1Steps.value.forEach(step => {
+    route1Steps.value.forEach((step: FlowRouteEx) => {
       if (step.status === 'active' || step.status === 'pending') {
         step.status = 'completed';
       }
     });
   } else {
-    route2Steps.value.forEach(step => {
+    route2Steps.value.forEach((step: FlowRouteEx) => {
       if (step.status === 'active' || step.status === 'pending') {
         step.status = 'completed';
       }
@@ -537,84 +639,36 @@ onMounted(async () => {
 
     <div class="flow-panel-content">
       <div class="fixed-flow-routes">
-        <!-- 路线选择 -->
-        <div class="route-selector">
-          <div class="route-info">
-            <el-icon>
-              <Setting />
-            </el-icon>
-            <span class="route-label">智能路线选择</span>
-            <el-tag size="small" type="info">自动</el-tag>
-            <el-button type="text" size="small" @click="toggleRouteManually" class="manual-toggle" title="手动切换路线">
-              <el-icon>
-                <Edit />
-              </el-icon>
-            </el-button>
-          </div>
-          <el-radio-group v-model="selectedRoute" @change="handleRouteChange" disabled>
-            <el-radio-button label="route1">生成总体报告</el-radio-button>
-            <el-radio-button label="route2">调用工具分析</el-radio-button>
-          </el-radio-group>
-          <div class="route-description">
-            <span v-if="currentRouteReason" class="route-reason">
-              {{ currentRouteReason }}
-            </span>
-            <span v-if="selectedRoute === 'route1'" class="route-desc">
-              系统将生成综合数据分析报告
-            </span>
-            <span v-else class="route-desc">
-              系统将调用工具执行数据分析
-            </span>
-          </div>
-        </div>
+        <!-- 只显示当前运行的流程步骤 -->
 
-        <!-- 路线1：生成总体报告 -->
-        <div v-if="selectedRoute === 'route1'" class="flow-route">
-          <h4 class="route-title">路线1：生成总体报告</h4>
-          <div class="flow-steps">
-            <div v-for="(step, index) in route1Steps" :key="index" :class="['flow-step', step.status]">
-              <div class="step-number">{{ index + 1 }}</div>
-              <div class="step-content">
-                <div class="step-title">{{ step.title }}</div>
-                <div class="step-description">{{ step.description }}</div>
+        <!-- Dify风格流程图：卡片+连线 -->
+        <!-- Dify风格流程图：默认空，执行时动态添加节点 -->
+        <div class="dify-flow">
+          <div class="dify-flow-steps">
+            <template v-for="(step, index) in executedSteps" :key="index">
+              <div :class="['dify-step-card', step.status]">
+                <div class="dify-step-title">{{ step.title }}</div>
+                <div class="dify-step-desc">
+                  {{ step.description }}
+                  <template v-if="step.title === '是否进行循环'">
+                    <span style="color:#10b981;font-size:13px;font-weight:600;display:block;margin-top:2px;">
+                      循环：{{ step.nextLoop && step.nextLoop.length > 0 ? '是' : '否' }}
+                    </span>
+                  </template>
+                  <span v-if="step.toolName" style="color:#3b82f6;font-size:12px;font-weight:500;display:block;margin-top:2px;">工具：{{ step.toolName }}</span>
+                </div>
+                <div class="dify-step-status">
+                  <el-icon v-if="step.status === 'active'" class="loading"><Loading /></el-icon>
+                  <el-icon v-else-if="step.status === 'completed'" class="completed"><CircleCheck /></el-icon>
+                  <el-icon v-else class="pending"><Clock /></el-icon>
+                </div>
               </div>
-              <div class="step-status">
-                <el-icon v-if="step.status === 'active'" class="loading">
-                  <Loading />
-                </el-icon>
-                <el-icon v-else-if="step.status === 'completed'" class="completed">
-                  <CircleCheck />
-                </el-icon>
-                <el-icon v-else class="pending">
-                  <Clock />
-                </el-icon>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 路线2：调用工具分析 -->
-        <div v-if="selectedRoute === 'route2'" class="flow-route">
-          <h4 class="route-title">路线2：调用工具分析</h4>
-          <div class="flow-steps">
-            <div v-for="(step, index) in route2Steps" :key="index" :class="['flow-step', step.status]">
-              <div class="step-number">{{ index + 1 }}</div>
-              <div class="step-content">
-                <div class="step-title">{{ step.title }}</div>
-                <div class="step-description">{{ step.description }}</div>
-              </div>
-              <div class="step-status">
-                <el-icon v-if="step.status === 'active'" class="loading">
-                  <Loading />
-                </el-icon>
-                <el-icon v-else-if="step.status === 'completed'" class="completed">
-                  <CircleCheck />
-                </el-icon>
-                <el-icon v-else class="pending">
-                  <Clock />
-                </el-icon>
-              </div>
-            </div>
+              <svg v-if="index < executedSteps.length - 1" class="dify-flow-line" width="40" height="40">
+                <line x1="20" y1="0" x2="20" y2="40" stroke="#3b82f6" stroke-width="2" />
+              </svg>
+            </template>
+            <!-- 无已执行步骤时不显示任何内容 -->
+            <template v-if="executedSteps.length === 0"></template>
           </div>
         </div>
       </div>
@@ -663,6 +717,69 @@ onMounted(async () => {
 </template>
 
 <style lang="scss" scoped>
+// Dify风格流程图样式
+.dify-flow {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px 0;
+}
+.dify-flow-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.dify-step-card {
+  background: #fff;
+  border: 2px solid #3b82f6;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.08);
+  padding: 16px 24px;
+  margin: 0 0 0 0;
+  min-width: 180px;
+  max-width: 260px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  transition: border-color 0.2s;
+}
+.dify-step-card.pending {
+  border-color: #9ca3af;
+}
+.dify-step-card.active {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 16px rgba(59,130,246,0.15);
+}
+.dify-step-card.completed {
+  border-color: #10b981;
+}
+.dify-step-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+.dify-step-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+.dify-step-status {
+  margin-top: 4px;
+  .el-icon {
+    font-size: 18px;
+    vertical-align: middle;
+    &.loading { color: #3b82f6; animation: rotating 1s linear infinite; }
+    &.completed { color: #10b981; }
+    &.pending { color: #9ca3af; }
+  }
+}
+.dify-flow-line {
+  display: block;
+  margin: -8px 0 0 0;
+  z-index: 0;
+}
 // --- Flow Panel Styles ---
 .flow-panel {
   width: 320px;
