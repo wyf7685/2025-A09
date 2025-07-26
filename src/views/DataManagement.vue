@@ -9,6 +9,7 @@ import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { DataSourceMetadataWithID } from '@/types';
 import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import { withLoading } from '@/utils/tools';
 import type { ElTable } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, ref, watch } from 'vue';
@@ -112,19 +113,11 @@ const tableRef = ref<InstanceType<typeof ElTable>>();
 // =============================================
 
 // 刷新数据集列表
-const fetchDatasets = async () => {
-  isLoading.value = true;
-  try {
-    const sources = await dataSourceStore.listDataSources();
-    datasources.value = sources;
-    updateFilteredDataSources();
-  } catch (error) {
-    ElMessage.error('获取数据源列表失败');
-    console.error(error);
-  } finally {
-    isLoading.value = false;
-  }
-};
+const fetchDatasets = () => withLoading(isLoading, async () => {
+  const sources = await dataSourceStore.listDataSources();
+  datasources.value = sources;
+  updateFilteredDataSources();
+}, '获取数据源列表失败');
 
 // 更新过滤后的数据源
 const updateFilteredDataSources = () => {
@@ -156,7 +149,6 @@ const getDatasourceNameMap = (): Record<string, string> => {
   });
   return nameMap;
 };
-
 
 // =============================================
 // 数据源操作方法

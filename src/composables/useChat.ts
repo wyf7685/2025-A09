@@ -4,6 +4,7 @@ import type {
   AssistantChatMessageContent,
   AssistantChatMessageText,
   ChatMessage,
+  DataSourceMetadata,
 } from '@/types';
 import type { FlowPanel } from '@/types/flow';
 import { ElMessage } from 'element-plus';
@@ -115,9 +116,9 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
    */
   const sendMessage = async (
     userMessage: string,
-    currentSessionId?: string,
-    currentDatasets?: any[] | null,
-    scrollToBottom?: () => void,
+    currentSessionId: string | null,
+    currentDatasets: DataSourceMetadata[] | null,
+    scrollToBottom: () => void,
   ): Promise<void> => {
     if (!userMessage.trim()) return;
 

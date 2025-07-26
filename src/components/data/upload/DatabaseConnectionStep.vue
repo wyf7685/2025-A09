@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AnyDatabaseConnection, DremioDatabaseType } from '@/types';
+import { withLoading } from '@/utils/tools';
 import { Connection, ArrowLeft } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, reactive, ref, watch } from 'vue';
@@ -102,7 +103,7 @@ const goBack = () => {
   emit('goBack');
 };
 
-const submitForm = async () => {
+const submitForm = () => withLoading(isSubmitting, async () => {
   if (!formRef.value) return;
 
   await formRef.value.validate();
@@ -112,22 +113,16 @@ const submitForm = async () => {
     return;
   }
 
-  isSubmitting.value = true;
+  // 构建连接参数
+  const connectionParams = {
+    database_type: formData.database_type,
+    connection: { ...formData.connection } as AnyDatabaseConnection,
+    name: connectionName.value,
+    description: connectionDescription.value,
+  };
 
-  try {
-    // 构建连接参数
-    const connectionParams = {
-      database_type: formData.database_type,
-      connection: { ...formData.connection } as AnyDatabaseConnection,
-      name: connectionName.value,
-      description: connectionDescription.value,
-    };
-
-    emit('connect', connectionParams);
-  } finally {
-    isSubmitting.value = false;
-  }
-};
+  emit('connect', connectionParams);
+});
 </script>
 
 <template>
