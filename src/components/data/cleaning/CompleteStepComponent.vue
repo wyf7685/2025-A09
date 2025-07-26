@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import type { CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
+import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
 import { CircleCheck, EditPen, RefreshRight, Upload } from '@element-plus/icons-vue';
 
 // 当前步骤的双向绑定
-const step = defineModel<CleaningStep>('step', {
-  required: true,
-  default: 'complete'
-});
+const step = defineModel<CleaningStep>('step', { required: true });
 
 // 定义组件属性
 defineProps<{
-  analysisResult: any;
+  analysisResult: AnalyzeDataQualityState | null;
   selectedCleaningActions: CleaningAction[];
   cleaningSuggestions: CleaningSuggestion[];
 }>();

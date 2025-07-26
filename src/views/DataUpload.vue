@@ -7,9 +7,10 @@ import { useModelStore } from '@/stores/model';
 import type { AnyDatabaseConnection, DremioDatabaseType } from '@/types';
 import { dataSourceAPI } from '@/utils/api';
 import { ElMessage } from 'element-plus';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowRight } from '@element-plus/icons-vue';
+import { withLoading } from '@/utils/tools';
 
 const router = useRouter();
 const dataSourceStore = useDataSourceStore();
@@ -35,6 +36,9 @@ const isConnecting = ref(false);
 // 可用模型列表
 const availableModels = ref<Array<{ value: string, label: string; }>>([]);
 
+const loadingText = computed(() =>
+  isUploading.value ? '文件上传中...' : isConnecting.value ? '连接数据库中...' : '');
+
 // 获取可用模型列表
 onMounted(async () => {
   try {
@@ -59,18 +63,8 @@ const goBack = () => {
   currentStep.value = 'method';
 };
 
-// 处理文件选择
-const handleFileSelected = (file: File) => {
-  selectedFile.value = file;
-
-  // 如果文件名为空，则使用文件名
-  if (!fileName.value) {
-    fileName.value = file.name.split('.')[0];
-  }
-};
-
 // 处理文件上传
-const handleFileUpload = async (cleanedFileId?: string) => {
+const handleFileUpload = (cleanedFileId?: string) => withLoading(isUploading, async () => {
   if (!selectedFile.value && !cleanedFileId) {
     ElMessage.warning('请选择要上传的文件');
     return;
@@ -81,70 +75,45 @@ const handleFileUpload = async (cleanedFileId?: string) => {
     return;
   }
 
-  isUploading.value = true;
-
-  try {
-    if (cleanedFileId) {
-      // 如果有已清洗的文件ID，使用该ID上传
-      await dataSourceAPI.uploadCleanedFile(
-        cleanedFileId,
-        fileName.value,
-        fileDescription.value,
-      );
-    } else {
-      // 否则直接上传原文件
-      await dataSourceStore.uploadFileSource(
-        selectedFile.value!,
-        fileDescription.value,
-        fileName.value
-      );
-    }
-
-    ElMessage.success('文件上传成功');
-
-    // 上传成功后跳转回数据管理页面
-    router.push('/data-management');
-  } catch (error) {
-    console.error('File upload failed:', error);
-    ElMessage.error('文件上传失败');
-  } finally {
-    isUploading.value = false;
+  if (cleanedFileId) {
+    // 如果有已清洗的文件ID，使用该ID上传
+    await dataSourceAPI.uploadCleanedFile(
+      cleanedFileId,
+      fileName.value,
+      fileDescription.value,
+    );
+  } else {
+    // 否则直接上传原文件
+    await dataSourceStore.uploadFileSource(
+      selectedFile.value!,
+      fileDescription.value,
+      fileName.value
+    );
   }
-};
+
+  ElMessage.success('文件上传成功');
+
+  // 上传成功后跳转回数据管理页面
+  router.push('/data-management');
+}, '文件上传失败');
 
 // 处理数据库连接
-const handleDatabaseConnect = async (params: {
+const handleDatabaseConnect = (params: {
   database_type: DremioDatabaseType;
   connection: AnyDatabaseConnection;
   name: string;
   description: string;
-}) => {
-  isConnecting.value = true;
-
-  try {
-    await dataSourceStore.createDatabaseSource({
-      database_type: params.database_type,
-      connection: params.connection,
-      name: params.name,
-      description: params.description
-    });
-
-    ElMessage.success('数据库连接成功');
-
-    // 连接成功后跳转回数据管理页面
-    router.push('/data-management');
-  } catch (error) {
-    console.error('Database connection failed:', error);
-    ElMessage.error('数据库连接失败');
-  } finally {
-    isConnecting.value = false;
-  }
-};
+}) => withLoading(isConnecting, async () => {
+  await dataSourceStore.createDatabaseSource(params);
+  ElMessage.success('数据库连接成功');
+  router.push('/data-management');
+}, '数据库连接失败');
 </script>
 
 <template>
-  <div class="data-upload-view" v-loading="isUploading || isConnecting"
-    :element-loading-text="isUploading ? '文件上传中...' : '连接数据库中...'"
+  <div class="data-upload-view"
+    v-loading="loadingText"
+    :element-loading-text="loadingText"
     element-loading-background="rgba(255, 255, 255, 0.7)">
     <div class="breadcrumb-container">
       <el-breadcrumb :separator-icon="ArrowRight">
@@ -158,18 +127,26 @@ const handleDatabaseConnect = async (params: {
 
     <div class="content-container">
       <!-- 步骤1：选择上传方式 -->
-      <UploadMethodSelector v-if="currentStep === 'method'" v-model:selectedMethod="selectedMethod"
+      <UploadMethodSelector v-if="currentStep === 'method'"
+        v-model:selected-method="selectedMethod"
         @proceed="handleMethodSelection" />
 
       <!-- 步骤2A：文件上传 -->
-      <FileUploadStep v-if="currentStep === 'fileUpload'" v-model:fileName="fileName"
-        v-model:fileDescription="fileDescription" v-model:userRequirements="userRequirements"
-        v-model:selectedModel="selectedModel" v-model:selected-file="selectedFile" :availableModels="availableModels"
-        @fileSelected="handleFileSelected" @goBack="goBack" @proceed="handleFileUpload" />
+      <FileUploadStep v-if="currentStep === 'fileUpload'"
+        v-model:file-name="fileName"
+        v-model:file-description="fileDescription" v-model:user-requirements="userRequirements"
+        v-model:selected-model="selectedModel"
+        v-model:selected-file="selectedFile"
+        :available-models="availableModels"
+        @go-back="goBack"
+        @proceed="handleFileUpload" />
 
       <!-- 步骤2B：数据库连接 -->
-      <DatabaseConnectionStep v-if="currentStep === 'database'" v-model:connectionName="connectionName"
-        v-model:connectionDescription="connectionDescription" @goBack="goBack" @connect="handleDatabaseConnect" />
+      <DatabaseConnectionStep v-if="currentStep === 'database'"
+        v-model:connection-name="connectionName"
+        v-model:connection-description="connectionDescription"
+        @go-back="goBack"
+        @connect="handleDatabaseConnect" />
     </div>
   </div>
 </template>

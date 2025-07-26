@@ -12,7 +12,6 @@ const selectedFile = defineModel<File | null>('selectedFile', { required: true }
 
 // 定义组件属性
 defineProps<{
-  // file: File | null;
   isAnalyzing: boolean;
   availableModels: Array<{ value: string, label: string; }>;
 }>();
@@ -22,7 +21,6 @@ const emit = defineEmits<{
   analyze: [];
   skipAndUpload: [];
   close: [];
-  fileSelected: [file: File];
 }>();
 
 // 文件上传相关状态
@@ -49,14 +47,12 @@ const handleFileUpload = (event: { raw: File; }) => {
     return false;
   }
 
-  // 更新文件名（如果未设置）
+  // 如果文件名为空，则使用文件名
   if (!fileName.value) {
     fileName.value = file.name.split('.')[0];
   }
 
   selectedFile.value = file;
-  emit('fileSelected', file);
-
   return false; // 阻止 el-upload 默认上传行为
 };
 

@@ -8,8 +8,7 @@ defineProps<{
   cleaningSuggestionsCount: number;
   fieldMappingsCount: number;
   overallScore?: number;
-}
->();
+}>();
 
 // 获取质量评分的颜色
 const getQualityScoreColor = (score: number) => {

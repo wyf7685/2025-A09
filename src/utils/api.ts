@@ -1,4 +1,9 @@
-import type { CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import type {
+  AnalyzeDataQualityResponse,
+  AnalyzeDataQualitySuccess,
+  CleaningSuggestion,
+  DataQualityReport,
+} from '@/types/cleaning';
 import type { DataSourceMetadata } from '@/types/dataSources';
 import type { ReportTemplate } from '@/types/report';
 import axios from 'axios';
@@ -84,36 +89,13 @@ export const checkHealth = async (): Promise<{ status: string }> => {
 };
 
 // 数据清洗相关 API
-export interface ApiResponse {
-  file_info?: {
-    file_id: string;
-    original_filename: string;
-    user_filename: string;
-    description: string;
-    upload_time: string;
-    file_size: number;
-  };
-  quality_report: DataQualityReport;
-  cleaning_suggestions: CleaningSuggestion[];
-  field_mappings: Record<string, string>;
-  status: string;
-  success?: boolean;
-  error?: string;
-  summary?: string;
-  quality_score?: number;
-  field_mappings_applied?: boolean;
-  cleaned_file_id?: string;
-  data_uploaded?: boolean;
-  upload_result?: any;
-}
-
 export const cleaningAPI = {
   // 使用智能Agent分析数据质量并生成清洗建议
   analyzeDataQuality: async (
     file: File,
     userRequirements?: string,
     modelName?: string,
-  ): Promise<ApiResponse> => {
+  ): Promise<AnalyzeDataQualitySuccess> => {
     const formData = new FormData();
     formData.append('file', file);
     if (userRequirements) {
@@ -122,11 +104,14 @@ export const cleaningAPI = {
     if (modelName) {
       formData.append('model_name', modelName);
     }
-    const response = await api.post('/clean/analyze', formData, {
+    const response = await api.post<AnalyzeDataQualityResponse>('/clean/analyze', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+    if (!response.data.success) {
+      throw new Error(response.data.error || '数据分析失败');
+    }
     return response.data;
   },
 
@@ -244,7 +229,12 @@ export const cleaningAPI = {
   saveFieldMappings: async (
     sourceId: string,
     fieldMappings: Record<string, string>,
-  ): Promise<ApiResponse> => {
+  ): Promise<{
+    success: true;
+    message: string;
+    source_id: string;
+    field_mappings: Record<string, string>;
+  }> => {
     const response = await api.post('/clean/save-field-mappings', {
       source_id: sourceId,
       field_mappings: fieldMappings,

@@ -6,7 +6,7 @@ import { computed, reactive, ref, watch } from 'vue';
 
 // 双向绑定数据
 const connectionName = defineModel<string>('connectionName', { required: true });
-const connectionDescription = defineModel<string>('connectionDescription', { default: '' });
+const connectionDescription = defineModel<string>('connectionDescription', { required: true });
 
 // 定义事件
 const emit = defineEmits<{
@@ -118,9 +118,9 @@ const submitForm = async () => {
     // 构建连接参数
     const connectionParams = {
       database_type: formData.database_type,
+      connection: { ...formData.connection } as AnyDatabaseConnection,
       name: connectionName.value,
       description: connectionDescription.value,
-      connection: { ...formData.connection } as AnyDatabaseConnection
     };
 
     emit('connect', connectionParams);

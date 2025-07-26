@@ -10,6 +10,19 @@ defineProps<{
 
 // 详情显示状态
 const showDetails = ref(false);
+
+const formatValue = (value: any): string => {
+  if (typeof value === 'number') {
+    return value.toFixed(2);
+  } else if (typeof value === 'boolean') {
+    return value ? '是' : '否';
+  } else if (Array.isArray(value)) {
+    return value.map(item => formatValue(item)).join(' ');
+  } else if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2);
+  }
+  return value;
+};
 </script>
 
 <template>
@@ -25,9 +38,7 @@ const showDetails = ref(false);
       <div v-show="showDetails" class="report-details">
         <el-descriptions :column="2" border>
           <el-descriptions-item v-for="(value, key) in dataQualityReport" :key="key" :label="key">
-            <span v-if="typeof value === 'number'">{{ value.toFixed(2) }}</span>
-            <span v-else-if="typeof value === 'boolean'">{{ value ? '是' : '否' }}</span>
-            <span v-else>{{ value }}</span>
+            <span>{{ formatValue(value) }}</span>
           </el-descriptions-item>
         </el-descriptions>
       </div>
