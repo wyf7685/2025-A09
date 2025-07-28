@@ -6,11 +6,11 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useModelStore } from '@/stores/model';
 import type { AnyDatabaseConnection, DremioDatabaseType } from '@/types';
 import { dataSourceAPI } from '@/utils/api';
-import { ElMessage } from 'element-plus';
+import { withLoading } from '@/utils/tools';
+import { ArrowRight } from '@element-plus/icons-vue';
+import { ElBreadcrumb, ElBreadcrumbItem, ElMessage } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ArrowRight } from '@element-plus/icons-vue';
-import { withLoading } from '@/utils/tools';
 
 const router = useRouter();
 const dataSourceStore = useDataSourceStore();

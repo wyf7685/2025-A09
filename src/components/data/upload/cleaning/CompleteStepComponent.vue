@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
 import { CircleCheck, EditPen, RefreshRight, Upload } from '@element-plus/icons-vue';
+import { ElButton, ElCard, ElIcon, ElResult, ElTag } from 'element-plus';
 
 // 当前步骤的双向绑定
 const step = defineModel<CleaningStep>('step', { required: true });

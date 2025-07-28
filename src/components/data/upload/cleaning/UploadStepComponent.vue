@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload, UploadFilled } from '@element-plus/icons-vue';
+import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElRow, ElSelect, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
 
 // 双向绑定数据
@@ -36,9 +36,14 @@ const closeDialog = () => emit('close');
 
 
 // 处理文件上传
-const handleFileUpload = (event: { raw: File; }) => {
+const handleFileUpload = (event: UploadFile) => {
   // 检查文件类型
   const file = event.raw;
+  if (!file) {
+    ElMessage.error('请选择一个文件进行上传');
+    return false;
+  }
+
   const allowedTypes = ['csv', 'xlsx', 'xls'];
   const fileExtension = file.name.split('.').pop()?.toLowerCase();
 

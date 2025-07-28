@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { AnyDatabaseConnection, DremioDatabaseType } from '@/types';
 import { withLoading } from '@/utils/tools';
-import { Connection, ArrowLeft } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ArrowLeft, Connection } from '@element-plus/icons-vue';
+import { ElButton, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMessage, ElRadioButton, ElRadioGroup } from 'element-plus';
 import { computed, reactive, ref, watch } from 'vue';
 
 // 双向绑定数据
@@ -45,9 +45,7 @@ const formData = reactive({
 const rules = {
   database_type: [{ required: true, message: '请选择数据库类型', trigger: 'change' }],
   'connection.hostname': [{ required: true, message: '请输入主机地址', trigger: 'blur' }],
-  'connection.port': [
-    { type: 'number', message: '端口号必须为数字', trigger: 'blur' }
-  ],
+  'connection.port': [{ type: 'number' as const, message: '端口号必须为数字', trigger: 'blur' }],
   'connection.username': [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   'connection.password': [{ required: true, message: '请输入密码', trigger: 'blur' }],
   'connection.databaseName': [{ required: true, message: '请输入数据库名称', trigger: 'blur' }],

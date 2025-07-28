@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { DocumentCopy, View, Edit, Delete, Search } from '@element-plus/icons-vue';
-import { ref, onMounted, nextTick, watch } from 'vue';
-import type { ElTable } from 'element-plus';
 import type { DataSourceMetadataWithID } from '@/types';
+import { Delete, DocumentCopy, Edit, Search, View } from '@element-plus/icons-vue';
+import { ElButton, ElCard, ElIcon, ElPagination, ElTable, ElTableColumn, ElTag, ElTooltip } from 'element-plus';
+import { nextTick, onMounted, ref, watch } from 'vue';
 
 // 使用 defineModel 实现分页相关双向绑定
 const currentPage = defineModel<number>('currentPage', { required: true });

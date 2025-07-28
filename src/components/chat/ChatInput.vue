@@ -2,7 +2,7 @@
 import type { DataSourceMetadata } from '@/types';
 import { turncateString } from '@/utils/tools';
 import { DataAnalysis, Document, DocumentCopy, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
-import { ElButton, ElDivider, ElIcon, ElInput, ElLink, ElTooltip } from 'element-plus';
+import { ElButton, ElDivider, ElIcon, ElInput, ElLink, ElTag, ElTooltip } from 'element-plus';
 
 const props = defineProps<{
   isProcessingChat: boolean;

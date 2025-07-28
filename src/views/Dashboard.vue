@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
+import { ChatDotRound, DataBoard, House } from '@element-plus/icons-vue';
+import { ElCol, ElIcon, ElRow, ElStatistic } from 'element-plus';
 import { computed, onMounted } from 'vue';
 
 const sessionStore = useSessionStore();
@@ -8,7 +10,7 @@ const dataSourceStore = useDataSourceStore();
 
 // 计算属性
 const currentSessionId = computed(() => sessionStore.currentSession?.id);
-const currentSessionName = computed(() => {
+const currentSessionName = computed<any>(() => {
   if (!currentSessionId.value) return '无';
   const session = sessionStore.sessions.find(s => s.id === currentSessionId.value);
   const name = session?.name || (currentSessionId.value ? `${currentSessionId.value.slice(0, 8)}...` : '无');

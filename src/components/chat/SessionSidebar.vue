@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/stores/session';
 import { ChatDotRound, DArrowLeft, Delete, Edit, Plus } from '@element-plus/icons-vue';
-import { ElMessageBox } from 'element-plus';
+import { ElButton, ElIcon } from 'element-plus';
 import { computed, ref } from 'vue';
 
 defineProps<{

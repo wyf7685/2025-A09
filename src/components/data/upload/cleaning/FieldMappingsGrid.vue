@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowRight } from '@element-plus/icons-vue';
+import { ElIcon, ElTag } from 'element-plus';
 
 // 定义组件属性
 defineProps<{

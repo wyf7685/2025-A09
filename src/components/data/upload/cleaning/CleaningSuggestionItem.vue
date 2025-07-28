@@ -6,6 +6,7 @@ import {
   DocumentCopy, Edit, InfoFilled,
   QuestionFilled, Warning
 } from '@element-plus/icons-vue';
+import { ElButton, ElCheckbox, ElIcon, ElTag } from 'element-plus';
 
 // 定义组件属性
 const props = defineProps<{

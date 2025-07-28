@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
-import type { FlowStep, FlowRoute, FlowPanel, LLMModel } from '@/types';
+import type { FlowPanel, FlowRoute, FlowStep, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Edit, Loading, Monitor, Setting } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElButton, ElDialog, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRadioButton, ElRadioGroup, ElSelect, ElTag, ElText } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 
 const modelStore = useModelStore();
@@ -233,7 +233,7 @@ const getProviderGroups = () => {
 };
 
 // 路线切换处理
-const handleRouteChange = (route: string) => {
+const handleRouteChange = (route: any) => {
   console.log('切换到路线:', route);
   logRouteStatus(`切换到${route}`);
   // 重置所有步骤状态

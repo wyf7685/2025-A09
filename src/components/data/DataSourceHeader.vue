@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { DocumentAdd, Refresh } from '@element-plus/icons-vue';
+import { ElButton } from 'element-plus';
 
 // 定义组件属性，带类型标注
 defineProps<{

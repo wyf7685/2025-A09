@@ -8,9 +8,7 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { DataSourceMetadataWithID } from '@/types';
-import type { CleaningAction, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { withLoading } from '@/utils/tools';
-import type { ElTable } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -36,13 +34,12 @@ const pageSize = ref(10);
 // =============================================
 const editDialogVisible = ref(false);
 const previewDialogVisible = ref(false);
-const addDatabaseDialogVisible = ref(false);
 const currentEditSource = ref<DataSourceMetadataWithID | null>(null);
 
 // =============================================
 // 预览数据状态
 // =============================================
-const previewData = ref<any[]>([]);
+const previewData = ref<Array<Record<string, any>>>([]);
 const previewColumns = ref<string[]>([]);
 const previewLoading = ref(false);
 const previewPagination = ref({
@@ -52,29 +49,8 @@ const previewPagination = ref({
 });
 
 // =============================================
-// 数据清洗弹窗相关状态
-// =============================================
-const dataCleaningDialogVisible = ref(false);
-const currentUploadFile = ref<File | null>(null);
-const dataQualityReport = ref<DataQualityReport | null>(null);
-const cleaningSuggestions = ref<CleaningSuggestion[]>([]);
-const fieldMappings = ref<Record<string, string>>({});
-const isAnalyzing = ref(false);
-const isCleaning = ref(false);
-const fileMetadata = ref({
-  name: '',
-  description: ''
-});
-const userRequirements = ref('');
-const selectedCleaningActions = ref<CleaningAction[]>([]);
-const cleaningStep = ref<'upload' | 'analysis' | 'cleaning' | 'complete'>('upload');
-const analysisResult = ref<any>(null);
-
-// =============================================
 // 智能分析相关状态
 // =============================================
-const isSmartAnalyzing = ref(false);
-const showAdvancedOptions = ref(false);
 const selectedModel = ref('');
 const availableModels = ref([
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (推荐)' },
@@ -106,7 +82,6 @@ const fetchAvailableModels = async () => {
 // 多选相关状态
 // =============================================
 const selectedSources = ref<string[]>([]);
-const tableRef = ref<InstanceType<typeof ElTable>>();
 
 // =============================================
 // 数据源列表相关方法
@@ -310,24 +285,25 @@ watch([currentPage, pageSize], updatePaginatedDataSources);
 <template>
   <div class="data-management-container">
     <!-- 顶部操作区域 -->
-    <DataSourceHeader :isLoading="isLoading" @refresh="fetchDatasets" />
+    <DataSourceHeader :is-loading="isLoading" @refresh="fetchDatasets" />
 
     <!-- 搜索和过滤区域 -->
-    <DataSourceSearchBar v-model:searchQuery="searchQuery" :selectedSources="selectedSources"
-      :sourceNames="getDatasourceNameMap()" @createSession="createSessionWithSelectedSources" />
+    <DataSourceSearchBar v-model:search-query="searchQuery" :selected-sources="selectedSources"
+      :source-names="getDatasourceNameMap()" @create-session="createSessionWithSelectedSources" />
 
     <!-- 数据源表格 -->
-    <DataSourceTable :dataSources="paginatedDataSources" :isLoading="isLoading" v-model:currentPage="currentPage"
-      v-model:pageSize="pageSize" :total="filteredDataSources.length" :selectedSources="selectedSources"
-      @selectionChange="handleSelectionChange" @edit="openEditDialog" @delete="deleteDataSource"
+    <DataSourceTable :data-sources="paginatedDataSources" :is-loading="isLoading" v-model:current-page="currentPage"
+      v-model:page-size="pageSize" :total="filteredDataSources.length" :selected-sources="selectedSources"
+      @selection-change="handleSelectionChange" @edit="openEditDialog" @delete="deleteDataSource"
       @preview="openPreviewDialog" @analyze="selectForAnalysis" />
 
     <!-- 编辑数据源对话框 -->
     <EditDataSourceDialog v-model:visible="editDialogVisible" :datasource="currentEditSource" @save="saveEdit" />
 
     <!-- 预览数据对话框 -->
-    <PreviewDataDialog v-model:visible="previewDialogVisible" :datasource="currentEditSource" :previewData="previewData"
-      :previewColumns="previewColumns" :pagination="previewPagination" :loading="previewLoading"
+    <PreviewDataDialog v-model:visible="previewDialogVisible" :datasource="currentEditSource"
+      :preview-data="previewData"
+      :preview-columns="previewColumns" :pagination="previewPagination" :loading="previewLoading"
       @loadPage="loadPreviewData" />
   </div>
 </template>

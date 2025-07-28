@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue';
+import { ElAlert, ElButton, ElEmpty, ElIcon } from 'element-plus';
 import DataQualityReportDetail from './DataQualityReport.vue';
 import FieldMappingsGrid from './FieldMappingsGrid.vue';
 import QualitySummaryCards from './QualitySummaryCards.vue';

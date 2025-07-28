@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Connection, Upload } from '@element-plus/icons-vue';
+import { ElButton, ElIcon } from 'element-plus';
 
 // 定义上传方法类型
 type UploadMethod = 'file' | 'database';

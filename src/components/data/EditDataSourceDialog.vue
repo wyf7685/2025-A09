@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
 import type { DataSourceMetadataWithID } from '@/types';
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus';
+import { ref, watch } from 'vue';
 
 // 使用 defineModel 实现对话框可见性双向绑定
 const visible = defineModel<boolean>('visible', { required: true });
 
 // 定义组件属性
-interface Props {
+const props = defineProps<{
   datasource: DataSourceMetadataWithID | null;
-}
-
-const props = defineProps<Props>();
+}>();
 
 // 定义组件事件
 const emit = defineEmits<{

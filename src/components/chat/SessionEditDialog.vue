@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus';
 import { ref, watch } from 'vue';
 
 // 使用 defineModel 实现双向绑定对话框的可见性

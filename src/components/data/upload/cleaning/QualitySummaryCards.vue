@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DataQualityReport } from '@/types/cleaning';
 import { Connection, Document, Grid, Warning } from '@element-plus/icons-vue';
+import { ElCol, ElIcon, ElRow, ElTag } from 'element-plus';
 
 // 定义组件属性
 defineProps<{

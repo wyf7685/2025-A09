@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import AnalysisStepComponent from '@/components/data/cleaning/AnalysisStepComponent.vue';
-import CleaningStepComponent from '@/components/data/cleaning/CleaningStepComponent.vue';
-import CleaningStepIndicator from '@/components/data/cleaning/CleaningStepIndicator.vue';
-import CompleteStepComponent from '@/components/data/cleaning/CompleteStepComponent.vue';
-import UploadStepComponent from '@/components/data/cleaning/UploadStepComponent.vue';
+import AnalysisStepComponent from './cleaning/AnalysisStepComponent.vue';
+import CleaningStepComponent from './cleaning/CleaningStepComponent.vue';
+import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
+import CompleteStepComponent from './cleaning/CompleteStepComponent.vue';
+import UploadStepComponent from './cleaning/UploadStepComponent.vue';
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { cleaningAPI } from '@/utils/api';
 import { withLoading } from '@/utils/tools';
 import { ArrowLeft } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElButton, ElIcon, ElMessage } from 'element-plus';
 import { ref } from 'vue';
 
 // 文件元数据模型

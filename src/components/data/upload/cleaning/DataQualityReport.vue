@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DataQualityReport } from '@/types/cleaning';
+import { ElButton, ElCollapseTransition, ElDescriptions, ElDescriptionsItem } from 'element-plus';
 import { ref } from 'vue';
 
 // 定义组件属性

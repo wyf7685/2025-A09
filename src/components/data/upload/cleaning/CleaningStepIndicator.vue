@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CleaningStep } from '@/types/cleaning';
 import { CircleCheck, CircleClose } from '@element-plus/icons-vue';
+import { ElIcon } from 'element-plus';
 
 // 组件属性
 defineProps<{

@@ -2,8 +2,8 @@
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { Model } from '@/types';
-import { Delete, Refresh, View } from '@element-plus/icons-vue';
-import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElTag } from 'element-plus';
+import { Calendar, DataAnalysis, Delete, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
+import { ElButton, ElCard, ElDialog, ElEmpty, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
 const sessionStore = useSessionStore();

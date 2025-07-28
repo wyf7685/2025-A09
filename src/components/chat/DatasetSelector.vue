@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useDataSourceStore } from '@/stores/datasource';
 import { DocumentCopy } from '@element-plus/icons-vue';
+import { ElButton, ElDialog, ElEmpty, ElIcon, ElTooltip } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
 const visible = defineModel<boolean>('visible', { required: true });

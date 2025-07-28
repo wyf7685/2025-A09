@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataSourceMetadataWithID } from '@/types';
+import { ElDescriptions, ElDescriptionsItem, ElDialog, ElPagination, ElTable, ElTableColumn } from 'element-plus';
 
-// 使用 defineModel 实现对话框可见性双向绑定
 const visible = defineModel<boolean>('visible', { required: true });
 
 // 定义组件属性
@@ -13,7 +13,7 @@ interface PaginationProps {
 
 interface Props {
   datasource: DataSourceMetadataWithID | null;
-  previewData: any[];
+  previewData: Array<Record<string, any>>;
   previewColumns: string[];
   pagination: PaginationProps;
   loading: boolean;
