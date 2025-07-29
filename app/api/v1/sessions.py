@@ -12,9 +12,6 @@ from app.schemas.session import Session, SessionID, SessionListItem
 from app.services.datasource import datasource_service
 from app.services.session import session_service
 
-# 模拟数据存储，在实际项目中应替换为数据库
-# sessions: dict[str, Session] = {}
-
 router = APIRouter()
 
 
@@ -82,7 +79,7 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
 async def get_session(session_id: SessionID) -> Session:
     """获取会话信息"""
     if session := await session_service.get_session(session_id):
-        return session
+        return session_service.tool_name_repr(session)
 
     raise HTTPException(status_code=404, detail="Session not found")
 

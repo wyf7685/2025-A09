@@ -554,7 +554,7 @@ def scikit_tools(
         target: str,
         model_type: str = "random_forest",
         task_type: str = "auto",
-        method: str = "grid",
+        method: str = "random",
         cv_folds: int = 5,
         scoring: str | None = None,
         param_grid: dict[str, list[Any]] | str | None = None,
@@ -575,7 +575,7 @@ def scikit_tools(
                     - "ridge": 岭回归(仅回归)
                     - "lasso": Lasso回归(仅回归)
             task_type: 任务类型，"regression"、"classification"或"auto"(默认，自动检测)
-            method: 优化方法，"grid"(网格搜索)或"random"(随机搜索)
+            method: 优化方法，"grid"(网格搜索)或"random"(随机搜索)，默认为random
             cv_folds: 交叉验证折数
             scoring: 评分指标，如"r2"(回归)、"accuracy"(分类)等
             param_grid: 超参数网格(字典或JSON字符串)，为None时使用预定义的网格

@@ -4,6 +4,7 @@ import uuid
 import anyio
 
 from app.const import SESSION_DIR
+from app.core.agent.tools import TOOL_NAMES
 from app.core.lifespan import lifespan
 from app.exception import SessionDeleteFailed, SessionLoadFailed, SessionNotFound
 from app.log import logger
@@ -122,6 +123,14 @@ class SessionService:
             # 即使文件删除失败，也不抛出异常，因为内存中的会话已经被删除
             # 这样前端仍然可以认为删除成功
             logger.exception(f"删除会话文件失败: {e}")
+
+    @staticmethod
+    def tool_name_repr(session: Session) -> Session:
+        session = session.model_copy(deep=True)
+        for entry in session.chat_history:
+            for tool_call in entry.assistant_response.tool_calls.values():
+                tool_call.name = TOOL_NAMES.get(tool_call.name, tool_call.name)
+        return session
 
 
 session_service = SessionService()

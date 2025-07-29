@@ -35,6 +35,10 @@ class UpdateCustomModelRequest(BaseModel):
     api_key: str | None = None
     model_name: str | None = None
 
+_DEFAULT_API_URL = {
+    "Deepseek": "https://api.deepseek.com/v1",
+}
+
 
 @router.post("/custom")
 async def set_custom_model(request: CustomModelRequest) -> dict:
@@ -44,7 +48,7 @@ async def set_custom_model(request: CustomModelRequest) -> dict:
             id=f"custom-{hash(request.api_url + request.model_name) % 100000}",
             name=request.name,
             provider=request.provider,
-            api_url=request.api_url,
+            api_url=request.api_url or _DEFAULT_API_URL.get(request.provider, ""),
             api_key=request.api_key,
             model_name=request.model_name,
         )
@@ -124,13 +128,13 @@ async def get_available_models() -> ModelsResponse:
     # DeepSeek Models
     if settings.OPENAI_API_KEY and settings.OPENAI_API_BASE:
         models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=True),
-            ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=True),
+            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=True),
+            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=True),
         ]
     else:
         models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek Chat", provider="DeepSeek", available=False),
-            ModelInfo(id="deepseek-coder", name="DeepSeek Coder", provider="DeepSeek", available=False),
+            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=False),
+            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=False),
         ]
 
     # 添加自定义模型

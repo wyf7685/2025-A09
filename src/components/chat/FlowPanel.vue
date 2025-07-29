@@ -60,7 +60,7 @@ const apiProviders = [
   {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-coder']
+    models: ['deepseek-chat', 'deepseek-reasoner']
   },
   {
     name: 'Anthropic',

@@ -39,7 +39,7 @@ const modelProviders = [
   },
   {
     name: 'DeepSeek',
-    models: ['deepseek-chat', 'deepseek-coder'],
+    models: ['deepseek-chat', 'deepseek-reasoner'],
     defaultUrl: 'https://api.deepseek.com/v1'
   }
 ];

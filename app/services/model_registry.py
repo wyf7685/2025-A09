@@ -46,6 +46,14 @@ class ModelRegistry:
         except Exception as e:
             logger.error(f"保存模型注册表失败: {e}")
 
+    def _save_registry_sync(self) -> None:
+        """保存模型注册表"""
+        try:
+            Path(self.registry_file).write_bytes(_models_ta.dump_json(self._models))
+            logger.debug("模型注册表已保存")
+        except Exception as e:
+            logger.error(f"保存模型注册表失败: {e}")
+
     def register_model(
         self,
         name: str,
@@ -82,7 +90,7 @@ class ModelRegistry:
         )
 
         self._models[model_id] = model_info
-        lifespan.task_group.start_soon(self._save_registry)  # Save asynchronously
+        self._save_registry_sync()
 
         logger.info(f"已注册新模型: {name} ({model_id})")
         return model_id
