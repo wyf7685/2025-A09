@@ -35,6 +35,7 @@ class UpdateCustomModelRequest(BaseModel):
     api_key: str | None = None
     model_name: str | None = None
 
+
 _DEFAULT_API_URL = {
     "Deepseek": "https://api.deepseek.com/v1",
 }

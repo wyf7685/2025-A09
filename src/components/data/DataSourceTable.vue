@@ -21,6 +21,9 @@ const props = defineProps<Props>();
 // 表格引用
 const tableRef = ref<InstanceType<typeof ElTable>>();
 
+// 防止无限循环
+const isUpdatingSelection = ref(false);
+
 // 定义组件事件
 const emit = defineEmits<{
   selectionChange: [selection: DataSourceMetadataWithID[]];
@@ -59,22 +62,35 @@ const getTypeTagType = (source: DataSourceMetadataWithID) => {
 
 // 处理表格选择变化
 const handleSelectionChange = (selection: DataSourceMetadataWithID[]) => {
+  // 防止在程序化更新选择时触发事件
+  if (isUpdatingSelection.value) return;
+
   emit('selectionChange', selection);
 };
 
 // 根据当前选择状态设置行的选中状态
 const setRowSelection = () => {
-  if (!tableRef.value) return;
+  if (!tableRef.value || isUpdatingSelection.value) return;
 
-  // 清除现有选择
-  tableRef.value.clearSelection();
+  // 设置标志位，防止触发 handleSelectionChange
+  isUpdatingSelection.value = true;
 
-  // 根据 selectedSources 重新设置选中状态
-  props.dataSources.forEach(row => {
-    if (props.selectedSources.includes(row.source_id)) {
-      tableRef.value?.toggleRowSelection(row, true);
-    }
-  });
+  try {
+    // 清除现有选择
+    tableRef.value.clearSelection();
+
+    // 根据 selectedSources 重新设置选中状态
+    props.dataSources.forEach(row => {
+      if (props.selectedSources.includes(row.source_id)) {
+        tableRef.value?.toggleRowSelection(row, true);
+      }
+    });
+  } finally {
+    // 使用 nextTick 确保所有 DOM 更新完成后再重置标志位
+    nextTick(() => {
+      isUpdatingSelection.value = false;
+    });
+  }
 };
 
 // 编辑数据源
