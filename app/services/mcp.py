@@ -53,7 +53,5 @@ class MCPService:
 
 mcp_service = MCPService()
 
-
-@lifespan.on_startup
-async def _() -> None:
-    await mcp_service.load()
+lifespan.on_startup(mcp_service.load)
+lifespan.on_shutdown(mcp_service.save)

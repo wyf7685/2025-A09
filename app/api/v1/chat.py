@@ -14,10 +14,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.const import REPORT_TEMPLATE_DIR
 from app.core.agent import DEFAULT_REPORT_TEMPLATE
+from app.exception import DAAServiceError
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
 from app.schemas.session import SessionID
-from app.services.agent import AgentInUse, AgentNotFound, daa_service
+from app.services.agent import daa_service
 from app.services.session import session_service
 from app.utils import escape_tag
 
@@ -46,11 +47,9 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     session_id = session.id
 
     try:
-        async with daa_service.use_agent(session, request.model_id, create_if_non_exist=True) as agent:
-            # 初始化响应变量
-            chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
+        chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
-            # 流式输出
+        async with daa_service.use_agent(session, request.model_id, create_if_non_exist=True) as agent:
             async for event in agent.astream(request.message):
                 try:
                     msg = event.model_dump_json() + "\n"
@@ -61,23 +60,22 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
                 chat_entry.add_stream_event(event)
 
-            chat_entry.merge_text()
-
             # 如果这是第一条消息，设置会话名称
             if len(session.chat_history) == 0:
                 session.name = await agent.create_title_async()
                 logger.info(f"设置会话 {session_id} 名称为: {session.name}")
 
         # 记录对话历史
+        chat_entry.merge_text()
         session.chat_history.append(chat_entry)
         await session_service.save_session(session)
 
         # 发送完成信号
         yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()})
 
-    except AgentInUse:
-        logger.warning(f"会话 {session.id} 的 Agent 正在使用中")
-        yield json.dumps({"error": f"会话 {session.id} 的 Agent 正在使用中"})
+    except DAAServiceError as e:
+        logger.warning(e)
+        yield json.dumps({"error": str(e)})
 
     except Exception as e:
         logger.exception("流式对话分析失败")
@@ -117,13 +115,11 @@ async def chat_summary(request: SummaryRequest) -> SummaryResponse:
                 summary=summary,
                 figures=figures,
             )
-    except AgentInUse:
-        raise HTTPException(status_code=503, detail="Agent is currently in use, please try again later") from None
-    except AgentNotFound:
-        raise HTTPException(status_code=404, detail="Agent not found for this session") from None
+    except DAAServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     except Exception as e:
-        logger.exception("获取对话摘要失败")
-        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {e}") from e
+        logger.exception("生成对话摘要失败")
+        raise HTTPException(status_code=500, detail=f"生成对话摘要失败: {e!r}") from e
 
 
 # 报告模板相关模型
@@ -310,21 +306,14 @@ async def generate_report(request: GenerateReportRequest) -> GenerateReportRespo
             figures=figures,
             template_used=template_name,
         )
+
     except HTTPException:
         raise
-    except AgentInUse:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Agent is currently in use, please try again later",
-        ) from None
-    except AgentNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found for this session",
-        ) from None
+    except DAAServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=f"生成分析报告失败: {e}") from e
     except Exception as e:
         logger.exception("生成分析报告失败")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate report: {e}",
+            detail=f"生成分析报告失败: {e}",
         ) from e

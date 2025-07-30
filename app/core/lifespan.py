@@ -13,13 +13,17 @@ type ASYNC_LIFESPAN_FUNC = Callable[[], Awaitable[Any]]
 type LIFESPAN_FUNC = SYNC_LIFESPAN_FUNC | ASYNC_LIFESPAN_FUNC
 
 
+def _ensure_async(func: LIFESPAN_FUNC) -> ASYNC_LIFESPAN_FUNC:
+    return func if is_coroutine_callable(func) else run_sync(func)
+
+
 class Lifespan:
     def __init__(self) -> None:
         self._task_group: TaskGroup | None = None
 
-        self._startup_funcs: list[LIFESPAN_FUNC] = []
-        self._ready_funcs: list[LIFESPAN_FUNC] = []
-        self._shutdown_funcs: list[LIFESPAN_FUNC] = []
+        self._startup_funcs: list[ASYNC_LIFESPAN_FUNC] = []
+        self._ready_funcs: list[ASYNC_LIFESPAN_FUNC] = []
+        self._shutdown_funcs: list[ASYNC_LIFESPAN_FUNC] = []
 
     @property
     def task_group(self) -> TaskGroup:
@@ -34,23 +38,21 @@ class Lifespan:
         self._task_group = task_group
 
     def on_startup[F: LIFESPAN_FUNC](self, func: F) -> F:
-        self._startup_funcs.append(func)
+        self._startup_funcs.append(_ensure_async(func))
         return func
 
     def on_shutdown[F: LIFESPAN_FUNC](self, func: F) -> F:
-        self._shutdown_funcs.append(func)
+        self._shutdown_funcs.append(_ensure_async(func))
         return func
 
     def on_ready[F: LIFESPAN_FUNC](self, func: F) -> F:
-        self._ready_funcs.append(func)
+        self._ready_funcs.append(_ensure_async(func))
         return func
 
     @staticmethod
-    async def _run_lifespan_func(funcs: Iterable[LIFESPAN_FUNC]) -> None:
+    async def _run_lifespan_func(funcs: Iterable[ASYNC_LIFESPAN_FUNC]) -> None:
         async with anyio.create_task_group() as task_group:
             for func in funcs:
-                if not is_coroutine_callable(func):
-                    func = run_sync(func)
                 task_group.start_soon(func)
 
     async def startup(self) -> None:

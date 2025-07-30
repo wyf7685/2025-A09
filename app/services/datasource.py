@@ -79,6 +79,12 @@ class DataSourceService:
         self.sources[source_id] = source
         return source
 
+    async def save_sources(self) -> None:
+        """保存所有数据源到文件"""
+        async with anyio.create_task_group() as tg:
+            for source_id, source in self.sources.items():
+                tg.start_soon(self.save_source, source_id, source)
+
     async def save_source(self, source_id: str, source: DataSource) -> None:
         fp = _DATASOURCE_DIR / f"{source_id}.json"
         await fp.write_text(_DataSourceStruct.from_data_source(source).model_dump_json())
@@ -302,6 +308,12 @@ async def _() -> None:
             logger.exception("从 Dremio 同步数据源失败")
         else:
             logger.success("成功从 Dremio 同步数据源")
+
+
+@lifespan.on_shutdown
+async def _() -> None:
+    logger.info("保存所有数据源...")
+    await datasource_service.save_sources()
 
 
 @lifespan.on_shutdown

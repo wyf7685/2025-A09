@@ -135,3 +135,4 @@ class SessionService:
 
 session_service = SessionService()
 lifespan.on_startup(session_service.load_sessions)
+lifespan.on_shutdown(session_service.save_sessions)

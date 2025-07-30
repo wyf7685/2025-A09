@@ -23,7 +23,7 @@ class CustomModelManager:
         self._models: dict[str, CustomModelConfig] = {}
         self.config_file = anyio.Path(DATA_DIR / "custom_models.json")
 
-    async def _load_config(self) -> None:
+    async def load_config(self) -> None:
         """加载自定义模型配置"""
         if await self.config_file.exists():
             try:
@@ -34,7 +34,7 @@ class CustomModelManager:
                 logger.warning(f"加载自定义模型配置失败: {e}")
                 self._models = {}
 
-    async def _save_config(self) -> None:
+    async def save_config(self) -> None:
         """保存自定义模型配置"""
         try:
             await self.config_file.write_bytes(_models_ta.dump_json(self._models))
@@ -45,7 +45,7 @@ class CustomModelManager:
     async def add_model(self, config: CustomModelConfig) -> None:
         """添加自定义模型配置"""
         self._models[config.id] = config
-        await self._save_config()
+        await self.save_config()
         logger.info(f"添加自定义模型: {config.name} ({config.id})")
 
     def get_model(self, model_id: str) -> CustomModelConfig | None:
@@ -56,7 +56,7 @@ class CustomModelManager:
         """移除自定义模型配置"""
         if model_id in self._models:
             del self._models[model_id]
-            await self._save_config()
+            await self.save_config()
             logger.info(f"移除自定义模型: {model_id}")
             return True
         return False
@@ -79,11 +79,12 @@ class CustomModelManager:
             if hasattr(model, key):
                 setattr(model, key, value)
 
-        await self._save_config()
+        await self.save_config()
         logger.info(f"更新自定义模型: {model_id}")
         return True
 
 
 # 全局自定义模型管理器实例
 custom_model_manager = CustomModelManager()
-lifespan.on_startup(custom_model_manager._load_config)  # noqa: SLF001
+lifespan.on_startup(custom_model_manager.load_config)
+lifespan.on_shutdown(custom_model_manager.save_config)

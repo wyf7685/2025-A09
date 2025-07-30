@@ -9,7 +9,7 @@ from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm
 from app.core.datasource import DataSource
 from app.core.lifespan import lifespan
-from app.exception import AgentInUse, AgentNotFound
+from app.exception import AgentCancelled, AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.schemas.session import Session, SessionID
@@ -38,6 +38,7 @@ class DataAnalyzerAgentService:
     def __init__(self) -> None:
         self.agents: dict[SessionID, AgentTuple] = {}
         self.in_use: dict[SessionID, bool] = {}
+        self.scopes: dict[SessionID, anyio.CancelScope] = {}
 
     async def create_agent(
         self,
@@ -88,6 +89,12 @@ class DataAnalyzerAgentService:
         else:
             logger.opt(colors=True).warning(f"尝试释放未被占用的会话 <c>{escape_tag(session_id)}</> 的 Agent")
 
+    def cancel(self, session_id: SessionID) -> None:
+        """取消会话的 Agent 操作"""
+        if scope := self.scopes.get(session_id):
+            scope.cancel()
+            logger.opt(colors=True).info(f"取消会话 <c>{escape_tag(session_id)}</> 的 Agent 操作")
+
     @contextlib.asynccontextmanager
     async def use_agent(
         self,
@@ -105,11 +112,17 @@ class DataAnalyzerAgentService:
                 raise AgentNotFound(session.id)
             agent = await self.create_agent(session, model_id)
 
+        self.scopes[session.id] = scope = anyio.CancelScope()
+
         try:
-            yield agent
+            with scope:
+                yield agent
         finally:
+            del self.scopes[session.id]
             await agent.asave_state(STATE_DIR / f"{session.id}.json")
             self.release(session.id)
+            if scope.cancel_called:
+                raise AgentCancelled(session.id)
 
 
 daa_service = DataAnalyzerAgentService()
@@ -117,12 +130,13 @@ daa_service = DataAnalyzerAgentService()
 
 @lifespan.on_shutdown
 async def _() -> None:
-    async def destroy(session_id: str, agent: DataAnalyzerAgent) -> None:
+    async def destroy(session_id: SessionID, agent: DataAnalyzerAgent) -> None:
         try:
+            daa_service.cancel(session_id)
             await agent.adestroy()
             logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
-        except Exception as e:
-            logger.opt(colors=True).error(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败: {e}")
+        except Exception:
+            logger.opt(colors=True, exception=True).error(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
     async with anyio.create_task_group() as tg:
         while daa_service.agents:

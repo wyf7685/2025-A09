@@ -1,3 +1,5 @@
+from app.utils import with_semaphore
+
 from .abstract import AbstractAsyncDremioClient as AbstractAsyncDremioClient
 from .abstract import AbstractDremioClient as AbstractDremioClient
 
@@ -5,6 +7,7 @@ _sync_client: AbstractDremioClient | None = None
 _async_client: AbstractAsyncDremioClient | None = None
 
 
+@with_semaphore(1)
 def get_dremio_client() -> AbstractDremioClient:
     from app.log import logger
 
@@ -27,6 +30,7 @@ def get_dremio_client() -> AbstractDremioClient:
     return _sync_client
 
 
+@with_semaphore(1)
 def get_async_dremio_client() -> AbstractAsyncDremioClient:
     from app.log import logger
 
