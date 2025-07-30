@@ -9,7 +9,7 @@ import loguru
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
-    from loguru import Logger, Record
+    from loguru import Logger
 
 logger: "Logger" = loguru.logger
 
@@ -99,12 +99,6 @@ class LoguruHandler(logging.Handler):  # pragma: no cover
         logger.opt(**kwds).log(level, record.getMessage())
 
 
-def default_filter(record: "Record") -> bool:
-    log_level = record["extra"].get("log_level", "INFO")
-    levelno = logger.level(log_level).no if isinstance(log_level, str) else log_level
-    return record["level"].no >= levelno
-
-
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -113,6 +107,7 @@ LOGGING_CONFIG = {
         "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
         "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
         "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "httpx": {"handlers": ["default"], "level": "INFO", "propagate": False},
     },
 }
 
@@ -125,7 +120,6 @@ logger_id_console = logger.add(
     diagnose=False,
     # diagnose=True,  # 生产环境应设置为 False
     enqueue=True,
-    filter=default_filter,
     format=log_format,
 )
 logger_id_file = logger.add(
@@ -134,7 +128,6 @@ logger_id_file = logger.add(
     level="DEBUG",
     diagnose=True,
     enqueue=True,
-    filter=default_filter,
     format=log_format,
 )
 

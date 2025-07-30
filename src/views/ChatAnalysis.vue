@@ -196,9 +196,9 @@ const sendMessage = async (): Promise<void> => {
 
   await chat.sendMessage(
     userMessage,
-    currentSessionId.value,
+    currentSessionId.value || null,
     currentDatasets.value,
-    scrollToBottom
+    scrollToBottom,
   );
 };
 
@@ -216,9 +216,12 @@ onMounted(async () => {
   <div class="chat-analysis-container">
 
     <!-- Session Sidebar -->
-    <SessionSidebar v-model:isSidebarOpen="isSidebarOpen" :currentSessionId="currentSessionId"
-      @switch-session="switchSession" @create-session="selectDatasetDialogVisible = true"
-      @edit-session="openEditSessionDialog" @delete-session="deleteSession" />
+    <SessionSidebar v-model:isSidebarOpen="isSidebarOpen"
+      :currentSessionId="currentSessionId"
+      @switch-session="switchSession"
+      @create-session="selectDatasetDialogVisible = true"
+      @edit-session="openEditSessionDialog"
+      @delete-session="deleteSession" />
 
     <!-- Chat Panel -->
     <div class="chat-panel">
@@ -241,26 +244,35 @@ onMounted(async () => {
       </div>
 
       <!-- Chat Messages Area -->
-      <ChatMessages :messages="messages" :currentSessionId="currentSessionId"
-        :currentDatasetExists="(currentDatasets?.length || 0) > 0" @add-sample-question="userInput = $event"
+      <ChatMessages :messages="messages"
+        :currentSessionId="currentSessionId"
+        :currentDatasetExists="(currentDatasets?.length || 0) > 0"
+        @add-sample-question="userInput = $event"
         ref="chatMessagesRef" />
 
       <!-- Chat Input Area -->
-      <ChatInput v-model:input="userInput" :isProcessingChat="isProcessingChat" :currentDatasets="currentDatasets"
-        @send="sendMessage" @go-to-data="goToAddData" />
+      <ChatInput v-model:input="userInput"
+        :isProcessingChat="isProcessingChat"
+        :currentDatasets="currentDatasets"
+        @send="sendMessage"
+        @go-to-data="goToAddData" />
     </div>
 
     <!-- Flow Panel -->
-    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef"></FlowPanel>
+    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" />
 
     <!-- Select Dataset Dialog -->
-    <DatasetSelector v-model:visible="selectDatasetDialogVisible" @create-session="createNewSession"
+    <DatasetSelector v-model:visible="selectDatasetDialogVisible"
+      @create-session="createNewSession"
       @go-to-data="goToAddData" />
 
     <!-- Session Edit Dialog -->
-    <SessionEditDialog v-model:visible="editSessionDialogVisible" v-model:sessionName="editingSessionName"
-      :sessionId="editingSessionId" @save="saveSessionEdit" />
+    <SessionEditDialog v-model:visible="editSessionDialogVisible"
+      v-model:sessionName="editingSessionName"
+      :sessionId="editingSessionId"
+      @save="saveSessionEdit" />
 
+    <!-- Report Generation Dialog -->
     <ReportGenerationDialog v-model:visible="reportDialogVisible" />
   </div>
 </template>

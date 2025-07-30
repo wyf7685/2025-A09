@@ -7,17 +7,16 @@ import threading
 from pathlib import Path
 from typing import Any, cast
 
-import pandas as pd
 from langchain_core.runnables import ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.core.agent.schemas import OperationFailedModel, is_failed, is_success
 from app.log import logger
 from app.services.datasource import temp_source_service
 from app.utils import run_sync
 
-from ...schemas import OperationFailedModel
 from ._clean import (
     apply_cleaning,
     apply_cleaning_actions,
@@ -29,12 +28,12 @@ from ._fields import guess_field_names
 from ._load_data import load_data
 from ._quality import analyze_quality, calculate_quality_score
 from .schemas import (
-    ApplyCleaningResult,
     CleaningState,
     DataQualityReport,
     ProcessCleanFileResult,
     ProcessCleanFileSummary,
     ProcessFileResult,
+    load_source,
 )
 
 
@@ -95,9 +94,9 @@ class SmartCleanDataAgent:
             # 1. 先进行标准的数据质量分析
             analysis_result = await self.process_file(file_path, user_requirements)
 
-            if not analysis_result.success:
-                return cast("OperationFailedModel", analysis_result)
-            assert isinstance(analysis_result, ProcessFileResult)
+            if is_failed(analysis_result):
+                return analysis_result
+            assert is_success(analysis_result)
 
             # 2. 如果没有指定选择的建议，使用所有自动应用的建议
             if selected_suggestions is None:
@@ -114,10 +113,10 @@ class SmartCleanDataAgent:
                 field_mappings=analysis_result.field_mappings,
             )
 
-            if not cleaning_result.success:
-                return cast("OperationFailedModel", cleaning_result)
+            if is_failed(cleaning_result):
+                return cleaning_result
 
-            cleaning_result = cast("ApplyCleaningResult", cleaning_result)
+            assert is_success(cleaning_result)
 
             # 4. 合并结果
             return ProcessCleanFileResult(
@@ -165,9 +164,8 @@ class SmartCleanDataAgent:
                 return OperationFailedModel(message=error_message, error_type="DataProcessingError")
 
             # 构建质量报告
-            df_data = result.get("df_data")
-            assert df_data is not None, "DataFrame data should not be None"
-            df = pd.DataFrame(df_data)  # 反序列化DataFrame
+            source = load_source(result, "source_id")
+            df = source.get_full()
             quality_report = DataQualityReport(
                 overall_score=calculate_quality_score(result["quality_issues"]),
                 total_rows=len(df),
@@ -195,6 +193,7 @@ class SmartCleanDataAgent:
                     temp_source_service.delete(source_id)
                 if cleaned_source_id := result.get("cleaned_source_id"):
                     temp_source_service.delete(cleaned_source_id)
+
 
 # 创建全局实例
 smart_clean_agent = SmartCleanDataAgent()

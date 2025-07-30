@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import { ref } from 'vue';
 
 // 双向绑定数据
-const userRequirements = defineModel<string>('userRequirements', { default: '' });
-const selectedModel = defineModel<string>('selectedModel', { default: '' });
-const fileMetadata = defineModel<{ name: string, description: string; }>('fileMetadata', { required: true });
+const fileName = defineModel<string>('fileName', { required: true });
+const fileDescription = defineModel<string>('fileDescription', { required: true });
+const userRequirements = defineModel<string>('userRequirements', { required: true });
+const selectedModel = defineModel<string>('selectedModel', { required: true });
+const selectedFile = defineModel<File | null>('selectedFile', { required: true });
 
 // 定义组件属性
 defineProps<{
-  file: File | null;
   isAnalyzing: boolean;
   availableModels: Array<{ value: string, label: string; }>;
 }>();
@@ -21,6 +23,9 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+// 文件上传相关状态
+const dragover = ref(false);
+
 // 高级选项显示状态
 const showAdvancedOptions = ref(false);
 
@@ -28,21 +33,69 @@ const showAdvancedOptions = ref(false);
 const startAnalysis = () => emit('analyze');
 const skipAnalysisAndUpload = () => emit('skipAndUpload');
 const closeDialog = () => emit('close');
+
+
+// 处理文件上传
+const handleFileUpload = (event: { raw: File; }) => {
+  // 检查文件类型
+  const file = event.raw;
+  const allowedTypes = ['csv', 'xlsx', 'xls'];
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+  if (!fileExtension || !allowedTypes.includes(fileExtension)) {
+    ElMessage.error('只支持 CSV 和 Excel 文件格式');
+    return false;
+  }
+
+  // 如果文件名为空，则使用文件名
+  if (!fileName.value) {
+    fileName.value = file.name.split('.')[0];
+  }
+
+  selectedFile.value = file;
+  return false; // 阻止 el-upload 默认上传行为
+};
+
+// 处理文件拖放
+const handleDragover = () => {
+  dragover.value = true;
+};
+
+const handleDragleave = () => {
+  dragover.value = false;
+};
 </script>
 
 <template>
   <div class="upload-info">
     <!-- 文件详情 -->
-    <div class="file-details">
+    <div v-if="selectedFile" class="file-details">
       <div class="file-icon">
         <el-icon size="48" color="#667eea">
           <Document />
         </el-icon>
       </div>
       <div class="file-meta">
-        <div class="file-name">{{ fileMetadata.name }}</div>
-        <div class="file-size">{{ file ? (file.size / 1024 / 1024).toFixed(2) : 0 }} MB</div>
-        <div class="file-type">{{ file?.name.split('.').pop()?.toUpperCase() }} 文件</div>
+        <div class="file-name">{{ fileName }}</div>
+        <div class="file-size">{{ selectedFile ? (selectedFile.size / 1024 / 1024).toFixed(2) : 0 }} MB</div>
+        <div class="file-type">{{ selectedFile?.name.split('.').pop()?.toUpperCase() }} 文件</div>
+      </div>
+    </div>
+    <div v-else>
+      <div class="upload-section">
+        <el-upload ref="uploadRef" class="upload-area" drag action="#" :auto-upload="false" :show-file-list="false"
+          :on-change="handleFileUpload" :multiple="false" @dragover="handleDragover"
+          @dragleave="handleDragleave">
+          <div class="upload-content" :class="{ 'active-drag': dragover }">
+            <el-icon class="upload-icon">
+              <UploadFilled />
+            </el-icon>
+            <div class="upload-text">
+              <h4>拖拽文件到此处，或 <em>点击上传</em></h4>
+              <p>支持 CSV、Excel (.xlsx, .xls) 文件</p>
+            </div>
+          </div>
+        </el-upload>
       </div>
     </div>
 
@@ -52,12 +105,12 @@ const closeDialog = () => emit('close');
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="文件名称">
-              <el-input v-model="fileMetadata.name" placeholder="请输入文件名称" :prefix-icon="Document" />
+              <el-input v-model="fileName" placeholder="请输入文件名称" :prefix-icon="Document" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="文件描述">
-              <el-input v-model="fileMetadata.description" placeholder="请输入文件描述信息" />
+              <el-input v-model="fileDescription" placeholder="请输入文件描述信息" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -131,6 +184,78 @@ const closeDialog = () => emit('close');
 
 <style lang="scss" scoped>
 .upload-info {
+  .upload-section {
+    margin-bottom: 30px;
+  }
+
+  .upload-area {
+    width: 100%;
+
+    :deep(.el-upload) {
+      width: 100%;
+    }
+
+    :deep(.el-upload-dragger) {
+      width: 100%;
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .upload-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+
+      &.active-drag {
+        background-color: #f0f7ff;
+      }
+
+      .upload-icon {
+        font-size: 48px;
+        color: #667eea;
+        margin-bottom: 16px;
+      }
+
+      .upload-text {
+        text-align: center;
+
+        h4 {
+          font-size: 16px;
+          font-weight: 500;
+          margin-bottom: 8px;
+
+          em {
+            color: #1d4ed8;
+            font-style: normal;
+            font-weight: 600;
+          }
+        }
+
+        p {
+          font-size: 14px;
+          color: #6b7280;
+        }
+      }
+
+      .selected-file {
+        margin-top: 16px;
+        padding: 8px 16px;
+        background-color: #f0f7ff;
+        border-radius: 8px;
+
+        p {
+          font-size: 14px;
+          color: #1d4ed8;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+
   .file-details {
     display: flex;
     align-items: center;

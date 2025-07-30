@@ -2,6 +2,8 @@ import { marked } from 'marked';
 // import hljs from 'highlight.js';
 import 'github-markdown-css/github-markdown-light.css'; // 导入 GitHub 风格样式
 import 'highlight.js/styles/github.css'; // 导入 GitHub 代码高亮样式
+import type { Ref } from 'vue';
+import { ElMessage } from 'element-plus';
 
 // 配置 marked 使用 highlight.js 进行代码高亮
 marked.setOptions({
@@ -82,3 +84,36 @@ export const base64ToBlob = (b64_data: string, contentType: string = ''): Blob |
     type: mimeType,
   });
 };
+
+export function withLoading<T>(ref: Ref<boolean>, proceed: () => T | Promise<T>): Promise<T>;
+export function withLoading<T>(
+  ref: Ref<boolean>,
+  proceed: () => T | Promise<T>,
+  onerror: string,
+): Promise<T | null>;
+export function withLoading<T, E>(
+  ref: Ref<boolean>,
+  proceed: () => T | Promise<T>,
+  onerror: (error: any) => E | Promise<E>,
+): Promise<T | E>;
+export async function withLoading<T, E>(
+  ref: Ref<boolean>,
+  proceed: () => T | Promise<T>,
+  onerror?: string | ((error: any) => E | Promise<E>),
+): Promise<T | E | null> {
+  ref.value = true;
+  try {
+    return await proceed();
+  } catch (error: any) {
+    if (onerror === undefined) throw error;
+    if (typeof onerror === 'string') {
+      console.error(`${onerror}: ${error}`);
+      ElMessage.error(onerror);
+      return null;
+    } else {
+      return await onerror(error);
+    }
+  } finally {
+    ref.value = false;
+  }
+}

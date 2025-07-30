@@ -1,7 +1,7 @@
 import contextlib
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
-from typing import Any, cast
+from typing import Any
 
 import anyio
 from anyio.abc import TaskGroup
@@ -33,27 +33,25 @@ class Lifespan:
             raise RuntimeError("Lifespan already started")
         self._task_group = task_group
 
-    def on_startup(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_startup[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._startup_funcs.append(func)
         return func
 
-    def on_shutdown(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_shutdown[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._shutdown_funcs.append(func)
         return func
 
-    def on_ready(self, func: LIFESPAN_FUNC) -> LIFESPAN_FUNC:
+    def on_ready[F: LIFESPAN_FUNC](self, func: F) -> F:
         self._ready_funcs.append(func)
         return func
 
     @staticmethod
-    async def _run_lifespan_func(
-        funcs: Iterable[LIFESPAN_FUNC],
-    ) -> None:
-        for func in funcs:
-            if is_coroutine_callable(func):
-                await cast("ASYNC_LIFESPAN_FUNC", func)()
-            else:
-                await run_sync(cast("SYNC_LIFESPAN_FUNC", func))()
+    async def _run_lifespan_func(funcs: Iterable[LIFESPAN_FUNC]) -> None:
+        async with anyio.create_task_group() as task_group:
+            for func in funcs:
+                if not is_coroutine_callable(func):
+                    func = run_sync(func)
+                task_group.start_soon(func)
 
     async def startup(self) -> None:
         # create background task group
@@ -76,8 +74,7 @@ class Lifespan:
         exc_tb: TracebackType | None = None,
     ) -> None:
         if self._shutdown_funcs:
-            # reverse shutdown funcs to ensure stack order
-            await self._run_lifespan_func(reversed(self._shutdown_funcs))
+            await self._run_lifespan_func(self._shutdown_funcs)
 
         # shutdown background task group
         self.task_group.cancel_scope.cancel()

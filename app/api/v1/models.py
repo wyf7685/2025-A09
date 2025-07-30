@@ -112,7 +112,7 @@ async def delete_model(model_id: str) -> dict[str, Any]:
     """删除模型"""
     try:
         # 从模型注册表删除模型
-        success = model_registry.delete_model(model_id)
+        success = await model_registry.delete_model(model_id)
 
         if not success:
             raise HTTPException(status_code=404, detail="Model not found")

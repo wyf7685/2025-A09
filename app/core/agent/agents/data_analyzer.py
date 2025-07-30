@@ -1,9 +1,11 @@
+import concurrent.futures
 import itertools
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import cast
 
+import anyio
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
@@ -24,7 +26,7 @@ from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, s
 from app.core.chain.llm import LLM
 from app.log import logger
 from app.schemas.session import SessionID
-from app.utils import escape_tag
+from app.utils import escape_tag, run_sync
 
 PROMPT_DIR = Path(__file__).parent.parent / "prompts" / "data_analyzer"
 
@@ -114,26 +116,30 @@ class DataAnalyzerAgent:
         self.llm = llm
         self.session_id = session_id
 
-        analyzer = analyzer_tool(sources, llm)
+        analyzer, executors = analyzer_tool(sources, llm)
         df_tools = dataframe_tools(sources)
         sk_tools, saved_models = scikit_tools(sources, session_id)
         sc_tools = sources_tools(sources)
         all_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
 
+        system_prompt = SYSTEM_PROMPT.format(
+            overview=format_sources_overview(sources_dict),
+            tool_intro=TOOL_INTRO,
+        )
+
         self.agent = create_react_agent(
             model=chat_model,
             tools=all_tools,
-            prompt=SYSTEM_PROMPT.format(
-                overview=format_sources_overview(sources_dict),
-                tool_intro=TOOL_INTRO,
-            ),
+            prompt=system_prompt,
             checkpointer=InMemorySaver(),
             pre_model_hook=pre_model_hook,
         )
         self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
+        self.executors = executors
         self.saved_models = saved_models
 
         logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
+        # logger.debug("SYSTEM PROMPT\n" + system_prompt)
 
     def get_messages(self) -> list[AnyMessage]:
         """获取当前 agent 的对话记录"""
@@ -155,6 +161,16 @@ class DataAnalyzerAgent:
     async def summary_async(self, report_template: str | None = None) -> tuple[str, list[str]]:
         return await _summary_chain(self.llm, self.get_messages()).ainvoke(report_template or DEFAULT_REPORT_TEMPLATE)
 
+    def _resume_from_state(self, state: DataAnalyzerAgentState) -> None:
+        """从状态恢复 agent"""
+        self.agent.update_state(self.config, state.values)
+        self.saved_models.clear()
+        self.saved_models.update(state.models)
+        self.sources.random_state = state.sources_random_state
+        self.sources.reset()
+        resume_tool_calls(self.sources, state.values["messages"])
+        logger.opt(colors=True).info(f"已恢复 agent 状态: {state.colorize()}")
+
     def load_state(self, state_file: Path) -> None:
         """从指定的状态文件加载 agent 状态。"""
         if not state_file.exists():
@@ -166,14 +182,21 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        self.agent.update_state(self.config, state.values)
-        self.saved_models.clear()
-        self.saved_models.update(state.models)
-        self.sources.random_state = state.sources_random_state
-        self.sources.reset()
-        resume_tool_calls(self.sources, state.values["messages"])
+        self._resume_from_state(state)
 
-        logger.opt(colors=True).info(f"已加载 agent 状态: {state.colorize()}")
+    async def aload_state(self, state_file: Path) -> None:
+        """异步从指定的状态文件加载 agent 状态。"""
+        path = anyio.Path(state_file)
+        if not await path.exists():
+            return
+
+        try:
+            state = DataAnalyzerAgentState.model_validate_json(await path.read_bytes())
+        except ValueError:
+            logger.warning("无法异步加载 agent 状态: 状态文件格式错误")
+            return
+
+        await run_sync(self._resume_from_state)(state)
 
     def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
@@ -184,6 +207,28 @@ class DataAnalyzerAgent:
         )
         state_file.write_bytes(state.model_dump_json().encode("utf-8"))
         logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
+
+    async def asave_state(self, state_file: Path) -> None:
+        """异步将当前 agent 状态保存到指定的状态文件。"""
+        state = DataAnalyzerAgentState(
+            values=cast("AgentValues", self.agent.get_state(self.config).values),
+            models=self.saved_models,
+            sources_random_state=self.sources.random_state,
+        )
+        await anyio.Path(state_file).write_bytes(state.model_dump_json().encode("utf-8"))
+        logger.opt(colors=True).info(f"已异步保存 agent 状态: {state.colorize()}")
+
+    def destroy(self) -> None:
+        """销毁 agent，释放资源"""
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            [executor.submit(e.stop) for e in self.executors]
+        logger.opt(colors=True).info(f"已销毁数据分析 Agent: <c>{self.session_id}</>")
+
+    async def adestroy(self) -> None:
+        """异步销毁 agent，释放资源"""
+        async with anyio.create_task_group() as tg:
+            [tg.start_soon(run_sync(e.stop)) for e in self.executors]
+        logger.opt(colors=True).info(f"已异步销毁数据分析 Agent: <c>{self.session_id}</>")
 
     def stream(self, user_input: str) -> Iterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""

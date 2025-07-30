@@ -1,16 +1,9 @@
 <script setup lang="ts">
-import type { CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import type { AnalyzeDataQualityState, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue';
 import DataQualityReportDetail from './DataQualityReport.vue';
 import FieldMappingsGrid from './FieldMappingsGrid.vue';
 import QualitySummaryCards from './QualitySummaryCards.vue';
-
-
-// 当前步骤的双向绑定
-const step = defineModel<CleaningStep>('step', {
-  required: true,
-  default: 'analysis'
-});
 
 // 定义组件属性
 defineProps<{
@@ -18,16 +11,15 @@ defineProps<{
   cleaningSuggestions: CleaningSuggestion[];
   fieldMappings: Record<string, string>;
   isAnalyzing: boolean;
-  analysisResult: any;
+  analysisResult: AnalyzeDataQualityState | null;
 }>();
 
 // 定义组件事件
 const emit = defineEmits<{
   skipAndUpload: [];
+  gotoCleaning: [];
+  gotoUpload: [];
 }>();
-
-// 跳过清洗直接上传
-const skipAnalysisAndUpload = () => emit('skipAndUpload');
 </script>
 
 <template>
@@ -43,15 +35,16 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
     </div>
     <div v-else>
       <!-- 智能分析结果总览 -->
-      <QualitySummaryCards :dataQualityReport="dataQualityReport" :cleaningSuggestionsCount="cleaningSuggestions.length"
-        :fieldMappingsCount="Object.keys(fieldMappings).length"
-        :overallScore="analysisResult?.quality_report?.overall_score" />
+      <QualitySummaryCards :data-quality-report="dataQualityReport"
+        :cleaning-suggestions-count="cleaningSuggestions.length"
+        :field-mappings-count="Object.keys(fieldMappings).length"
+        :overall-score="analysisResult?.quality_report.overall_score || 0" />
 
       <!-- 字段映射结果 -->
-      <FieldMappingsGrid :fieldMappings="fieldMappings" />
+      <FieldMappingsGrid :field-mappings="fieldMappings" />
 
       <!-- 详细数据质量报告 -->
-      <DataQualityReportDetail :dataQualityReport="dataQualityReport" />
+      <DataQualityReportDetail :data-quality-report="dataQualityReport" />
 
       <!-- 分析结果操作区域 -->
       <div class="analysis-actions">
@@ -63,7 +56,7 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
         </div>
 
         <div class="action-buttons">
-          <el-button type="primary" @click="step = 'cleaning'" :disabled="cleaningSuggestions.length === 0"
+          <el-button type="primary" @click="emit('gotoCleaning')" :disabled="cleaningSuggestions.length === 0"
             size="large">
             <el-icon>
               <ArrowRight />
@@ -71,14 +64,14 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
             下一步：执行清洗操作 ({{ cleaningSuggestions.length }})
           </el-button>
 
-          <el-button type="success" @click="skipAnalysisAndUpload" size="large" :disabled="!dataQualityReport">
+          <el-button type="success" @click="emit('skipAndUpload')" size="large" :disabled="!dataQualityReport">
             <el-icon>
               <Upload />
             </el-icon>
             {{ cleaningSuggestions.length === 0 ? '直接上传数据' : '忽略问题，仅应用字段映射并上传' }}
           </el-button>
 
-          <el-button @click="step = 'upload'" size="large">
+          <el-button @click="emit('gotoUpload')" size="large">
             <el-icon>
               <Back />
             </el-icon>

@@ -42,7 +42,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
+def analyzer_tool(sources: Sources, llm: LLM) -> tuple[BaseTool, list[CodeExecutor]]:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -54,6 +54,7 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
         Tool: 用于数据分析的LangChain工具。
     """
     analyzers: dict[DatasetID, NL2DataAnalysis] = {}
+    executors: list[CodeExecutor] = []
 
     @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
     @register_tool("通用数据分析工具")
@@ -61,7 +62,9 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
         source = sources.get(dataset_id)
 
         if dataset_id not in analyzers:
-            analyzers[dataset_id] = NL2DataAnalysis(llm, executor=CodeExecutor(source))
+            executor = CodeExecutor(source)
+            executors.append(executor)
+            analyzers[dataset_id] = NL2DataAnalysis(llm, executor=executor)
 
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
         result = analyzers[dataset_id].invoke((source, query))
@@ -78,4 +81,4 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
 
         return format_result(result), artifact
 
-    return analyze_data
+    return analyze_data, executors

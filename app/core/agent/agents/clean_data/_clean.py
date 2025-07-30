@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -6,6 +5,7 @@ from typing import Any
 import pandas as pd
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import Runnable
+from pydantic import BaseModel
 
 from app.core.agent.schemas import OperationFailedModel
 from app.core.chain import get_llm
@@ -345,12 +345,15 @@ def _chain_prompt(input: tuple[pd.DataFrame, str]) -> str:
     )
 
 
+class LLMCleaningSuggestionResponse(BaseModel):
+    suggestions: list[dict[str, Any]]
+
+
 def _chain_parse(response: str) -> list[dict[str, Any]]:
     try:
         json_match = re.search(r"\{.*\}", response, re.DOTALL)
         if json_match:
-            parsed = json.loads(json_match.group(0))
-            return parsed.get("suggestions", [])
+            return LLMCleaningSuggestionResponse.model_validate_json(json_match.group(0)).suggestions
         logger.warning("无法从LLM响应中提取JSON格式的清洗建议")
         return []
     except Exception as e:

@@ -34,5 +34,6 @@
     "pyproject.toml": "pyproject.toml, poetry.lock, pdm.lock, uv.lock, requirements.txt, Pipfile, Pipfile.lock"
   },
 
-  "typescript.format.semicolons": "insert"
+  "typescript.format.semicolons": "insert",
+  "html.format.wrapAttributes": "preserve"
 }

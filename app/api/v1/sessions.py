@@ -35,10 +35,10 @@ async def create_session(request: CreateSessionRequest) -> Session:
 
         # 检查数据集是否存在
         for dataset_id in request.dataset_ids:
-            if not datasource_service.source_exists(dataset_id):
+            if not await datasource_service.source_exists(dataset_id):
                 raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
-        return session_service.create_session(request.dataset_ids)
+        return await session_service.create_session(request.dataset_ids)
 
     except HTTPException:
         raise
@@ -59,16 +59,16 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
     目前支持更新会话名称
     """
     try:
-        if not session_service.session_exists(session_id):
+        if not await session_service.session_exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = session_service.get_session(session_id)
+        session = await session_service.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
         # 更新会话名称
         session.name = request.name
-        session_service.save_session(session)
+        await session_service.save_session(session)
 
         return session
     except HTTPException:
@@ -81,7 +81,7 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: SessionID) -> Session:
     """获取会话信息"""
-    if session := session_service.get_session(session_id):
+    if session := await session_service.get_session(session_id):
         return session
 
     raise HTTPException(status_code=404, detail="Session not found")
@@ -100,10 +100,10 @@ async def get_sessions() -> list[SessionListItem]:
 async def delete_session(session_id: SessionID) -> dict[str, Any]:
     """删除会话"""
     try:
-        if not session_service.session_exists(session_id):
+        if not await session_service.session_exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session_service.delete_session(session_id)
+        await session_service.delete_session(session_id)
         return {"success": True, "message": f"Session {session_id} deleted"}
     except KeyError as e:
         logger.warning(f"删除会话时出现错误: {e}")

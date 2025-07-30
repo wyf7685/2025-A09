@@ -48,7 +48,7 @@ async def set_custom_model(request: CustomModelRequest) -> dict:
             api_key=request.api_key,
             model_name=request.model_name,
         )
-        custom_model_manager.add_model(config)
+        await custom_model_manager.add_model(config)
         logger.info(f"设置自定义模型: {config.name} ({config.id})")
         return {"success": True, "message": "自定义模型配置成功", "model_id": config.id}
     except Exception as e:
@@ -66,7 +66,7 @@ async def update_custom_model(model_id: LLModelID, request: UpdateCustomModelReq
         if not update_data:
             raise HTTPException(status_code=400, detail="没有提供要更新的数据")
 
-        success = custom_model_manager.update_model(model_id, **update_data)
+        success = await custom_model_manager.update_model(model_id, **update_data)
         if not success:
             raise HTTPException(status_code=404, detail="自定义模型未找到")
 
@@ -154,7 +154,7 @@ async def get_available_models() -> ModelsResponse:
 async def delete_custom_model(model_id: LLModelID) -> dict:
     """删除自定义模型配置"""
     try:
-        success = custom_model_manager.remove_model(model_id)
+        success = await custom_model_manager.remove_model(model_id)
         if not success:
             raise HTTPException(status_code=404, detail="自定义模型未找到")
 

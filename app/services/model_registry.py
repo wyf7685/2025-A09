@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import anyio
 from pydantic import TypeAdapter
 
 from app.const import DATA_DIR, MODEL_DIR
@@ -22,26 +23,25 @@ class ModelRegistry:
     """模型注册表"""
 
     def __init__(self) -> None:
-        self.models_dir = MODEL_DIR
-        self.registry_file = DATA_DIR / "model_registry.json"
-        self.models_dir.mkdir(exist_ok=True)
+        self.models_dir = anyio.Path(MODEL_DIR)
+        self.registry_file = anyio.Path(DATA_DIR / "model_registry.json")
         self._models: dict[str, MLModelInfo] = {}
 
-    def _load_registry(self) -> None:
+    async def _load_registry(self) -> None:
         """加载模型注册表"""
-        if self.registry_file.exists():
+        if await self.registry_file.exists():
             try:
-                data = _models_ta.validate_json(self.registry_file.read_bytes())
+                data = _models_ta.validate_json(await self.registry_file.read_bytes())
                 self._models.update(data)
                 logger.info(f"已加载模型注册表: {len(self._models)} 个模型")
             except Exception as e:
                 logger.warning(f"加载模型注册表失败: {e}")
                 self._models = {}
 
-    def _save_registry(self) -> None:
+    async def _save_registry(self) -> None:
         """保存模型注册表"""
         try:
-            self.registry_file.write_bytes(_models_ta.dump_json(self._models))
+            await self.registry_file.write_bytes(_models_ta.dump_json(self._models))
             logger.debug("模型注册表已保存")
         except Exception as e:
             logger.error(f"保存模型注册表失败: {e}")
@@ -82,7 +82,7 @@ class ModelRegistry:
         )
 
         self._models[model_id] = model_info
-        self._save_registry()
+        lifespan.task_group.start_soon(self._save_registry)  # Save asynchronously
 
         logger.info(f"已注册新模型: {name} ({model_id})")
         return model_id
@@ -98,7 +98,7 @@ class ModelRegistry:
             models = [m for m in models if m.session_id == session_id]
         return sorted(models, key=lambda x: x.created_at, reverse=True)
 
-    def update_model(self, model_id: str, **kwargs: Any) -> bool:
+    async def update_model(self, model_id: str, **kwargs: Any) -> bool:
         """更新模型信息"""
         if model_id not in self._models:
             return False
@@ -109,10 +109,10 @@ class ModelRegistry:
                 setattr(model, key, value)
 
         model.last_used = datetime.now().isoformat()
-        self._save_registry()
+        await self._save_registry()
         return True
 
-    def delete_model(self, model_id: str) -> bool:
+    async def delete_model(self, model_id: str) -> bool:
         """删除模型"""
         if model_id not in self._models:
             return False
@@ -121,21 +121,19 @@ class ModelRegistry:
 
         # 删除模型文件
         try:
-            if model.model_path and Path(model.model_path).exists():
-                Path(model.model_path).unlink()
-            if model.metadata_path and Path(model.metadata_path).exists():
-                Path(model.metadata_path).unlink()
+            model.model_path.unlink(missing_ok=True)
+            model.metadata_path.unlink(missing_ok=True)
 
             # 删除模型目录（如果为空）
             model_dir = self.models_dir / model_id
-            if model_dir.exists() and not any(model_dir.iterdir()):
-                model_dir.rmdir()
+            if await model_dir.exists() and not anext(model_dir.iterdir(), None):
+                await model_dir.rmdir()
         except Exception as e:
             logger.warning(f"删除模型文件失败: {e}")
 
         # 从注册表中删除
         del self._models[model_id]
-        self._save_registry()
+        await self._save_registry()
 
         logger.info(f"已删除模型: {model_id}")
         return True

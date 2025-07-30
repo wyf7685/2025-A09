@@ -37,8 +37,11 @@ export const useModelStore = defineStore('model', () => {
       ) {
         selectedModel.value = availableModels.value[0] || null;
       }
+
+      return availableModels.value;
     } catch (error) {
       console.error('Failed to fetch available models:', error);
+      return [];
     }
   };
 

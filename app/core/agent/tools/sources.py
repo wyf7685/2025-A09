@@ -1,6 +1,7 @@
 from langchain_core.tools import BaseTool, tool
 
 from app.core.agent.resume import resumable
+from app.core.agent.schemas import format_sources_overview
 from app.core.agent.sources import Sources
 
 from ._registry import register_tool
@@ -25,9 +26,7 @@ def sources_tools(sources: Sources) -> list[BaseTool]:
         Returns:
             str: 格式化的数据集信息列表，每个数据集包含ID和概览
         """
-        return "\n\n".join(
-            f"数据集ID: {source_id}\n{source.format_overview()}" for source_id, source in sources.items()
-        )
+        return format_sources_overview(sources.sources)
 
     @tool
     @register_tool("重命名数据集")

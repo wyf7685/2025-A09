@@ -6,13 +6,14 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.lifespan import lifespan
 from app.log import configure_logging
 from app.utils import configure_matplotlib_fonts
 
 configure_matplotlib_fonts()
+configure_logging()
 
 from app.api.v1 import router as api_router
+from app.core.lifespan import lifespan
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -37,7 +38,6 @@ app.add_middleware(
 # 注册API路由
 app.include_router(api_router)
 
-configure_logging()
 
 if __name__ == "__main__":
     uvicorn.run(

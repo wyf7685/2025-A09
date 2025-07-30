@@ -5,6 +5,7 @@
 
 from typing import Any
 
+import anyio
 from pydantic import TypeAdapter
 
 from app.const import DATA_DIR
@@ -20,43 +21,42 @@ class CustomModelManager:
 
     def __init__(self) -> None:
         self._models: dict[str, CustomModelConfig] = {}
-        self.config_file = DATA_DIR / "custom_models.json"
-        self.config_file.parent.mkdir(exist_ok=True)
+        self.config_file = anyio.Path(DATA_DIR / "custom_models.json")
 
-    def _load_config(self) -> None:
+    async def _load_config(self) -> None:
         """加载自定义模型配置"""
-        if self.config_file.exists():
+        if await self.config_file.exists():
             try:
-                data = _models_ta.validate_json(self.config_file.read_bytes())
+                data = _models_ta.validate_json(await self.config_file.read_bytes())
                 self._models.update(data)
                 logger.info(f"已加载自定义模型配置: {len(self._models)} 个模型")
             except Exception as e:
                 logger.warning(f"加载自定义模型配置失败: {e}")
                 self._models = {}
 
-    def _save_config(self) -> None:
+    async def _save_config(self) -> None:
         """保存自定义模型配置"""
         try:
-            self.config_file.write_bytes(_models_ta.dump_json(self._models))
+            await self.config_file.write_bytes(_models_ta.dump_json(self._models))
             logger.debug("自定义模型配置已保存")
         except Exception as e:
             logger.error(f"保存自定义模型配置失败: {e}")
 
-    def add_model(self, config: CustomModelConfig) -> None:
+    async def add_model(self, config: CustomModelConfig) -> None:
         """添加自定义模型配置"""
         self._models[config.id] = config
-        self._save_config()
+        await self._save_config()
         logger.info(f"添加自定义模型: {config.name} ({config.id})")
 
     def get_model(self, model_id: str) -> CustomModelConfig | None:
         """获取自定义模型配置"""
         return self._models.get(model_id)
 
-    def remove_model(self, model_id: str) -> bool:
+    async def remove_model(self, model_id: str) -> bool:
         """移除自定义模型配置"""
         if model_id in self._models:
             del self._models[model_id]
-            self._save_config()
+            await self._save_config()
             logger.info(f"移除自定义模型: {model_id}")
             return True
         return False
@@ -69,7 +69,7 @@ class CustomModelManager:
         """检查是否是自定义模型"""
         return model_id in self._models
 
-    def update_model(self, model_id: str, **kwargs: Any) -> bool:
+    async def update_model(self, model_id: str, **kwargs: Any) -> bool:
         """更新自定义模型配置"""
         if model_id not in self._models:
             return False
@@ -79,7 +79,7 @@ class CustomModelManager:
             if hasattr(model, key):
                 setattr(model, key, value)
 
-        self._save_config()
+        await self._save_config()
         logger.info(f"更新自定义模型: {model_id}")
         return True
 

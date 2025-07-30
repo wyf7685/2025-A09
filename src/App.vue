@@ -79,6 +79,13 @@ onMounted(async () => {
             <span>数据管理</span>
           </el-menu-item>
 
+          <el-menu-item index="/data-upload">
+            <el-icon>
+              <Connection />
+            </el-icon>
+            <span>数据上传</span>
+          </el-menu-item>
+
           <el-menu-item index="/chat-analysis">
             <el-icon>
               <ChatDotRound />

@@ -1,9 +1,14 @@
 import contextlib
 from collections.abc import AsyncGenerator
+from typing import NamedTuple
+
+import anyio
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model, get_llm
+from app.core.datasource import DataSource
+from app.core.lifespan import lifespan
 from app.exception import AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.custom_model import LLModelID
@@ -12,13 +17,29 @@ from app.services.datasource import datasource_service
 from app.utils import escape_tag, run_sync
 
 
+class AgentTuple(NamedTuple):
+    model_id: LLModelID | None
+    agent: DataAnalyzerAgent
+
+
+@run_sync
+def _create_agent(
+    model_id: LLModelID | None,
+    sources: dict[str, DataSource],
+    session_id: SessionID,
+) -> DataAnalyzerAgent:
+    """创建一个新的数据分析 Agent"""
+    llm = get_llm(model_id)
+    chat_model = get_chat_model(model_id)
+    return DataAnalyzerAgent(sources, llm, chat_model, session_id)
+
+
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
-        self.agents: dict[SessionID, tuple[LLModelID | None, DataAnalyzerAgent]] = {}
+        self.agents: dict[SessionID, AgentTuple] = {}
         self.in_use: dict[SessionID, bool] = {}
 
-    @run_sync
-    def create_agent(
+    async def create_agent(
         self,
         session: Session,
         model_id: LLModelID | None = None,
@@ -26,14 +47,15 @@ class DataAnalyzerAgentService:
         """创建新的数据分析 Agent"""
         state_file = STATE_DIR / f"{session.id}.json"
         if agent := self.get_agent(session, None):
-            agent.save_state(state_file)
+            await agent.asave_state(state_file)
+            await agent.adestroy()
 
-        llm = get_llm()
-        chat_model = get_chat_model(model_id)
-        sources = {source_id: datasource_service.get_source(source_id).copy() for source_id in session.dataset_ids}
-        agent = DataAnalyzerAgent(sources, llm, chat_model, session.id)
-        agent.load_state(state_file)
-        self.agents[session.id] = model_id, agent
+        sources = {
+            source_id: (await datasource_service.get_source(source_id)).copy() for source_id in session.dataset_ids
+        }
+        agent = await _create_agent(model_id, sources, session.id)
+        await agent.aload_state(state_file)
+        self.agents[session.id] = AgentTuple(model_id, agent)
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
         )
@@ -45,10 +67,10 @@ class DataAnalyzerAgentService:
         model_id: LLModelID | None = None,
     ) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
-        previous, agent = self.agents.get(session.id, (None, None))
-        if model_id is not None and previous != model_id:
+        t = self.agents.get(session.id)
+        if t is None or (model_id is not None and t.model_id != model_id):
             return None
-        return agent
+        return t.agent
 
     def aquire(self, session_id: SessionID) -> bool:
         """尝试获取会话的 Agent"""
@@ -86,8 +108,23 @@ class DataAnalyzerAgentService:
         try:
             yield agent
         finally:
-            agent.save_state(STATE_DIR / f"{session.id}.json")
+            await agent.asave_state(STATE_DIR / f"{session.id}.json")
             self.release(session.id)
 
 
 daa_service = DataAnalyzerAgentService()
+
+
+@lifespan.on_shutdown
+async def _() -> None:
+    async def destroy(session_id: str, agent: DataAnalyzerAgent) -> None:
+        try:
+            await agent.adestroy()
+            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+        except Exception as e:
+            logger.opt(colors=True).error(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败: {e}")
+
+    async with anyio.create_task_group() as tg:
+        while daa_service.agents:
+            session_id, (_, agent) = daa_service.agents.popitem()
+            tg.start_soon(destroy, session_id, agent)

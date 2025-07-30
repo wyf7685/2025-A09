@@ -86,8 +86,7 @@ def deserialize_result(data: dict) -> ExecuteResult:
 
 def parse_result(data: bytes) -> ExecuteResult:
     try:
-        execution_result: dict = json.loads(data.decode("utf-8"))
-        return deserialize_result(execution_result)
+        return deserialize_result(json.loads(data.decode("utf-8")))
     except Exception as e:
         return {
             "success": False,
@@ -132,7 +131,6 @@ class CodeExecutor:
         self.temp_dir = Path(tempfile.mkdtemp())
 
         finalize(self, self.stop)
-        finalize(self, shutil.rmtree, self.temp_dir)
 
     def __enter__(self) -> Self:
         """使用上下文管理器启动容器"""
@@ -148,6 +146,7 @@ class CodeExecutor:
         if self.container:
             return
 
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.data_source.get_full().to_csv(self.temp_dir / "data.csv", index=False)
 
         try:
@@ -172,12 +171,15 @@ class CodeExecutor:
     def stop(self) -> None:
         """停止并移除Docker容器"""
         if self.container:
-            logger.info(f"正在停止Docker容器: {self.container.id}")
+            logger.info(f"停止Docker容器: {self.container.id}")
             try:
                 self.container.stop(timeout=1)
                 self.container = None
             except docker.errors.DockerException:
                 logger.exception("停止Docker容器时出错")
+        if self.temp_dir.exists():
+            logger.info(f"清理临时目录: {self.temp_dir}")
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def execute(self, code: str) -> ExecuteResult:
         """
