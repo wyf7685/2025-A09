@@ -1,20 +1,20 @@
 from collections.abc import Sequence
 
 import anyio
-from langchain_mcp_adapters.sessions import Connection
 from pydantic import TypeAdapter
 
 from app.const import DATA_DIR
 from app.core.lifespan import lifespan
+from app.schemas.mcp import MCPConnection
 
-_mcp_servers_ta = TypeAdapter(dict[str, Connection])
+_mcp_servers_ta = TypeAdapter(dict[str, MCPConnection])
 
 _MCP_SERVERS_FILE = anyio.Path(DATA_DIR / "mcp_servers.json")
 
 
 class MCPService:
     def __init__(self) -> None:
-        self.servers: dict[str, Connection] = {}
+        self.servers: dict[str, MCPConnection] = {}
 
     async def save(self) -> None:
         await _MCP_SERVERS_FILE.write_bytes(_mcp_servers_ta.dump_json(self.servers))
@@ -25,30 +25,30 @@ class MCPService:
         else:
             self.servers = {}
 
-    async def register(self, name: str, connection: Connection) -> None:
-        if name in self.servers:
-            raise ValueError(f"Server with name '{name}' already exists.")
-        self.servers[name] = connection
+    async def register(self, connection: MCPConnection) -> None:
+        if connection.id in self.servers:
+            raise ValueError(f"MCP Server with id '{connection.id}' already exists.")
+        self.servers[connection.id] = connection
         await self.save()
 
-    async def delete(self, name: str) -> None:
-        if name not in self.servers:
-            raise ValueError(f"Server with name '{name}' does not exist.")
-        del self.servers[name]
+    async def delete(self, id: str) -> None:
+        if id not in self.servers:
+            raise ValueError(f"MCP Server with id '{id}' does not exist.")
+        del self.servers[id]
         await self.save()
 
-    def all(self) -> dict[str, Connection]:
+    def all(self) -> dict[str, MCPConnection]:
         """Get all registered MCP servers."""
         return self.servers
 
-    def get(self, *names: str) -> Sequence[Connection]:
+    def get(self, *ids: str) -> Sequence[MCPConnection]:
         """Get a specific MCP server by name."""
-        if not names:
+        if not ids:
             return list(self.servers.values())
-        for name in names:
-            if name not in self.servers:
-                raise ValueError(f"Server with name '{name}' does not exist.")
-        return [self.servers[name] for name in names]
+        for id in ids:
+            if id not in self.servers:
+                raise ValueError(f"MCP Server with name '{id}' does not exist.")
+        return [self.servers[name] for name in ids]
 
 
 mcp_service = MCPService()

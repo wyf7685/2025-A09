@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.services.custom_model import custom_model_manager
+from app.utils import run_sync
 
 type LLM = Runnable[LanguageModelInput, str]
 
@@ -136,5 +137,11 @@ def get_llm(model_id: LLModelID | None = None) -> LLM:
     return _select_model(model_id or settings.TEST_MODEL_NAME, "LLM")
 
 
+get_llm_async = run_sync(get_llm)
+
+
 def get_chat_model(model_id: LLModelID | None = None) -> BaseChatModel:
     return _select_model(model_id or settings.TEST_MODEL_NAME, "ChatModel")
+
+
+get_chat_model_async = run_sync(get_chat_model)

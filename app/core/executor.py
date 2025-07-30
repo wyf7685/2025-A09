@@ -17,6 +17,7 @@ import docker
 import docker.errors
 from app.core.datasource import DataSource
 from app.log import logger
+from app.utils import run_sync
 
 
 class ExecuteResult(TypedDict):
@@ -180,6 +181,8 @@ class CodeExecutor:
         if self.temp_dir.exists():
             logger.info(f"清理临时目录: {self.temp_dir}")
             shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    astop = run_sync(stop)
 
     def execute(self, code: str) -> ExecuteResult:
         """

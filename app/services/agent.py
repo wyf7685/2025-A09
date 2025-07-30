@@ -3,66 +3,70 @@ from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
 import anyio
+from anyio.lowlevel import checkpoint
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
-from app.core.chain import get_chat_model, get_llm
-from app.core.datasource import DataSource
+from app.core.chain import get_chat_model_async, get_llm_async
 from app.core.lifespan import lifespan
 from app.exception import AgentCancelled, AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
-from app.utils import escape_tag, run_sync
+from app.services.mcp import mcp_service
+from app.utils import escape_tag
 
 
 class AgentTuple(NamedTuple):
-    model_id: LLModelID | None
     agent: DataAnalyzerAgent
-
-
-@run_sync
-def _create_agent(
-    model_id: LLModelID | None,
-    sources: dict[str, DataSource],
-    session_id: SessionID,
-) -> DataAnalyzerAgent:
-    """创建一个新的数据分析 Agent"""
-    llm = get_llm(model_id)
-    chat_model = get_chat_model(model_id)
-    return DataAnalyzerAgent(sources, llm, chat_model, session_id)
+    model_id: LLModelID | None
 
 
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
         self.agents: dict[SessionID, AgentTuple] = {}
-        self.in_use: dict[SessionID, bool] = {}
-        self.scopes: dict[SessionID, anyio.CancelScope] = {}
+        self._in_use: dict[SessionID, anyio.Lock] = {}
+        self._scope: dict[SessionID, anyio.CancelScope] = {}
 
-    async def create_agent(
+    async def _create(
         self,
         session: Session,
         model_id: LLModelID | None = None,
     ) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
         state_file = STATE_DIR / f"{session.id}.json"
-        if agent := self.get_agent(session, None):
-            await agent.asave_state(state_file)
-            await agent.adestroy()
+        if existing := self._get(session, None):
+            try:
+                self.cancel(session.id)
+                await existing.save_state(state_file)
+                await existing.destroy()
+            except Exception:
+                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session.id)}</> 的 Agent 失败")
+            finally:
+                self.agents.pop(session.id, None)
+                del existing
 
-        sources = {
-            source_id: (await datasource_service.get_source(source_id)).copy() for source_id in session.dataset_ids
-        }
-        agent = await _create_agent(model_id, sources, session.id)
-        await agent.aload_state(state_file)
-        self.agents[session.id] = AgentTuple(model_id, agent)
+        mcps = mcp_service.get(*(session.mcp_ids or []))
+        sources = {id: (await datasource_service.get_source(id)).copy() for id in session.dataset_ids}
+        llm = await get_llm_async(model_id)
+        chat_model = await get_chat_model_async(model_id)
+        agent = await DataAnalyzerAgent.create(
+            sources_dict=sources,
+            llm=llm,
+            chat_model=chat_model,
+            session_id=session.id,
+            mcp_connections=(mcp.connection for mcp in mcps),
+        )
+        await agent.load_state(state_file)
+
+        self.agents[session.id] = AgentTuple(agent, model_id)
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
         )
         return agent
 
-    def get_agent(
+    def _get(
         self,
         session: Session,
         model_id: LLModelID | None = None,
@@ -73,25 +77,27 @@ class DataAnalyzerAgentService:
             return None
         return t.agent
 
-    def aquire(self, session_id: SessionID) -> bool:
-        """尝试获取会话的 Agent"""
-        if self.in_use.get(session_id, False):
-            return False
-        logger.opt(colors=True).info(f"获取会话 <c>{escape_tag(session_id)}</> 的 Agent")
-        self.in_use[session_id] = True
-        return True
+    async def destroy(self, session_id: SessionID) -> None:
+        """销毁会话的 Agent"""
+        if session_id not in self.agents:
+            raise AgentNotFound(session_id)
 
-    def release(self, session_id: SessionID) -> None:
-        """释放会话的 Agent"""
-        if session_id in self.in_use:
-            del self.in_use[session_id]
-            logger.opt(colors=True).info(f"释放会话 <c>{escape_tag(session_id)}</> 的 Agent")
-        else:
-            logger.opt(colors=True).warning(f"尝试释放未被占用的会话 <c>{escape_tag(session_id)}</> 的 Agent")
+        self.cancel(session_id)
+        await checkpoint()
+
+        agent, _ = self.agents.pop(session_id)
+        self._scope.pop(session_id, None)
+        self._in_use.pop(session_id, None)
+
+        try:
+            await agent.destroy()
+            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+        except Exception:
+            logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
     def cancel(self, session_id: SessionID) -> None:
         """取消会话的 Agent 操作"""
-        if scope := self.scopes.get(session_id):
+        if scope := self._scope.get(session_id):
             scope.cancel()
             logger.opt(colors=True).info(f"取消会话 <c>{escape_tag(session_id)}</> 的 Agent 操作")
 
@@ -103,26 +109,37 @@ class DataAnalyzerAgentService:
         *,
         create_if_non_exist: bool,
     ) -> AsyncGenerator[DataAnalyzerAgent]:
-        if not self.aquire(session.id):
+        if session.id not in self._in_use:
+            self._in_use[session.id] = anyio.Lock()
+
+        if self._in_use[session.id].locked():
             raise AgentInUse(session.id)
 
-        agent = self.get_agent(session, model_id)
-        if agent is None:
-            if not create_if_non_exist:
-                raise AgentNotFound(session.id)
-            agent = await self.create_agent(session, model_id)
+        async def cleanup(agent: DataAnalyzerAgent) -> None:
+            self._scope.pop(session.id, None)
 
-        self.scopes[session.id] = scope = anyio.CancelScope()
+            try:
+                await agent.save_state(STATE_DIR / f"{session.id}.json")
+            except Exception:
+                logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session.id)}</> 的 Agent 状态失败")
 
-        try:
-            with scope:
-                yield agent
-        finally:
-            del self.scopes[session.id]
-            await agent.asave_state(STATE_DIR / f"{session.id}.json")
-            self.release(session.id)
             if scope.cancel_called:
                 raise AgentCancelled(session.id)
+
+        async with self._in_use[session.id]:
+            agent = self._get(session, model_id)
+            if agent is None:
+                if not create_if_non_exist:
+                    raise AgentNotFound(session.id)
+                agent = await self._create(session, model_id)
+
+            self._scope[session.id] = scope = anyio.CancelScope()
+
+            try:
+                with scope:
+                    yield agent
+            finally:
+                await cleanup(agent)
 
 
 daa_service = DataAnalyzerAgentService()
@@ -130,15 +147,14 @@ daa_service = DataAnalyzerAgentService()
 
 @lifespan.on_shutdown
 async def _() -> None:
-    async def destroy(session_id: SessionID, agent: DataAnalyzerAgent) -> None:
+    async def destroy(session_id: SessionID) -> None:
         try:
-            daa_service.cancel(session_id)
-            await agent.adestroy()
-            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+            await daa_service.destroy(session_id)
+        except AgentNotFound:
+            pass
         except Exception:
-            logger.opt(colors=True, exception=True).error(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
+            logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
     async with anyio.create_task_group() as tg:
-        while daa_service.agents:
-            session_id, (_, agent) = daa_service.agents.popitem()
-            tg.start_soon(destroy, session_id, agent)
+        for session_id in daa_service.agents:
+            tg.start_soon(destroy, session_id)

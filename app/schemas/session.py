@@ -10,6 +10,7 @@ type SessionID = str
 class Session(BaseModel):
     id: SessionID
     dataset_ids: list[str]
+    mcp_ids: list[str] | None = None
     name: str | None = None
     chat_history: list[ChatEntry] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())

@@ -50,7 +50,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
         async with daa_service.use_agent(session, request.model_id, create_if_non_exist=True) as agent:
-            async for event in agent.astream(request.message):
+            async for event in agent.stream(request.message):
                 try:
                     msg = event.model_dump_json() + "\n"
                 except Exception:
@@ -62,7 +62,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
             # 如果这是第一条消息，设置会话名称
             if len(session.chat_history) == 0:
-                session.name = await agent.create_title_async()
+                session.name = await agent.create_title()
                 logger.info(f"设置会话 {session_id} 名称为: {session.name}")
 
         # 记录对话历史
@@ -109,7 +109,7 @@ async def chat_summary(request: SummaryRequest) -> SummaryResponse:
 
     try:
         async with daa_service.use_agent(session, request.model_id, create_if_non_exist=False) as agent:
-            summary, figures = await agent.summary_async()
+            summary, figures = await agent.summary()
             return SummaryResponse(
                 session_id=session.id,
                 summary=summary,
@@ -298,7 +298,7 @@ async def generate_report(request: GenerateReportRequest) -> GenerateReportRespo
                     detail="当前会话没有对话记录，请先进行数据分析对话",
                 )
 
-            summary, figures = await agent.summary_async(template_content)
+            summary, figures = await agent.summary(template_content)
 
         return GenerateReportResponse(
             session_id=session.id,

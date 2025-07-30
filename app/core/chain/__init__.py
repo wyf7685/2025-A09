@@ -5,7 +5,9 @@ from .general_analysis import GeneralSummaryInput as GeneralSummaryInput
 from .general_analysis import QueryGenerator as QueryGenerator
 from .general_analysis import QueryGeneratorInput as QueryGeneratorInput
 from .llm import get_chat_model as get_chat_model
+from .llm import get_chat_model_async as get_chat_model_async
 from .llm import get_llm as get_llm
+from .llm import get_llm_async as get_llm_async
 from .llm import rate_limiter as rate_limiter
 from .nl_analysis import NL2DataAnalysis as NL2DataAnalysis
 from .nl_analysis import NLAnalysisSummary as NLAnalysisSummary

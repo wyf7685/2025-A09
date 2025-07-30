@@ -1,6 +1,6 @@
 import contextlib
 import json
-from collections.abc import Iterable
+from collections.abc import AsyncIterable, Iterable
 from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -114,8 +114,15 @@ class BufferedStreamEventReader:
         self.tokens.clear()
         return LlmTokenEvent(content=content, metadata=metadata)
 
-    def __call__(self, stream: Iterable[StreamEvent]) -> Iterable[StreamEvent]:
+    def read(self, stream: Iterable[StreamEvent]) -> Iterable[StreamEvent]:
         for event in stream:
             yield from self.push(event)
+        if msg := self.flush():
+            yield msg
+
+    async def aread(self, stream: AsyncIterable[StreamEvent]) -> AsyncIterable[StreamEvent]:
+        async for event in stream:
+            for e in self.push(event):
+                yield e
         if msg := self.flush():
             yield msg
