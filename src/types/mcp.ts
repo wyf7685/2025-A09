@@ -1,101 +1,65 @@
-// 定义编码错误处理器类型
-type EncodingErrorHandler = 'strict' | 'ignore' | 'replace';
-
 // StdioConnection 接口
 interface StdioConnection {
   transport: 'stdio';
-
   /** The executable to run to start the server. */
   command: string;
-
   /** Command line arguments to pass to the executable. */
   args: string[];
-
   /** The environment to use when spawning the process. */
   env?: Record<string, string>;
-
   /** The working directory to use when spawning the process. */
   cwd?: string | null;
-
   /** The text encoding used when sending/receiving messages to the server. */
   encoding: string;
-
-  /**
-   * The text encoding error handler.
-   * See https://docs.python.org/3/library/codecs.html#codec-base-classes for
-   * explanations of possible values
-   */
-  encoding_error_handler: EncodingErrorHandler;
-
-  /** Additional keyword arguments to pass to the ClientSession */
-  session_kwargs?: Record<string, any> | null;
 }
 
 // SSEConnection 接口
 interface SSEConnection {
   transport: 'sse';
-
   /** The URL of the SSE endpoint to connect to. */
   url: string;
-
   /** HTTP headers to send to the SSE endpoint */
   headers?: Record<string, any> | null;
-
   /** HTTP timeout */
   timeout: number;
-
   /** SSE read timeout */
   sse_read_timeout: number;
-
-  /** Additional keyword arguments to pass to the ClientSession */
-  session_kwargs?: Record<string, any> | null;
-
-  /** Custom factory for httpx.AsyncClient (optional) */
-  httpx_client_factory?: any | null;
 }
 
 // StreamableHttpConnection 接口
 interface StreamableHttpConnection {
   transport: 'streamable_http';
-
   /** The URL of the endpoint to connect to. */
   url: string;
-
   /** HTTP headers to send to the endpoint. */
   headers?: Record<string, any> | null;
-
   /** HTTP timeout. */
   timeout: number;
-
   /**
    * How long (in seconds) the client will wait for a new event before disconnecting.
    * All other HTTP operations are controlled by `timeout`.
    */
   sse_read_timeout: number;
-
   /** Whether to terminate the session on close */
   terminate_on_close: boolean;
-
-  /** Additional keyword arguments to pass to the ClientSession */
-  session_kwargs?: Record<string, any> | null;
-
-  /** Custom factory for httpx.AsyncClient (optional) */
-  httpx_client_factory?: any | null;
 }
 
 // WebsocketConnection 接口
 interface WebsocketConnection {
   transport: 'websocket';
-
   /** The URL of the Websocket endpoint to connect to. */
   url: string;
-
-  /** Additional keyword arguments to pass to the ClientSession */
-  session_kwargs?: Record<string, any> | null;
 }
 
-export type MCPConnection =
+export type AnyMCPConnection =
   | StdioConnection
   | SSEConnection
   | StreamableHttpConnection
   | WebsocketConnection;
+
+export interface MCPConnection {
+  id: string;
+  name: string;
+  description?: string | null;
+  connection: AnyMCPConnection;
+}

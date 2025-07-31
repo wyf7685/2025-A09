@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import overload
 
 import anyio
 from pydantic import TypeAdapter
@@ -8,7 +9,6 @@ from app.core.lifespan import lifespan
 from app.schemas.mcp import MCPConnection
 
 _mcp_servers_ta = TypeAdapter(dict[str, MCPConnection])
-
 _MCP_SERVERS_FILE = anyio.Path(DATA_DIR / "mcp_servers.json")
 
 
@@ -44,14 +44,22 @@ class MCPService:
         """Get all registered MCP servers."""
         return self.servers
 
-    def get(self, *ids: str) -> Sequence[MCPConnection]:
-        """Get a specific MCP server by name."""
+    @overload
+    def get(self, /) -> Sequence[MCPConnection]: ...
+    @overload
+    def get(self, id: str, /) -> MCPConnection: ...
+    @overload
+    def get(self, id1: str, id2: str, /, *ids: str) -> Sequence[MCPConnection]: ...
+
+    def get(self, *ids: str) -> MCPConnection | Sequence[MCPConnection]:
+        """Get a specific MCP server by ID."""
         if not ids:
             return list(self.servers.values())
         for id in ids:
             if id not in self.servers:
-                raise ValueError(f"MCP Server with name '{id}' does not exist.")
-        return [self.servers[name] for name in ids]
+                raise ValueError(f"MCP Server with ID '{id}' does not exist.")
+        conns = [self.servers[id] for id in ids]
+        return conns[0] if len(conns) == 1 else conns
 
 
 mcp_service = MCPService()

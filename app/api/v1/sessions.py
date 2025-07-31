@@ -8,18 +8,21 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.log import logger
+from app.schemas.mcp import MCPConnection
 from app.schemas.session import Session, SessionID, SessionListItem
+from app.services.agent import daa_service
 from app.services.datasource import datasource_service
+from app.services.mcp import mcp_service
 from app.services.session import session_service
 
-router = APIRouter()
+router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
 
 class CreateSessionRequest(BaseModel):
     dataset_ids: list[str]
 
 
-@router.post("/sessions")
+@router.post("")
 async def create_session(request: CreateSessionRequest) -> Session:
     """
     创建新会话
@@ -48,7 +51,7 @@ class UpdateSessionRequest(BaseModel):
     name: str
 
 
-@router.put("/sessions/{session_id}", response_model=Session)
+@router.put("/{session_id}", response_model=Session)
 async def update_session(session_id: SessionID, request: UpdateSessionRequest) -> Session:
     """
     更新会话信息
@@ -67,7 +70,7 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
         session.name = request.name
         await session_service.save_session(session)
 
-        return session
+        return session_service.tool_name_repr(session)
     except HTTPException:
         raise
     except Exception as e:
@@ -75,7 +78,7 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
         raise HTTPException(status_code=500, detail=f"Failed to update session: {e}") from e
 
 
-@router.get("/sessions/{session_id}")
+@router.get("/{session_id}")
 async def get_session(session_id: SessionID) -> Session:
     """获取会话信息"""
     if session := await session_service.get_session(session_id):
@@ -84,7 +87,7 @@ async def get_session(session_id: SessionID) -> Session:
     raise HTTPException(status_code=404, detail="Session not found")
 
 
-@router.get("/sessions")
+@router.get("")
 async def get_sessions() -> list[SessionListItem]:
     """获取所有会话列表"""
     try:
@@ -93,7 +96,7 @@ async def get_sessions() -> list[SessionListItem]:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {e}") from e
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete("/{session_id}")
 async def delete_session(session_id: SessionID) -> dict[str, Any]:
     """删除会话"""
     try:
@@ -108,3 +111,129 @@ async def delete_session(session_id: SessionID) -> dict[str, Any]:
     except Exception as e:
         logger.exception(f"删除会话失败: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {e}") from e
+
+
+class AddMCPToSessionRequest(BaseModel):
+    """向会话添加MCP连接请求"""
+
+    mcp_ids: list[str]
+
+
+@router.post("/{session_id}/mcp")
+async def add_mcp_to_session(session_id: SessionID, request: AddMCPToSessionRequest) -> Session:
+    """
+    向会话添加MCP连接
+    """
+    try:
+        # 检查会话是否存在
+        if not await session_service.session_exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = await session_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 检查MCP连接是否存在
+        from app.services.mcp import mcp_service
+
+        for mcp_id in request.mcp_ids:
+            try:
+                mcp_service.get(mcp_id)
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=f"MCP connection {mcp_id} not found") from e
+
+        # 添加MCP连接ID到会话
+        if session.mcp_ids is None:
+            session.mcp_ids = []
+
+        # 避免重复添加
+        for mcp_id in request.mcp_ids:
+            if mcp_id not in session.mcp_ids:
+                session.mcp_ids.append(mcp_id)
+
+        # 刷新MCP连接状态
+        await daa_service.refresh_mcp(session)
+
+        # 保存会话
+        await session_service.save_session(session)
+
+        return session_service.tool_name_repr(session)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("向会话添加MCP连接失败")
+        raise HTTPException(status_code=500, detail=f"Failed to add MCP to session: {e}") from e
+
+
+class RemoveMCPFromSessionRequest(BaseModel):
+    """从会话移除MCP连接请求"""
+
+    mcp_ids: list[str]
+
+
+@router.delete("/{session_id}/mcp")
+async def remove_mcp_from_session(session_id: SessionID, request: RemoveMCPFromSessionRequest) -> Session:
+    """
+    从会话移除MCP连接
+    """
+    try:
+        # 检查会话是否存在
+        if not await session_service.session_exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = await session_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 移除MCP连接ID
+        if session.mcp_ids:
+            for mcp_id in request.mcp_ids:
+                if mcp_id in session.mcp_ids:
+                    session.mcp_ids.remove(mcp_id)
+
+        # 刷新MCP连接状态
+        await daa_service.refresh_mcp(session)
+
+        # 保存会话
+        await session_service.save_session(session)
+
+        return session_service.tool_name_repr(session)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("从会话移除MCP连接失败")
+        raise HTTPException(status_code=500, detail=f"Failed to remove MCP from session: {e}") from e
+
+
+@router.get("/{session_id}/mcp")
+async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnection]:
+    """
+    获取会话关联的MCP连接
+    """
+    try:
+        # 检查会话是否存在
+        if not await session_service.session_exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = await session_service.get_session(session_id)
+        if not session or not session.mcp_ids:
+            return []
+
+        connections: list[MCPConnection] = []
+        for mcp_id in session.mcp_ids:
+            try:
+                connections.append(mcp_service.get(mcp_id))
+            except ValueError:
+                # MCP连接不存在，跳过
+                logger.warning(f"MCP connection {mcp_id} not found in session {session_id}")
+                continue
+
+        return connections
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("获取会话MCP连接失败")
+        raise HTTPException(status_code=500, detail=f"Failed to get session MCP connections: {e}") from e

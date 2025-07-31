@@ -30,6 +30,12 @@ const routes = [
     meta: { title: '对话分析' },
   },
   {
+    path: '/mcp-connections',
+    name: 'MCPConnections',
+    component: () => import('../views/MCPConnections.vue'),
+    meta: { title: 'MCP连接管理' },
+  },
+  {
     path: '/llm-models',
     name: 'LLMModels',
     component: () => import('../views/LLMModels.vue'),

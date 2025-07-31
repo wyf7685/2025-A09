@@ -1,7 +1,6 @@
 import itertools
 import threading
 from collections.abc import AsyncIterator, Iterable
-from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
 
@@ -10,7 +9,8 @@ from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, ensure_config
-from langchain_mcp_adapters.sessions import Connection, create_session
+from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
+from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
@@ -18,17 +18,13 @@ from langgraph.prebuilt import create_react_agent
 
 from app.core.agent.events import StreamEvent, fix_message_content, process_stream_event
 from app.core.agent.resume import resume_tool_call
-from app.core.agent.schemas import (
-    AgentValues,
-    DataAnalyzerAgentState,
-    SourcesDict,
-    format_sources_overview,
-)
+from app.core.agent.schemas import AgentValues, DataAnalyzerAgentState, SourcesDict, format_sources_overview
 from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
 from app.core.chain.llm import LLM
-from app.core.executor import CodeExecutor
+from app.core.lifespan import Lifespan
 from app.log import logger
+from app.schemas.mcp import Connection
 from app.schemas.session import SessionID
 from app.utils import escape_tag, run_sync
 
@@ -39,7 +35,6 @@ PROMPT_DIR = Path(__file__).parent.parent / "prompts" / "data_analyzer"
 
 
 def _read_prompt_file(filename: str) -> str:
-    """读取指定的提示文件内容"""
     return (PROMPT_DIR / filename).read_text(encoding="utf-8")
 
 
@@ -111,15 +106,65 @@ def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[
 class DataAnalyzerAgent:
     sources: Sources
     llm: LLM
+    chat_model: BaseChatModel
     session_id: SessionID
+    mcp_connections: list[Connection] | None = None
+    pre_model_hook: Runnable | None = None
     agent: CompiledStateGraph[Any, Any, Any]
     config: RunnableConfig
-    executors: list[CodeExecutor]
     saved_models: dict[str, Path]
-    _stack: AsyncExitStack
+    _lifespan: Lifespan | None = None
 
     def __init__(self) -> None:
         raise NotImplementedError("Use the `create` class method to instantiate this agent.")
+
+    async def _create_graph(self) -> CompiledStateGraph[Any, Any, Any]:
+        if self._lifespan is not None:
+            await self._lifespan.shutdown()
+
+        self._lifespan = Lifespan()
+
+        # Builtin Tools
+        analyzer = analyzer_tool(self.sources, self.llm, self._lifespan)
+        df_tools = dataframe_tools(self.sources)
+        sk_tools, saved_models = scikit_tools(self.sources, self.session_id)
+        sc_tools = sources_tools(self.sources)
+        builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
+
+        # MCP Tools
+        mcp_tools: list[BaseTool] = []
+        if self.mcp_connections is not None:
+            for connection in self.mcp_connections:
+                connection = cast("LangChainMCPConnection", connection)
+                session = await self._lifespan.enter_async_context(create_session(connection))
+                mcp_tools.extend(await load_mcp_tools(session))
+
+        # All Tools
+        all_tools = builtin_tools + mcp_tools
+
+        # Prompt
+        system_prompt = SYSTEM_PROMPT.format(
+            overview=format_sources_overview(self.sources.sources),
+            tool_intro=TOOL_INTRO,
+        )
+
+        # Create Agent
+        self.agent = await run_sync(create_react_agent)(
+            model=self.chat_model,
+            tools=all_tools,
+            prompt=system_prompt,
+            checkpointer=InMemorySaver(),
+            pre_model_hook=self.pre_model_hook,
+        )
+        self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
+        self.saved_models = saved_models
+        logger.opt(colors=True).info(
+            f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(builtin_tools)}</>"
+            + (f", MCP 工具数: <y>{len(mcp_tools)}</>" if mcp_tools else "")
+        )
+
+        await self._lifespan.startup()
+        return self.agent
 
     @classmethod
     async def create(
@@ -133,42 +178,19 @@ class DataAnalyzerAgent:
         mcp_connections: Iterable[Connection] | None = None,
     ) -> Self:
         self = super().__new__(cls)
-        self.sources = sources = Sources(sources_dict)
+        self.sources = Sources(sources_dict)
         self.llm = llm
+        self.chat_model = chat_model
         self.session_id = session_id
+        self.pre_model_hook = pre_model_hook
+        self.mcp_connections = list(mcp_connections) if mcp_connections else None
 
-        analyzer, self.executors = analyzer_tool(sources, llm)
-        df_tools = dataframe_tools(sources)
-        sk_tools, self.saved_models = scikit_tools(sources, session_id)
-        sc_tools = sources_tools(sources)
-        builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
-
-        self._stack = AsyncExitStack()
-        await self._stack.__aenter__()
-
-        mcp_tools: list[BaseTool] = []
-        if mcp_connections is not None:
-            for connection in mcp_connections:
-                session = await self._stack.enter_async_context(create_session(connection))
-                mcp_tools.extend(await load_mcp_tools(session, connection=connection))
-
-        all_tools = builtin_tools + mcp_tools
-
-        system_prompt = SYSTEM_PROMPT.format(
-            overview=format_sources_overview(sources.sources),
-            tool_intro=TOOL_INTRO,
-        )
-        self.agent = await run_sync(create_react_agent)(
-            model=chat_model,
-            tools=all_tools,
-            prompt=system_prompt,
-            checkpointer=InMemorySaver(),
-            pre_model_hook=pre_model_hook,
-        )
-        self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
-        logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(all_tools)}</>")
-
+        await self._create_graph()
         return self
+
+    @property
+    def mcp_count(self) -> int:
+        return len(self.mcp_connections) if self.mcp_connections else 0
 
     def get_messages(self) -> list[AnyMessage]:
         """获取当前 agent 的对话记录"""
@@ -221,10 +243,18 @@ class DataAnalyzerAgent:
 
     async def destroy(self) -> None:
         """销毁 agent，释放资源"""
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(self._stack.__aexit__, None, None, None)
-            [tg.start_soon(e.astop) for e in self.executors]
+        if self._lifespan is not None:
+            await self._lifespan.shutdown()
         logger.opt(colors=True).info(f"已销毁数据分析 Agent: <c>{self.session_id}</>")
+
+    async def bind_mcp(self, mcp_connections: Iterable[Connection] | None = None) -> None:
+        original_count = self.mcp_count
+        self.mcp_connections = list(mcp_connections) if mcp_connections else None
+        current_count = self.mcp_count
+        values = self.agent.get_state(self.config).values
+        await self._create_graph()
+        self.agent.update_state(self.config, values)
+        logger.opt(colors=True).info(f"绑定 MCP 连接: <y>{original_count}</> -> <y>{current_count}</>")
 
     async def stream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""

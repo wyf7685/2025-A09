@@ -22,7 +22,7 @@ def _() -> None:
     from .sources import sources_tools
 
     obj: Any = object()
-    analyzer_tool(obj, obj)
+    analyzer_tool(obj, obj, obj)
     dataframe_tools(obj)
     scikit_tools(obj, obj)
     sources_tools(obj)

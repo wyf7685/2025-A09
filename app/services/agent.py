@@ -140,6 +140,13 @@ class DataAnalyzerAgentService:
                 if scope.cancel_called:
                     raise AgentCancelled(session.id)
 
+    async def refresh_mcp(self, session: Session) -> None:
+        """刷新会话的 MCP 连接"""
+        mcps = mcp_service.get(*(session.mcp_ids or []))
+        async with self.use_agent(session, create_if_non_exist=False) as agent:
+            await agent.bind_mcp(mcp.connection for mcp in mcps)
+        logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
+
     async def _destroy_all(self) -> None:
         async def destroy(session_id: SessionID) -> None:
             try:

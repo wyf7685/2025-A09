@@ -28,6 +28,7 @@ declare module 'vue' {
     FieldMappingsGrid: typeof import('./src/components/data/upload/cleaning/FieldMappingsGrid.vue')['default']
     FileUploadStep: typeof import('./src/components/data/upload/FileUploadStep.vue')['default']
     FlowPanel: typeof import('./src/components/chat/FlowPanel.vue')['default']
+    MCPConnectionForm: typeof import('./src/components/mcp/MCPConnectionForm.vue')['default']
     PreviewDataDialog: typeof import('./src/components/data/PreviewDataDialog.vue')['default']
     QualitySummaryCards: typeof import('./src/components/data/upload/cleaning/QualitySummaryCards.vue')['default']
     ReportGenerationDialog: typeof import('./src/components/chat/report/ReportGenerationDialog.vue')['default']

@@ -7,6 +7,7 @@ from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.executor import CodeExecutor, format_result
+from app.core.lifespan import Lifespan
 from app.log import logger
 from app.utils import escape_tag
 
@@ -42,7 +43,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(sources: Sources, llm: LLM) -> tuple[BaseTool, list[CodeExecutor]]:
+def analyzer_tool(sources: Sources, llm: LLM, lifespan: Lifespan) -> BaseTool:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -54,7 +55,6 @@ def analyzer_tool(sources: Sources, llm: LLM) -> tuple[BaseTool, list[CodeExecut
         Tool: 用于数据分析的LangChain工具。
     """
     analyzers: dict[DatasetID, NL2DataAnalysis] = {}
-    executors: list[CodeExecutor] = []
 
     @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
     @register_tool("通用数据分析工具")
@@ -63,7 +63,7 @@ def analyzer_tool(sources: Sources, llm: LLM) -> tuple[BaseTool, list[CodeExecut
 
         if dataset_id not in analyzers:
             executor = CodeExecutor(source)
-            executors.append(executor)
+            lifespan.on_shutdown(executor.astop)
             analyzers[dataset_id] = NL2DataAnalysis(llm, executor=executor)
 
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
@@ -81,4 +81,4 @@ def analyzer_tool(sources: Sources, llm: LLM) -> tuple[BaseTool, list[CodeExecut
 
         return format_result(result), artifact
 
-    return analyze_data, executors
+    return analyze_data

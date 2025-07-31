@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
-import { ChatDotRound, Collection, Connection, DataAnalysis, House, Menu, Monitor } from '@element-plus/icons-vue';
+import { ChatDotRound, Collection, Connection, DataAnalysis, House, Menu, Monitor, Link } from '@element-plus/icons-vue';
 import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElMenu, ElMenuItem } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { RouterView } from 'vue-router';
@@ -91,6 +91,13 @@ onMounted(async () => {
               <ChatDotRound />
             </el-icon>
             <span>对话分析</span>
+          </el-menu-item>
+
+          <el-menu-item index="/mcp-connections">
+            <el-icon>
+              <Link />
+            </el-icon>
+            <span>MCP连接</span>
           </el-menu-item>
 
           <el-menu-item index="/llm-models">

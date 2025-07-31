@@ -49,6 +49,14 @@ class Lifespan:
         self._ready_funcs.append(_ensure_async(func))
         return func
 
+    async def enter_async_context[T](self, cm: contextlib.AbstractAsyncContextManager[T, Any]) -> T:
+        async def exit_cm() -> None:
+            await cm.__aexit__(None, None, None)
+
+        result = await cm.__aenter__()
+        self.on_shutdown(exit_cm)
+        return result
+
     @staticmethod
     async def _run_lifespan_func(funcs: Iterable[ASYNC_LIFESPAN_FUNC]) -> None:
         async with anyio.create_task_group() as task_group:
@@ -106,4 +114,5 @@ class Lifespan:
             await self.shutdown()
 
 
+# Global lifespan instance, used by FastAPI application
 lifespan = Lifespan()

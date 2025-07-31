@@ -3,7 +3,6 @@ import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
-import { withLoading } from '@/utils/tools';
 
 export const useSessionStore = defineStore('session', () => {
   const currentSession = ref<Session | null>(null);
