@@ -17,6 +17,9 @@ class SessionService:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
 
+        lifespan.on_startup(self._load_sessions)
+        lifespan.on_shutdown(self._save_sessions)
+
     async def session_exists(self, session_id: SessionID) -> bool:
         if session_id in self.sessions:
             return True
@@ -40,7 +43,7 @@ class SessionService:
             return await self.load_session(session_id)
         return None
 
-    async def load_sessions(self) -> None:
+    async def _load_sessions(self) -> None:
         async def load(fp: anyio.Path) -> None:
             if not (await fp.is_file() and fp.suffix == ".json"):
                 return
@@ -68,7 +71,7 @@ class SessionService:
             self.sessions[session.id] = session
             return session
 
-    async def save_sessions(self) -> None:
+    async def _save_sessions(self) -> None:
         async with anyio.create_task_group() as tg:
             for session in self.sessions.values():
                 tg.start_soon(self.save_session, session)
@@ -134,5 +137,3 @@ class SessionService:
 
 
 session_service = SessionService()
-lifespan.on_startup(session_service.load_sessions)
-lifespan.on_shutdown(session_service.save_sessions)

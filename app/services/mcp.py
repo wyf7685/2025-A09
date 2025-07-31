@@ -16,6 +16,9 @@ class MCPService:
     def __init__(self) -> None:
         self.servers: dict[str, MCPConnection] = {}
 
+        lifespan.on_startup(self.load)
+        lifespan.on_shutdown(self.save)
+
     async def save(self) -> None:
         await _MCP_SERVERS_FILE.write_bytes(_mcp_servers_ta.dump_json(self.servers))
 
@@ -52,6 +55,3 @@ class MCPService:
 
 
 mcp_service = MCPService()
-
-lifespan.on_startup(mcp_service.load)
-lifespan.on_shutdown(mcp_service.save)

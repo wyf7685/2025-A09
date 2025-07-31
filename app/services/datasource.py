@@ -46,6 +46,21 @@ class DataSourceService:
     def __init__(self) -> None:
         self.sources: dict[str, DataSource] = {}
 
+        async def _sync() -> None:
+            try:
+                await self.sync_from_dremio()
+            except Exception:
+                logger.exception("从 Dremio 同步数据源失败")
+            else:
+                logger.success("成功从 Dremio 同步数据源")
+
+        @lifespan.on_startup
+        async def _() -> None:
+            await self._load_sources()
+            lifespan.task_group.start_soon(_sync)
+
+        lifespan.on_shutdown(self._save_sources)
+
     async def source_exists(self, source_id: str) -> bool:
         if source_id in self.sources:
             return True
@@ -55,7 +70,9 @@ class DataSourceService:
         except FileNotFoundError:
             return False
 
-    async def load_sources(self) -> None:
+    async def _load_sources(self) -> None:
+        ori = len(self.sources)
+
         async for fp in _DATASOURCE_DIR.iterdir():
             if not (await fp.is_file() and fp.suffix == ".json"):
                 continue
@@ -63,7 +80,10 @@ class DataSourceService:
                 await self._load_source(fp)
             except Exception:
                 logger.opt(colors=True, exception=True).warning(f"从文件 <y><u>{escape_tag(fp)}</></> 读取数据源失败")
+
         self._check_unique()
+        now = len(self.sources)
+        logger.opt(colors=True).success(f"加载 <y>{now - ori}</> 个数据源")
 
     async def _load_source(self, source_id: str | anyio.Path) -> DataSource:
         fp = _DATASOURCE_DIR / f"{source_id}.json" if isinstance(source_id, str) else source_id
@@ -79,8 +99,9 @@ class DataSourceService:
         self.sources[source_id] = source
         return source
 
-    async def save_sources(self) -> None:
+    async def _save_sources(self) -> None:
         """保存所有数据源到文件"""
+        logger.info("保存所有数据源...")
         async with anyio.create_task_group() as tg:
             for source_id, source in self.sources.items():
                 tg.start_soon(self.save_source, source_id, source)
@@ -199,6 +220,8 @@ class TempFileService:
     def __init__(self) -> None:
         self._data: dict[str, anyio.Path] = {}
 
+        lifespan.on_shutdown(self.delete_all)
+
     async def register(self, file_path: Path) -> str:
         """
         注册临时文件
@@ -244,6 +267,7 @@ class TempFileService:
         """
         删除所有临时文件
         """
+        logger.info("清理所有临时文件...")
         for file_id in list(self._data):
             await self.delete(file_id)
 
@@ -291,33 +315,3 @@ class TempSourceService:
 datasource_service = DataSourceService()
 temp_file_service = TempFileService()
 temp_source_service = TempSourceService()
-
-
-@lifespan.on_startup
-async def _() -> None:
-    """在应用启动时加载数据源"""
-
-    await datasource_service.load_sources()
-    logger.opt(colors=True).success(f"加载 <y>{len(datasource_service.sources)}</> 个数据源")
-
-    @lifespan.task_group.start_soon
-    async def _() -> None:
-        try:
-            await datasource_service.sync_from_dremio()
-        except Exception:
-            logger.exception("从 Dremio 同步数据源失败")
-        else:
-            logger.success("成功从 Dremio 同步数据源")
-
-
-@lifespan.on_shutdown
-async def _() -> None:
-    logger.info("保存所有数据源...")
-    await datasource_service.save_sources()
-
-
-@lifespan.on_shutdown
-async def _() -> None:
-    """在应用关闭时清理临时文件和数据源"""
-    logger.info("清理所有临时文件...")
-    await temp_file_service.delete_all()

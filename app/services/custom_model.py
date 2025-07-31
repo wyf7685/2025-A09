@@ -23,6 +23,9 @@ class CustomModelManager:
         self._models: dict[str, CustomModelConfig] = {}
         self.config_file = anyio.Path(DATA_DIR / "custom_models.json")
 
+        lifespan.on_startup(self.load_config)
+        lifespan.on_shutdown(self.save_config)
+
     async def load_config(self) -> None:
         """加载自定义模型配置"""
         if await self.config_file.exists():
@@ -86,5 +89,3 @@ class CustomModelManager:
 
 # 全局自定义模型管理器实例
 custom_model_manager = CustomModelManager()
-lifespan.on_startup(custom_model_manager.load_config)
-lifespan.on_shutdown(custom_model_manager.save_config)

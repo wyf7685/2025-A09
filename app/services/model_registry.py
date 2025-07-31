@@ -27,7 +27,10 @@ class ModelRegistry:
         self.registry_file = anyio.Path(DATA_DIR / "model_registry.json")
         self._models: dict[str, MLModelInfo] = {}
 
-    async def load_registry(self) -> None:
+        lifespan.on_startup(self._load_registry)
+        lifespan.on_shutdown(self._save_registry)
+
+    async def _load_registry(self) -> None:
         """加载模型注册表"""
         if await self.registry_file.exists():
             try:
@@ -38,7 +41,7 @@ class ModelRegistry:
                 logger.warning(f"加载模型注册表失败: {e}")
                 self._models = {}
 
-    async def save_registry(self) -> None:
+    async def _save_registry(self) -> None:
         """保存模型注册表"""
         try:
             await self.registry_file.write_bytes(_models_ta.dump_json(self._models))
@@ -117,7 +120,7 @@ class ModelRegistry:
                 setattr(model, key, value)
 
         model.last_used = datetime.now().isoformat()
-        await self.save_registry()
+        await self._save_registry()
         return True
 
     async def delete_model(self, model_id: str) -> bool:
@@ -141,7 +144,7 @@ class ModelRegistry:
 
         # 从注册表中删除
         del self._models[model_id]
-        await self.save_registry()
+        await self._save_registry()
 
         logger.info(f"已删除模型: {model_id}")
         return True
@@ -157,5 +160,3 @@ class ModelRegistry:
 
 # 全局模型注册表实例
 model_registry = ModelRegistry()
-lifespan.on_startup(model_registry.load_registry)
-lifespan.on_shutdown(model_registry.save_registry)
