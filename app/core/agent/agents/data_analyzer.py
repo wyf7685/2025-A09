@@ -1,6 +1,8 @@
 import itertools
 import threading
 from collections.abc import AsyncIterator, Iterable
+from contextlib import suppress
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
 
@@ -9,8 +11,6 @@ from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, ensure_config
-from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
-from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
@@ -30,6 +30,7 @@ from app.utils import escape_tag, run_sync
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
+    from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
 
 PROMPT_DIR = Path(__file__).parent.parent / "prompts" / "data_analyzer"
 
@@ -120,9 +121,12 @@ class DataAnalyzerAgent:
 
     async def _create_graph(self) -> CompiledStateGraph[Any, Any, Any]:
         if self._lifespan is not None:
-            await self._lifespan.shutdown()
+            with anyio.CancelScope(), suppress(Exception):
+                await self._lifespan.shutdown()
+            self._lifespan = None
 
         self._lifespan = Lifespan()
+        await self._lifespan.startup()
 
         # Builtin Tools
         analyzer = analyzer_tool(self.sources, self.llm, self._lifespan)
@@ -135,9 +139,10 @@ class DataAnalyzerAgent:
         mcp_tools: list[BaseTool] = []
         if self.mcp_connections is not None:
             for connection in self.mcp_connections:
-                connection = cast("LangChainMCPConnection", connection)
-                session = await self._lifespan.enter_async_context(create_session(connection))
-                mcp_tools.extend(await load_mcp_tools(session))
+                connection = cast("LangChainMCPConnection", deepcopy(connection))
+                # session = await self._stack.enter_async_context(create_session(connection))
+                # await session.initialize()
+                mcp_tools.extend(await load_mcp_tools(None, connection=connection))
 
         # All Tools
         all_tools = builtin_tools + mcp_tools
@@ -163,7 +168,6 @@ class DataAnalyzerAgent:
             + (f", MCP 工具数: <y>{len(mcp_tools)}</>" if mcp_tools else "")
         )
 
-        await self._lifespan.startup()
         return self.agent
 
     @classmethod
@@ -214,7 +218,7 @@ class DataAnalyzerAgent:
         self.saved_models.update(state.models)
         self.sources.random_state = state.sources_random_state
         self.sources.reset()
-        resume_tool_calls(self.sources, state.values["messages"])
+        resume_tool_calls(self.sources, state.values.get("messages", []))
         logger.opt(colors=True).info(f"已恢复 agent 状态: {state.colorize()}")
 
     async def load_state(self, state_file: Path) -> None:
@@ -246,15 +250,6 @@ class DataAnalyzerAgent:
         if self._lifespan is not None:
             await self._lifespan.shutdown()
         logger.opt(colors=True).info(f"已销毁数据分析 Agent: <c>{self.session_id}</>")
-
-    async def bind_mcp(self, mcp_connections: Iterable[Connection] | None = None) -> None:
-        original_count = self.mcp_count
-        self.mcp_connections = list(mcp_connections) if mcp_connections else None
-        current_count = self.mcp_count
-        values = self.agent.get_state(self.config).values
-        await self._create_graph()
-        self.agent.update_state(self.config, values)
-        logger.opt(colors=True).info(f"绑定 MCP 连接: <y>{original_count}</> -> <y>{current_count}</>")
 
     async def stream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""

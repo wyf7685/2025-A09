@@ -3,6 +3,7 @@ import { useSessionStore } from '@/stores/session';
 import { ChatDotRound, DArrowLeft, Delete, Edit, Plus } from '@element-plus/icons-vue';
 import { ElButton, ElIcon } from 'element-plus';
 import { computed, ref } from 'vue';
+import MCPManager from './MCPManager.vue';
 
 defineProps<{
   currentSessionId: string | undefined;
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 const sessionStore = useSessionStore();
 const sessions = computed(() => sessionStore.sessions);
 const isDeletingSession = ref<boolean>(false); // 防止重复删除操作
+const mcpManagerRef = ref<InstanceType<typeof MCPManager>>();
 
 // 处理侧边栏关闭
 const closeSidebar = () => {
@@ -42,7 +44,7 @@ const handleEditSession = (sessionId: string, sessionName: string, event: Event)
   emit('edit-session', sessionId, sessionName);
 };
 
-// 删除会话
+// 处理删除会话，同时暴露MCP管理器的引用
 const handleDeleteSession = async (sessionId: string, event: Event) => {
   // 阻止事件冒泡，避免触发会话切换
   event.stopPropagation();
@@ -57,6 +59,11 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
     isDeletingSession.value = false;
   }
 };
+
+// 暴露MCP管理器的引用给父组件
+defineExpose({
+  mcpManager: mcpManagerRef
+});
 </script>
 
 <template>
@@ -82,6 +89,13 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
             :disabled="sessionStore.isDeleting[session.id]" />
         </div>
       </div>
+    </div>
+
+    <!-- MCP 管理器 -->
+    <div class="mcp-section" v-if="currentSessionId">
+      <MCPManager
+        :current-session-id="currentSessionId"
+        ref="mcpManagerRef" />
     </div>
   </div>
 </template>
@@ -243,6 +257,13 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
       background-color: #f3f4f6;
     }
   }
+}
+
+.mcp-section {
+  flex-shrink: 0;
+  padding: 12px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
 }
 
 /* 响应式设计 */

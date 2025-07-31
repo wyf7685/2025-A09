@@ -6,6 +6,7 @@ from typing import Any
 import anyio
 from anyio.abc import TaskGroup
 
+from app.log import logger
 from app.utils import is_coroutine_callable, run_sync
 
 type SYNC_LIFESPAN_FUNC = Callable[[], Any]
@@ -49,32 +50,28 @@ class Lifespan:
         self._ready_funcs.append(_ensure_async(func))
         return func
 
-    async def enter_async_context[T](self, cm: contextlib.AbstractAsyncContextManager[T, Any]) -> T:
-        async def exit_cm() -> None:
-            await cm.__aexit__(None, None, None)
-
-        result = await cm.__aenter__()
-        self.on_shutdown(exit_cm)
-        return result
-
-    @staticmethod
-    async def _run_lifespan_func(funcs: Iterable[ASYNC_LIFESPAN_FUNC]) -> None:
-        async with anyio.create_task_group() as task_group:
+    async def _run_lifespan_func(self, funcs: Iterable[ASYNC_LIFESPAN_FUNC]) -> None:
+        async with self.task_group as tg:
             for func in funcs:
-                task_group.start_soon(func)
+                tg.start_soon(func)
 
     async def startup(self) -> None:
         # create background task group
+        logger.debug("Lifespan startup...")
         self.task_group = anyio.create_task_group()
         await self.task_group.__aenter__()
 
         # run startup funcs
         if self._startup_funcs:
+            logger.debug("Running startup functions")
             await self._run_lifespan_func(self._startup_funcs)
 
         # run ready funcs
         if self._ready_funcs:
+            logger.debug("Running ready functions")
             await self._run_lifespan_func(self._ready_funcs)
+
+        logger.debug("Lifespan startup complete")
 
     async def shutdown(
         self,
@@ -84,14 +81,18 @@ class Lifespan:
         exc_tb: TracebackType | None = None,
     ) -> None:
         if self._shutdown_funcs:
-            await self._run_lifespan_func(self._shutdown_funcs)
+            logger.debug("Running shutdown functions")
+            await self._run_lifespan_func(reversed(self._shutdown_funcs))
 
         # shutdown background task group
+        logger.debug("Shutting down task group")
         self.task_group.cancel_scope.cancel()
 
+        logger.debug("Waiting for task group to finish")
         with contextlib.suppress(Exception):
             await self.task_group.__aexit__(exc_type, exc_val, exc_tb)
 
+        logger.debug("Lifespan shutdown complete")
         self._task_group = None
 
     async def __aenter__(self, *_: object) -> None:

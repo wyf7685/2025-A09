@@ -8,6 +8,7 @@ import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
 import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
+import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
@@ -17,6 +18,7 @@ import { useRouter } from 'vue-router';
 const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
+const mcpStore = useMCPStore();
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true);
@@ -25,6 +27,7 @@ const selectDatasetDialogVisible = ref<boolean>(false);
 const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
+const sessionSidebarRef = ref<InstanceType<typeof SessionSidebar>>();
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -34,6 +37,25 @@ const currentDatasets = computed(() =>
       .map(id => dataSourceStore.dataSources[id] || null).filter(ds => ds)
     : null
 );
+
+// 当前会话的MCP连接
+const currentMCPConnections = ref<any[]>([]);
+
+// 加载当前会话的MCP连接
+const loadCurrentMCPConnections = async () => {
+  if (!currentSessionId.value) {
+    currentMCPConnections.value = [];
+    return;
+  }
+
+  try {
+    const connections = await mcpStore.getSessionConnections(currentSessionId.value);
+    currentMCPConnections.value = connections;
+  } catch (error) {
+    console.error('加载会话 MCP 连接失败:', error);
+    currentMCPConnections.value = [];
+  }
+};
 
 // 会话编辑相关
 const editSessionDialogVisible = ref(false);
@@ -108,6 +130,15 @@ const createNewSession = async (sourceIds: string[]) => {
     const session = await sessionStore.createSession(datasetIds);
     sessionStore.setCurrentSession(session);
     await refreshChatHistory();
+
+    // 刷新MCP连接
+    if (sessionSidebarRef.value?.mcpManager) {
+      await sessionSidebarRef.value.mcpManager.refreshConnections();
+    }
+
+    // 加载当前会话的MCP连接
+    await loadCurrentMCPConnections();
+
     selectDatasetDialogVisible.value = false; // Close the dialog
 
     const message = datasetIds.length === 1
@@ -131,6 +162,15 @@ const switchSession = async (sessionId: string) => {
   await sessionStore.setCurrentSessionById(sessionId);
   const session = sessions.value.find(s => s.id === sessionId);
   await refreshChatHistory();
+
+  // 刷新MCP连接
+  if (sessionSidebarRef.value?.mcpManager) {
+    await sessionSidebarRef.value.mcpManager.refreshConnections();
+  }
+
+  // 加载当前会话的MCP连接
+  await loadCurrentMCPConnections();
+
   ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`);
 };
 
@@ -206,8 +246,11 @@ const sendMessage = async (): Promise<void> => {
 onMounted(async () => {
   await loadSessions();
   await dataSourceStore.listDataSources(); // 加载数据源
+  await mcpStore.listConnections(); // 加载MCP连接
+
   if (currentSessionId.value) {
-    refreshChatHistory();
+    await refreshChatHistory();
+    await loadCurrentMCPConnections(); // 加载当前会话的MCP连接
   }
 });
 </script>
@@ -221,7 +264,8 @@ onMounted(async () => {
       @switch-session="switchSession"
       @create-session="selectDatasetDialogVisible = true"
       @edit-session="openEditSessionDialog"
-      @delete-session="deleteSession" />
+      @delete-session="deleteSession"
+      ref="sessionSidebarRef" />
 
     <!-- Chat Panel -->
     <div class="chat-panel">
@@ -254,6 +298,7 @@ onMounted(async () => {
       <ChatInput v-model:input="userInput"
         :isProcessingChat="isProcessingChat"
         :currentDatasets="currentDatasets"
+        :mcpConnections="currentMCPConnections"
         @send="sendMessage"
         @go-to-data="goToAddData" />
     </div>

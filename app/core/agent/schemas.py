@@ -9,7 +9,7 @@ from app.core.datasource import DataSource
 
 
 class AgentValues(TypedDict):
-    messages: list[AnyMessage]
+    messages: NotRequired[list[AnyMessage]]
 
 
 class DataAnalyzerAgentState(BaseModel):
@@ -19,7 +19,7 @@ class DataAnalyzerAgentState(BaseModel):
 
     def colorize(self) -> str:
         return (
-            f"消息数=<y>{len(self.values['messages'])}</>, "
+            f"消息数=<y>{len(self.values.get('messages', []))}</>, "
             f"模型数=<y>{len(self.models)}</>, "
             f"随机状态=<y>{self.sources_random_state}</>"
         )

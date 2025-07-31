@@ -49,7 +49,7 @@ class DataAnalyzerAgentService:
                 self.agents.pop(session.id, None)
                 del existing
 
-        mcps = mcp_service.get(*(session.mcp_ids or []))
+        mcps = mcp_service.gets(*(session.mcp_ids or []))
         sources = {id: (await datasource_service.get_source(id)).copy() for id in session.dataset_ids}
         llm = await get_llm_async(model_id)
         chat_model = await get_chat_model_async(model_id)
@@ -124,28 +124,46 @@ class DataAnalyzerAgentService:
                     raise AgentNotFound(session.id)
                 agent = await self._create(session, model_id)
 
-            self._scope[session.id] = scope = anyio.CancelScope()
-
-            try:
-                with scope:
-                    yield agent
-            finally:
-                self._scope.pop(session.id, None)
-
+            with anyio.CancelScope() as scope:
+                self._scope[session.id] = scope
                 try:
-                    await agent.save_state(STATE_DIR / f"{session.id}.json")
-                except Exception:
-                    logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session.id)}</> 的 Agent 状态失败")
+                    yield agent
+                finally:
+                    with anyio.CancelScope(shield=True):
+                        self._scope.pop(session.id, None)
 
-                if scope.cancel_called:
-                    raise AgentCancelled(session.id)
+                        try:
+                            await agent.save_state(STATE_DIR / f"{session.id}.json")
+                        except Exception:
+                            logger.opt(colors=True).exception(
+                                f"保存会话 <c>{escape_tag(session.id)}</> 的 Agent 状态失败"
+                            )
+
+                        if scope.cancel_called:
+                            raise AgentCancelled(session.id)
 
     async def refresh_mcp(self, session: Session) -> None:
         """刷新会话的 MCP 连接"""
-        mcps = mcp_service.get(*(session.mcp_ids or []))
-        async with self.use_agent(session, create_if_non_exist=False) as agent:
-            await agent.bind_mcp(mcp.connection for mcp in mcps)
-        logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
+        # mcps = mcp_service.gets(*(session.mcp_ids or []))
+
+        ### v1
+        # async with self.use_agent(session, create_if_non_exist=True) as agent:
+        #     await agent.bind_mcp(mcp.connection for mcp in mcps)
+        # logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
+
+        ### v2
+        # try:
+        #     async with self.use_agent(session, create_if_non_exist=False) as agent:
+        #         await agent.bind_mcp(mcp.connection for mcp in mcps)
+        # except AgentNotFound:
+        #     return
+        # else:
+        #     logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
+
+        ### v3
+        # 直接删掉，下次用到就会创建带有新 MCP 的 Agent
+        with contextlib.suppress(AgentNotFound):
+            await self.destroy(session.id)
 
     async def _destroy_all(self) -> None:
         async def destroy(session_id: SessionID) -> None:

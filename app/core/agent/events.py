@@ -76,7 +76,7 @@ def process_stream_event(event: Any) -> Iterable[StreamEvent]:
                 yield ToolCallEvent(
                     id=tool_call["id"],
                     name=tool_call["name"],
-                    human_repr=TOOL_NAMES[tool_call["name"]],
+                    human_repr=TOOL_NAMES.get(tool_call["name"], tool_call["name"]),
                     args=tool_call["args"],
                 )
         case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):

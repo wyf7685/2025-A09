@@ -1,11 +1,14 @@
 from collections.abc import Sequence
-from typing import overload
+from typing import cast
 
 import anyio
+from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
+from langchain_mcp_adapters.sessions import create_session
 from pydantic import TypeAdapter
 
 from app.const import DATA_DIR
 from app.core.lifespan import lifespan
+from app.log import logger
 from app.schemas.mcp import MCPConnection
 
 _mcp_servers_ta = TypeAdapter(dict[str, MCPConnection])
@@ -31,6 +34,15 @@ class MCPService:
     async def register(self, connection: MCPConnection) -> None:
         if connection.id in self.servers:
             raise ValueError(f"MCP Server with id '{connection.id}' already exists.")
+
+        try:
+            async with create_session(cast("LangChainMCPConnection", connection.connection)) as session:
+                await session.initialize()
+                await session.send_ping()
+        except Exception as e:
+            logger.opt(exception=True).warning(f"Failed to connect to MCP Server: {connection.connection}")
+            raise ValueError(f"Failed to connect to MCP Server: {e}") from e
+
         self.servers[connection.id] = connection
         await self.save()
 
@@ -44,22 +56,15 @@ class MCPService:
         """Get all registered MCP servers."""
         return self.servers
 
-    @overload
-    def get(self, /) -> Sequence[MCPConnection]: ...
-    @overload
-    def get(self, id: str, /) -> MCPConnection: ...
-    @overload
-    def get(self, id1: str, id2: str, /, *ids: str) -> Sequence[MCPConnection]: ...
-
-    def get(self, *ids: str) -> MCPConnection | Sequence[MCPConnection]:
+    def get(self, id: str) -> MCPConnection:
         """Get a specific MCP server by ID."""
-        if not ids:
-            return list(self.servers.values())
-        for id in ids:
-            if id not in self.servers:
-                raise ValueError(f"MCP Server with ID '{id}' does not exist.")
-        conns = [self.servers[id] for id in ids]
-        return conns[0] if len(conns) == 1 else conns
+        if id not in self.servers:
+            raise ValueError(f"MCP Server with ID '{id}' does not exist.")
+        return self.servers[id]
+
+    def gets(self, *ids: str) -> Sequence[MCPConnection]:
+        """Get multiple MCP servers by IDs."""
+        return [self.get(id) for id in ids] if ids else list(self.servers.values())
 
 
 mcp_service = MCPService()

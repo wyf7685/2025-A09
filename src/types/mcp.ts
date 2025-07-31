@@ -8,7 +8,7 @@ interface StdioConnection {
   /** The environment to use when spawning the process. */
   env?: Record<string, string>;
   /** The working directory to use when spawning the process. */
-  cwd?: string | null;
+  cwd?: string;
   /** The text encoding used when sending/receiving messages to the server. */
   encoding: string;
 }
@@ -19,7 +19,7 @@ interface SSEConnection {
   /** The URL of the SSE endpoint to connect to. */
   url: string;
   /** HTTP headers to send to the SSE endpoint */
-  headers?: Record<string, any> | null;
+  headers?: Record<string, any>;
   /** HTTP timeout */
   timeout: number;
   /** SSE read timeout */
@@ -32,7 +32,7 @@ interface StreamableHttpConnection {
   /** The URL of the endpoint to connect to. */
   url: string;
   /** HTTP headers to send to the endpoint. */
-  headers?: Record<string, any> | null;
+  headers?: Record<string, any>;
   /** HTTP timeout. */
   timeout: number;
   /**
@@ -60,6 +60,6 @@ export type AnyMCPConnection =
 export interface MCPConnection {
   id: string;
   name: string;
-  description?: string | null;
+  description?: string;
   connection: AnyMCPConnection;
 }

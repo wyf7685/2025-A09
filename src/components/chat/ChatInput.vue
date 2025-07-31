@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { DataSourceMetadata } from '@/types';
+import type { MCPConnection } from '@/types/mcp';
 import { turncateString } from '@/utils/tools';
-import { DataAnalysis, Document, DocumentCopy, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
+import { DataAnalysis, Document, DocumentCopy, Link, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
 import { ElButton, ElDivider, ElIcon, ElInput, ElLink, ElTag, ElTooltip } from 'element-plus';
 
 const props = defineProps<{
   isProcessingChat: boolean;
   currentDatasets?: DataSourceMetadata[] | null;
+  mcpConnections?: MCPConnection[] | null;
 }>();
 
 const input = defineModel<string>('input', { required: true });
@@ -48,6 +50,23 @@ const formatDatasetsTooltip = (names: string[]) => {
   if (names.length === 1) return names[0];
   return `共 ${names.length} 个数据集: ${names.slice(0, 2).map(s => turncateString(s, 20)).join(', ')} ${names.length > 3 ? '等' : ''}`;
 };
+
+const formatMCPTooltip = (connections: MCPConnection[]) => {
+  if (connections.length === 0) return '无 MCP 连接';
+  if (connections.length === 1) return connections[0].name;
+  return `共 ${connections.length} 个 MCP 连接: ${connections.slice(0, 2).map(c => turncateString(c.name, 20)).join(', ')} ${connections.length > 2 ? '等' : ''}`;
+};
+
+// 获取传输类型标签样式
+const getTransportTagType = (transport: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
+  const typeMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
+    stdio: 'primary',
+    sse: 'success',
+    streamable_http: 'warning',
+    websocket: 'info'
+  };
+  return typeMap[transport] || 'primary';
+};
 </script>
 
 <template>
@@ -78,6 +97,40 @@ const formatDatasetsTooltip = (names: string[]) => {
           <el-link v-else type="warning" @click="goToAddData" :underline="false">
             请先选择一个数据集进行分析
           </el-link>
+        </div>
+      </el-tooltip>
+
+      <!-- MCP 连接指示器 -->
+      <el-tooltip placement="top" :content="formatMCPTooltip(mcpConnections || [])">
+        <div class="mcp-indicator">
+          <el-icon>
+            <Link />
+          </el-icon>
+          <template v-if="mcpConnections?.length">
+            MCP 连接:
+            <strong v-if="mcpConnections.length === 1">
+              {{ turncateString(mcpConnections[0].name, 12) }}
+            </strong>
+            <strong v-else>
+              {{ mcpConnections.length }} 个
+            </strong>
+            <div class="mcp-tags" v-if="mcpConnections.length > 0">
+              <el-tag
+                v-for="connection in mcpConnections.slice(0, 3)"
+                :key="connection.id"
+                :type="getTransportTagType(connection.connection.transport)"
+                size="small"
+                style="margin-left: 4px;">
+                {{ turncateString(connection.name, 8) }}
+              </el-tag>
+              <el-tag v-if="mcpConnections.length > 3" size="small" style="margin-left: 4px;">
+                +{{ mcpConnections.length - 3 }}
+              </el-tag>
+            </div>
+          </template>
+          <span v-else class="no-mcp">
+            无 MCP 连接
+          </span>
         </div>
       </el-tooltip>
 
@@ -149,6 +202,37 @@ const formatDatasetsTooltip = (names: string[]) => {
 
   strong {
     color: #374151;
+  }
+}
+
+.mcp-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  padding: 4px 8px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+
+  .el-icon {
+    font-size: 14px;
+  }
+
+  strong {
+    color: #374151;
+  }
+
+  .no-mcp {
+    color: #9ca3af;
+    font-style: italic;
+  }
+
+  .mcp-tags {
+    display: flex;
+    align-items: center;
+    margin-left: 4px;
   }
 
   .el-link {
