@@ -59,7 +59,24 @@ class SessionService:
             raise SessionNotFound(session_id if isinstance(session_id, str) else "<Unknown>")
 
         try:
-            session = Session.model_validate_json(await fp.read_bytes())
+            # 尝试直接加载会话
+            try:
+                session = Session.model_validate_json(await fp.read_bytes())
+            except Exception as first_error:
+                # 如果失败，尝试先解析为字典，然后手动添加缺少的字段
+                import json
+
+                raw_data = json.loads(await fp.read_bytes())
+
+                # 如果缺少 dataset_ids 字段，添加一个空列表
+                if "dataset_ids" not in raw_data:
+                    logger.info(
+                        f"Adding missing dataset_ids field to session {session_id if isinstance(session_id, str) else session_id.stem}"
+                    )
+                    raw_data["dataset_ids"] = []
+
+                # 重新尝试验证
+                session = Session.model_validate(raw_data)
         except Exception as e:
             logger.opt(exception=True).warning(f"Failed to load session from {fp}")
             raise SessionLoadFailed(session_id if isinstance(session_id, str) else session_id.stem) from e

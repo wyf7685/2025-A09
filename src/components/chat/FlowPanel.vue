@@ -163,7 +163,15 @@ const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
 };
 
 const clearFlowSteps = () => {
+  // 清空流程步骤历史记录
   flowSteps.value = [];
+
+  // 重置所有路线的步骤状态为待处理
+  resetAllSteps();
+
+  // 添加日志
+  console.log('[流程图] 已重置所有流程步骤状态');
+  logRouteStatus('流程图已重置，准备处理新对话');
 };
 
 // 模型配置方法
@@ -292,9 +300,21 @@ const handleRouteChange = (route: string) => {
 const resetAllSteps = () => {
   route1Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
+    // 清除工具名称
+    if (step.toolName) {
+      step.toolName = '';
+    }
   });
   route2Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
+    // 清除工具名称
+    if (step.toolName) {
+      step.toolName = '';
+    }
+    // 重置循环
+    if (step.nextLoop) {
+      step.nextLoop = [];
+    }
   });
 };
 
@@ -322,7 +342,16 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
     console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${route2Steps.value[stepIndex].status}`);
     // 如果是“是否进行循环”节点且需要循环，追加新节点
     if (route2Steps.value[stepIndex].title === '是否进行循环' && status === 'completed') {
-      // 只追加一次循环节点，且工具名与左侧对话栏一致
+      // 检查状态消息，判断是否需要进行循环
+      const needLoop = currentStatusMessage.value.includes('需要循环') ||
+                       currentStatusMessage.value.includes('循环：是') ||
+                       currentStatusMessage.value.includes('继续执行下一个工具');
+
+      console.log(`[流程图] 是否循环判断: ${needLoop}`, currentStatusMessage.value);
+
+      // 只有当确定需要循环时才添加循环节点
+      if (needLoop) {
+        // 只追加一次循环节点，且工具名与左侧对话栏一致
       if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
         let toolName = route2Steps.value[3]?.toolName;
 
@@ -331,12 +360,17 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
           route2Steps.value[3].status = 'completed';
         }
         // 追加新的循环节点，反映工具运行状况（只有新节点显示 active）
+        // 将工具名称分开显示，找到下一个要执行的工具
+        const toolsList = toolName ? toolName.split(', ') : [];
+        // 这里用单个工具名来表示当前或下一个要执行的工具
+        const nextTool = toolsList.length > 0 ? toolsList[toolsList.length - 1] : toolName;
+
         route2Steps.value[stepIndex].nextLoop = [
           {
             title: '调用执行工具',
-            description: `执行相应的数据处理工具（循环）：${toolName}`,
+            description: `执行相应的数据处理工具（循环）：${nextTool}`,
             status: 'active',
-            toolName: toolName
+            toolName: nextTool
           }
         ];
       } else {
@@ -344,6 +378,10 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
         if (route2Steps.value[3] && route2Steps.value[3].status === 'active') {
           route2Steps.value[3].status = 'completed';
         }
+      }
+      } else {
+        // 不需要循环，确保 nextLoop 为空数组
+        route2Steps.value[stepIndex].nextLoop = [];
       }
     }
 
@@ -370,8 +408,14 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
   logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`);
 };
 
+// 当前状态消息，用于判断是否需要循环
+const currentStatusMessage = ref('');
+
 // 调试函数：监控流程图状态
 const logRouteStatus = (message: string) => {
+  // 保存最新的状态消息
+  currentStatusMessage.value = message;
+
   console.log(`[流程图调试] ${message}`);
   console.log('当前路线:', selectedRoute.value);
   if (selectedRoute.value === 'route1') {

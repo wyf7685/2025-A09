@@ -1,0 +1,28 @@
+// 这是一个包含精确文本的文件，用于检测格式差异
+    console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${route2Steps.value[stepIndex].status}`);
+    // 如果是"是否进行循环"节点且需要循环，追加新节点
+    if (route2Steps.value[stepIndex].title === '是否进行循环' && status === 'completed') {
+      // 只追加一次循环节点，且工具名与左侧对话栏一致
+      if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
+        let toolName = route2Steps.value[3]?.toolName;
+
+        // 旧的调用执行工具节点直接设为 completed
+        if (route2Steps.value[3]) {
+          route2Steps.value[3].status = 'completed';
+        }
+        // 追加新的循环节点，反映工具运行状况（只有新节点显示 active）
+        route2Steps.value[stepIndex].nextLoop = [
+          {
+            title: '调用执行工具',
+            description: `执行相应的数据处理工具（循环）：${toolName}`,
+            status: 'active',
+            toolName: toolName
+          }
+        ];
+      } else {
+        // 如果已存在循环节点，确保旧节点不是 active
+        if (route2Steps.value[3] && route2Steps.value[3].status === 'active') {
+          route2Steps.value[3].status = 'completed';
+        }
+      }
+    }
