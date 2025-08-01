@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AnyMCPConnection, MCPConnection } from '@/types/mcp';
+import type { AnyMCPConnection, MCPConnection, MCPConnectionTransport } from '@/types/mcp';
 import {
   ChatDotRound,
   Connection,
@@ -43,7 +43,7 @@ const argInputRef = ref();
 const formData = reactive({
   name: '',
   description: '',
-  transport: 'sse' as 'stdio' | 'sse' | 'streamable_http' | 'websocket',
+  transport: 'sse' as MCPConnectionTransport,
 
   // Stdio 字段
   command: '',

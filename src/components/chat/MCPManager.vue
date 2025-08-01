@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
-import type { MCPConnection } from '@/types/mcp';
+import type { MCPConnection, MCPConnectionTransport } from '@/types/mcp';
 import {
   Connection,
   Delete,
@@ -9,7 +9,7 @@ import {
   Plus,
   Search
 } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElBadge, ElButton, ElCheckbox, ElDialog, ElIcon, ElInput, ElMessage, ElTag } from 'element-plus';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -45,27 +45,21 @@ const filteredAvailableConnections = computed(() => {
   return connections;
 });
 
-// 获取传输类型标签样式
-const getTransportTagType = (transport: string) => {
-  const typeMap: Record<string, string> = {
-    stdio: 'primary',
-    sse: 'success',
-    streamable_http: 'warning',
-    websocket: 'info'
-  };
-  return typeMap[transport] || 'default';
-};
+// 传输类型标签样式
+const transportTagTypeMap = {
+  stdio: 'primary',
+  sse: 'success',
+  streamable_http: 'warning',
+  websocket: 'info'
+} as const;
 
-// 获取传输类型显示标签
-const getTransportLabel = (transport: string) => {
-  const labelMap: Record<string, string> = {
-    stdio: 'Stdio',
-    sse: 'SSE',
-    streamable_http: 'HTTP',
-    websocket: 'WebSocket'
-  };
-  return labelMap[transport] || transport;
-};
+// 传输类型显示标签
+const transportLabelMap = {
+  stdio: 'Stdio',
+  sse: 'SSE',
+  streamable_http: 'HTTP',
+  websocket: 'WebSocket'
+} as const;
 
 // 切换连接选择
 const toggleConnection = (connectionId: string) => {
@@ -176,11 +170,6 @@ onMounted(async () => {
     await loadSessionMCPConnections();
   }
 });
-
-// 暴露方法给父组件
-defineExpose({
-  refreshConnections: loadSessionMCPConnections
-});
 </script>
 
 <template>
@@ -206,17 +195,22 @@ defineExpose({
       </div>
     </div>
 
+    <!-- 空状态 -->
+    <div v-if="!sessionMCPConnections.length" class="empty-state">
+      <el-icon>
+        <Connection />
+      </el-icon>
+      <span>暂无 MCP 连接</span>
+    </div>
+
     <!-- 当前会话的MCP连接列表 -->
-    <div class="mcp-list" v-if="sessionMCPConnections.length > 0">
-      <div
-        v-for="connection in sessionMCPConnections"
-        :key="connection.id"
-        class="mcp-item">
+    <div class="mcp-list" v-else>
+      <div v-for="connection in sessionMCPConnections" :key="connection.id" class="mcp-item">
         <div class="mcp-info">
           <div class="mcp-name">{{ connection.name }}</div>
           <div class="mcp-type">
-            <el-tag :type="getTransportTagType(connection.connection.transport)" size="small">
-              {{ getTransportLabel(connection.connection.transport) }}
+            <el-tag :type="transportTagTypeMap[connection.connection.transport]" size="small">
+              {{ transportLabelMap[connection.connection.transport] }}
             </el-tag>
           </div>
         </div>
@@ -229,22 +223,6 @@ defineExpose({
             :loading="removing === connection.id" />
         </div>
       </div>
-    </div>
-
-    <!-- 空状态 -->
-    <div v-else class="empty-state">
-      <el-icon>
-        <Connection />
-      </el-icon>
-      <span>暂无 MCP 连接</span>
-      <el-button
-        v-if="currentSessionId"
-        size="small"
-        type="primary"
-        text
-        @click="showMCPSelector = true">
-        立即添加
-      </el-button>
     </div>
 
     <!-- MCP选择对话框 -->
@@ -274,8 +252,8 @@ defineExpose({
               <div class="connection-description" v-if="connection.description">
                 {{ connection.description }}
               </div>
-              <el-tag :type="getTransportTagType(connection.connection.transport)" size="small">
-                {{ getTransportLabel(connection.connection.transport) }}
+              <el-tag :type="transportTagTypeMap[connection.connection.transport]" size="small">
+                {{ transportLabelMap[connection.connection.transport] }}
               </el-tag>
             </div>
             <div class="connection-checkbox">
@@ -336,7 +314,7 @@ defineExpose({
 }
 
 .title {
-  font-weight: 600;
+  font-weight: 450;
   color: var(--el-text-color-primary);
 }
 
@@ -358,7 +336,10 @@ defineExpose({
 }
 
 .mcp-info {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: 8px;
 }
 
 .mcp-name {
@@ -368,7 +349,7 @@ defineExpose({
 }
 
 .mcp-type {
-  margin-top: 4px;
+  margin-left: 4px;
 }
 
 .empty-state {

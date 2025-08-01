@@ -20,7 +20,6 @@ const sessionStore = useSessionStore();
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
 const isDeletingSession = ref<boolean>(false); // 防止重复删除操作
-const mcpManagerRef = ref<InstanceType<typeof MCPManager>>();
 
 // 处理侧边栏关闭
 const closeSidebar = () => {
@@ -58,11 +57,6 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
     isDeletingSession.value = false;
   }
 };
-
-// 暴露MCP管理器的引用给父组件
-defineExpose({
-  mcpManager: mcpManagerRef
-});
 </script>
 
 <template>
@@ -92,9 +86,7 @@ defineExpose({
 
     <!-- MCP 管理器 -->
     <div class="mcp-section" v-if="currentSessionId">
-      <MCPManager
-        v-model:sessionMCPConnections="sessionMCPConnections"
-        ref="mcpManagerRef" />
+      <MCPManager v-model:sessionMCPConnections="sessionMCPConnections" />
     </div>
   </div>
 </template>

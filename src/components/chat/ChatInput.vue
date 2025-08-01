@@ -108,10 +108,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
           </el-icon>
           <template v-if="mcpConnections?.length">
             MCP 连接:
-            <strong v-if="mcpConnections.length === 1">
-              {{ turncateString(mcpConnections[0].name, 12) }}
-            </strong>
-            <strong v-else>
+            <strong>
               {{ mcpConnections.length }} 个
             </strong>
             <div class="mcp-tags" v-if="mcpConnections.length > 0">

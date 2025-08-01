@@ -51,6 +51,8 @@ interface WebsocketConnection {
   url: string;
 }
 
+export type MCPConnectionTransport = 'stdio' | 'sse' | 'streamable_http' | 'websocket';
+
 export type AnyMCPConnection =
   | StdioConnection
   | SSEConnection

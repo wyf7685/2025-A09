@@ -28,7 +28,6 @@ const selectDatasetDialogVisible = ref<boolean>(false);
 const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
-const sessionSidebarRef = ref<InstanceType<typeof SessionSidebar>>();
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -132,11 +131,6 @@ const createNewSession = async (sourceIds: string[]) => {
     sessionStore.setCurrentSession(session);
     await refreshChatHistory();
 
-    // 刷新MCP连接
-    if (sessionSidebarRef.value?.mcpManager) {
-      await sessionSidebarRef.value.mcpManager.refreshConnections();
-    }
-
     // 加载当前会话的MCP连接
     await loadCurrentMCPConnections();
 
@@ -163,11 +157,6 @@ const switchSession = async (sessionId: string) => {
   await sessionStore.setCurrentSessionById(sessionId);
   const session = sessions.value.find(s => s.id === sessionId);
   await refreshChatHistory();
-
-  // 刷新MCP连接
-  if (sessionSidebarRef.value?.mcpManager) {
-    await sessionSidebarRef.value.mcpManager.refreshConnections();
-  }
 
   // 加载当前会话的MCP连接
   await loadCurrentMCPConnections();
@@ -265,8 +254,7 @@ onMounted(async () => {
       @switch-session="switchSession"
       @create-session="selectDatasetDialogVisible = true"
       @edit-session="openEditSessionDialog"
-      @delete-session="deleteSession"
-      ref="sessionSidebarRef" />
+      @delete-session="deleteSession" />
 
     <!-- Chat Panel -->
     <div class="chat-panel">
