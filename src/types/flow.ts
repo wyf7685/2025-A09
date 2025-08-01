@@ -15,6 +15,8 @@ export interface FlowRoute {
   title: string;
   description: string;
   status: 'pending' | 'active' | 'completed' | 'error';
+  nextLoop?: FlowRoute[];
+  toolName?: string;
 }
 
 export interface FlowPanel {
