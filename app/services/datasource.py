@@ -129,7 +129,6 @@ class DataSourceService:
         self.sources.pop(source_id, None)
 
     async def sync_from_dremio(self) -> None:
-        return  # XXX: TEMP
         dss = await _fetch_dremio_source()
 
         current_ds = {

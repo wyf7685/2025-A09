@@ -1,7 +1,7 @@
 import contextlib
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
-from typing import Any
+from typing import cast
 
 import anyio
 from anyio.abc import TaskGroup
@@ -9,13 +9,13 @@ from anyio.abc import TaskGroup
 from app.log import logger
 from app.utils import is_coroutine_callable, run_sync
 
-type SYNC_LIFESPAN_FUNC = Callable[[], Any]
-type ASYNC_LIFESPAN_FUNC = Callable[[], Awaitable[Any]]
+type SYNC_LIFESPAN_FUNC = Callable[[], object]
+type ASYNC_LIFESPAN_FUNC = Callable[[], Awaitable[object]]
 type LIFESPAN_FUNC = SYNC_LIFESPAN_FUNC | ASYNC_LIFESPAN_FUNC
 
 
 def _ensure_async(func: LIFESPAN_FUNC) -> ASYNC_LIFESPAN_FUNC:
-    return func if is_coroutine_callable(func) else run_sync(func)
+    return cast("ASYNC_LIFESPAN_FUNC", func) if is_coroutine_callable(func) else run_sync(func)
 
 
 class Lifespan:
@@ -51,7 +51,7 @@ class Lifespan:
         return func
 
     async def _run_lifespan_func(self, funcs: Iterable[ASYNC_LIFESPAN_FUNC]) -> None:
-        async with self.task_group as tg:
+        async with anyio.create_task_group() as tg:
             for func in funcs:
                 tg.start_soon(func)
 
