@@ -125,7 +125,7 @@ class DataAnalyzerAgent:
                 await self._lifespan.shutdown()
             self._lifespan = None
 
-        self._lifespan = Lifespan()
+        self._lifespan = Lifespan(f"Agent<white>[<c>{escape_tag(self.session_id)}</>]</>")
         await self._lifespan.startup()
 
         # Builtin Tools

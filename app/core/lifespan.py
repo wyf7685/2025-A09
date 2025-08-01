@@ -19,7 +19,8 @@ def _ensure_async(func: LIFESPAN_FUNC) -> ASYNC_LIFESPAN_FUNC:
 
 
 class Lifespan:
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
+        self._name = name
         self._task_group: TaskGroup | None = None
 
         self._startup_funcs: list[ASYNC_LIFESPAN_FUNC] = []
@@ -55,23 +56,26 @@ class Lifespan:
             for func in funcs:
                 tg.start_soon(func)
 
+    def _log(self, msg: str, /) -> None:
+        logger.opt(colors=True).debug(f"<m>{self._name}</> | {msg}")
+
     async def startup(self) -> None:
         # create background task group
-        logger.debug("Lifespan startup...")
+        self._log("生命周期启动中...")
         self.task_group = anyio.create_task_group()
         await self.task_group.__aenter__()
 
         # run startup funcs
         if self._startup_funcs:
-            logger.debug("Running startup functions")
+            self._log("执行生命周期函数: <y>startup</>")
             await self._run_lifespan_func(self._startup_funcs)
 
         # run ready funcs
         if self._ready_funcs:
-            logger.debug("Running ready functions")
+            self._log("执行生命周期函数: <y>ready</>")
             await self._run_lifespan_func(self._ready_funcs)
 
-        logger.debug("Lifespan startup complete")
+        self._log("生命周期启动完成")
 
     async def shutdown(
         self,
@@ -81,18 +85,16 @@ class Lifespan:
         exc_tb: TracebackType | None = None,
     ) -> None:
         if self._shutdown_funcs:
-            logger.debug("Running shutdown functions")
+            self._log("执行生命周期函数: <y>shutdown</>")
             await self._run_lifespan_func(reversed(self._shutdown_funcs))
 
         # shutdown background task group
-        logger.debug("Shutting down task group")
+        self._log("正在关闭任务组")
         self.task_group.cancel_scope.cancel()
-
-        logger.debug("Waiting for task group to finish")
         with contextlib.suppress(Exception):
             await self.task_group.__aexit__(exc_type, exc_val, exc_tb)
 
-        logger.debug("Lifespan shutdown complete")
+        self._log("生命周期关闭完成")
         self._task_group = None
 
     async def __aenter__(self, *_: object) -> None:
@@ -116,4 +118,4 @@ class Lifespan:
 
 
 # Global lifespan instance, used by FastAPI application
-lifespan = Lifespan()
+lifespan = Lifespan("Application")
