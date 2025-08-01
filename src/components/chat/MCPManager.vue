@@ -1,3 +1,188 @@
+<script setup lang="ts">
+import { useMCPStore } from '@/stores/mcp';
+import { useSessionStore } from '@/stores/session';
+import type { MCPConnection } from '@/types/mcp';
+import {
+  Connection,
+  Delete,
+  Link,
+  Plus,
+  Search
+} from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+
+const sessionMCPConnections = defineModel<MCPConnection[]>('sessionMCPConnections', { required: true });
+
+// Stores
+const mcpStore = useMCPStore();
+const sessionStore = useSessionStore();
+const router = useRouter();
+
+// 响应式数据
+const showMCPSelector = ref(false);
+const searchQuery = ref('');
+const selectedConnections = ref<string[]>([]);
+const adding = ref(false);
+const removing = ref<string | null>(null);
+
+// 计算属性
+const currentSessionId = computed(() => sessionStore.currentSessionId);
+const filteredAvailableConnections = computed(() => {
+  let connections = mcpStore.allConnections;
+
+  // 过滤已添加到当前会话的连接
+  const sessionMCPIds = sessionMCPConnections.value.map(c => c.id);
+  connections = connections.filter(c => !sessionMCPIds.includes(c.id));
+
+  // 搜索过滤
+  if (searchQuery.value) {
+    connections = mcpStore.searchConnections(searchQuery.value)
+      .filter(c => !sessionMCPIds.includes(c.id));
+  }
+
+  return connections;
+});
+
+// 获取传输类型标签样式
+const getTransportTagType = (transport: string) => {
+  const typeMap: Record<string, string> = {
+    stdio: 'primary',
+    sse: 'success',
+    streamable_http: 'warning',
+    websocket: 'info'
+  };
+  return typeMap[transport] || 'default';
+};
+
+// 获取传输类型显示标签
+const getTransportLabel = (transport: string) => {
+  const labelMap: Record<string, string> = {
+    stdio: 'Stdio',
+    sse: 'SSE',
+    streamable_http: 'HTTP',
+    websocket: 'WebSocket'
+  };
+  return labelMap[transport] || transport;
+};
+
+// 切换连接选择
+const toggleConnection = (connectionId: string) => {
+  const index = selectedConnections.value.indexOf(connectionId);
+  if (index > -1) {
+    selectedConnections.value.splice(index, 1);
+  } else {
+    selectedConnections.value.push(connectionId);
+  }
+};
+
+// 添加选中的连接到会话
+const addSelectedConnections = async () => {
+  if (!currentSessionId.value || selectedConnections.value.length === 0) return;
+
+  try {
+    adding.value = true;
+
+    await mcpStore.addConnectionsToSession(
+      currentSessionId.value,
+      selectedConnections.value
+    );
+
+    // 刷新会话的MCP连接
+    await loadSessionMCPConnections();
+
+    ElMessage.success(`成功添加 ${selectedConnections.value.length} 个 MCP 连接`);
+
+    // 重置选择
+    selectedConnections.value = [];
+    showMCPSelector.value = false;
+  } catch (error) {
+    console.error('添加 MCP 连接失败:', error);
+  } finally {
+    adding.value = false;
+  }
+};
+
+// 从会话移除MCP连接
+const removeMCPFromSession = async (connectionId: string) => {
+  if (!currentSessionId.value) return;
+
+  try {
+    removing.value = connectionId;
+
+    await mcpStore.removeConnectionsFromSession(
+      currentSessionId.value,
+      [connectionId]
+    );
+
+    // 刷新会话的MCP连接
+    await loadSessionMCPConnections();
+
+    ElMessage.success('MCP 连接已移除');
+  } catch (error) {
+    console.error('移除 MCP 连接失败:', error);
+  } finally {
+    removing.value = null;
+  }
+};
+
+// 加载会话的MCP连接
+const loadSessionMCPConnections = async () => {
+  if (!currentSessionId.value) {
+    sessionMCPConnections.value = [];
+    return;
+  }
+
+  try {
+    const connections = await mcpStore.getSessionConnections(currentSessionId.value);
+    sessionMCPConnections.value = connections;
+  } catch (error) {
+    console.error('加载会话 MCP 连接失败:', error);
+    sessionMCPConnections.value = [];
+  }
+};
+
+// 前往MCP管理页面
+const goToMCPManagement = () => {
+  showMCPSelector.value = false;
+  router.push('/mcp-connections');
+};
+
+// 监听当前会话变化
+watch(
+  () => currentSessionId.value,
+  (newSessionId) => {
+    if (newSessionId) {
+      loadSessionMCPConnections();
+    } else {
+      sessionMCPConnections.value = [];
+    }
+  },
+  { immediate: true }
+);
+
+// 生命周期
+onMounted(async () => {
+  // 加载所有MCP连接
+  try {
+    await mcpStore.listConnections();
+  } catch (error) {
+    console.error('加载 MCP 连接失败:', error);
+  }
+
+  // 加载当前会话的MCP连接
+  if (currentSessionId.value) {
+    await loadSessionMCPConnections();
+  }
+});
+
+// 暴露方法给父组件
+defineExpose({
+  refreshConnections: loadSessionMCPConnections
+});
+</script>
+
 <template>
   <div class="mcp-manager">
     <!-- MCP管理头部 -->
@@ -128,196 +313,6 @@
     </el-dialog>
   </div>
 </template>
-
-<script setup lang="ts">
-import { useMCPStore } from '@/stores/mcp';
-import { useSessionStore } from '@/stores/session';
-import type { MCPConnection } from '@/types/mcp';
-import {
-  Connection,
-  Delete,
-  Link,
-  Plus,
-  Search
-} from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
-
-// Props
-interface Props {
-  currentSessionId?: string;
-}
-
-const props = defineProps<Props>();
-
-// Stores
-const mcpStore = useMCPStore();
-const sessionStore = useSessionStore();
-const router = useRouter();
-
-// 响应式数据
-const showMCPSelector = ref(false);
-const searchQuery = ref('');
-const selectedConnections = ref<string[]>([]);
-const sessionMCPConnections = ref<MCPConnection[]>([]);
-const adding = ref(false);
-const removing = ref<string | null>(null);
-
-// 计算属性
-const filteredAvailableConnections = computed(() => {
-  let connections = mcpStore.allConnections;
-
-  // 过滤已添加到当前会话的连接
-  const sessionMCPIds = sessionMCPConnections.value.map(c => c.id);
-  connections = connections.filter(c => !sessionMCPIds.includes(c.id));
-
-  // 搜索过滤
-  if (searchQuery.value) {
-    connections = mcpStore.searchConnections(searchQuery.value)
-      .filter(c => !sessionMCPIds.includes(c.id));
-  }
-
-  return connections;
-});
-
-// 获取传输类型标签样式
-const getTransportTagType = (transport: string) => {
-  const typeMap: Record<string, string> = {
-    stdio: 'primary',
-    sse: 'success',
-    streamable_http: 'warning',
-    websocket: 'info'
-  };
-  return typeMap[transport] || 'default';
-};
-
-// 获取传输类型显示标签
-const getTransportLabel = (transport: string) => {
-  const labelMap: Record<string, string> = {
-    stdio: 'Stdio',
-    sse: 'SSE',
-    streamable_http: 'HTTP',
-    websocket: 'WebSocket'
-  };
-  return labelMap[transport] || transport;
-};
-
-// 切换连接选择
-const toggleConnection = (connectionId: string) => {
-  const index = selectedConnections.value.indexOf(connectionId);
-  if (index > -1) {
-    selectedConnections.value.splice(index, 1);
-  } else {
-    selectedConnections.value.push(connectionId);
-  }
-};
-
-// 添加选中的连接到会话
-const addSelectedConnections = async () => {
-  if (!props.currentSessionId || selectedConnections.value.length === 0) return;
-
-  try {
-    adding.value = true;
-
-    await mcpStore.addConnectionsToSession(
-      props.currentSessionId,
-      selectedConnections.value
-    );
-
-    // 刷新会话的MCP连接
-    await loadSessionMCPConnections();
-
-    // 重置选择
-    selectedConnections.value = [];
-    showMCPSelector.value = false;
-
-    ElMessage.success(`成功添加 ${selectedConnections.value.length} 个 MCP 连接`);
-  } catch (error) {
-    console.error('添加 MCP 连接失败:', error);
-  } finally {
-    adding.value = false;
-  }
-};
-
-// 从会话移除MCP连接
-const removeMCPFromSession = async (connectionId: string) => {
-  if (!props.currentSessionId) return;
-
-  try {
-    removing.value = connectionId;
-
-    await mcpStore.removeConnectionsFromSession(
-      props.currentSessionId,
-      [connectionId]
-    );
-
-    // 刷新会话的MCP连接
-    await loadSessionMCPConnections();
-
-    ElMessage.success('MCP 连接已移除');
-  } catch (error) {
-    console.error('移除 MCP 连接失败:', error);
-  } finally {
-    removing.value = null;
-  }
-};
-
-// 加载会话的MCP连接
-const loadSessionMCPConnections = async () => {
-  if (!props.currentSessionId) {
-    sessionMCPConnections.value = [];
-    return;
-  }
-
-  try {
-    const connections = await mcpStore.getSessionConnections(props.currentSessionId);
-    sessionMCPConnections.value = connections;
-  } catch (error) {
-    console.error('加载会话 MCP 连接失败:', error);
-    sessionMCPConnections.value = [];
-  }
-};
-
-// 前往MCP管理页面
-const goToMCPManagement = () => {
-  showMCPSelector.value = false;
-  router.push('/mcp-connections');
-};
-
-// 监听当前会话变化
-watch(
-  () => props.currentSessionId,
-  (newSessionId) => {
-    if (newSessionId) {
-      loadSessionMCPConnections();
-    } else {
-      sessionMCPConnections.value = [];
-    }
-  },
-  { immediate: true }
-);
-
-// 生命周期
-onMounted(async () => {
-  // 加载所有MCP连接
-  try {
-    await mcpStore.listConnections();
-  } catch (error) {
-    console.error('加载 MCP 连接失败:', error);
-  }
-
-  // 加载当前会话的MCP连接
-  if (props.currentSessionId) {
-    await loadSessionMCPConnections();
-  }
-});
-
-// 暴露方法给父组件
-defineExpose({
-  refreshConnections: loadSessionMCPConnections
-});
-</script>
 
 <style scoped>
 .mcp-manager {

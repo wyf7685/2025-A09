@@ -10,6 +10,7 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
+import type { MCPConnection } from '@/types';
 import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
@@ -39,7 +40,7 @@ const currentDatasets = computed(() =>
 );
 
 // 当前会话的MCP连接
-const currentMCPConnections = ref<any[]>([]);
+const currentMCPConnections = ref<MCPConnection[]>([]);
 
 // 加载当前会话的MCP连接
 const loadCurrentMCPConnections = async () => {
@@ -260,7 +261,7 @@ onMounted(async () => {
 
     <!-- Session Sidebar -->
     <SessionSidebar v-model:isSidebarOpen="isSidebarOpen"
-      :currentSessionId="currentSessionId"
+      v-model:sessionMCPConnections="currentMCPConnections"
       @switch-session="switchSession"
       @create-session="selectDatasetDialogVisible = true"
       @edit-session="openEditSessionDialog"

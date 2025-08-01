@@ -103,7 +103,6 @@ export const useMCPStore = defineStore('mcp', () => {
       const response = await api.post<Session>(`/sessions/${sessionId}/mcp`, {
         mcp_ids: mcpIds,
       });
-      ElMessage.success('MCP连接已添加到会话');
       return response.data;
     },
   );
@@ -115,7 +114,6 @@ export const useMCPStore = defineStore('mcp', () => {
       const response = await api.delete<Session>(`/sessions/${sessionId}/mcp`, {
         data: { mcp_ids: mcpIds },
       });
-      ElMessage.success('MCP连接已从会话移除');
       return response.data;
     },
   );

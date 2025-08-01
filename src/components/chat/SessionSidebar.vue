@@ -4,12 +4,10 @@ import { ChatDotRound, DArrowLeft, Delete, Edit, Plus } from '@element-plus/icon
 import { ElButton, ElIcon } from 'element-plus';
 import { computed, ref } from 'vue';
 import MCPManager from './MCPManager.vue';
-
-defineProps<{
-  currentSessionId: string | undefined;
-}>();
+import type { MCPConnection } from '@/types/mcp';
 
 const isSidebarOpen = defineModel<boolean>('isSidebarOpen', { required: true });
+const sessionMCPConnections = defineModel<MCPConnection[]>('sessionMCPConnections', { required: true });
 
 const emit = defineEmits<{
   'switch-session': [sessionId: string];                    // 切换会话
@@ -20,6 +18,7 @@ const emit = defineEmits<{
 
 const sessionStore = useSessionStore();
 const sessions = computed(() => sessionStore.sessions);
+const currentSessionId = computed(() => sessionStore.currentSessionId);
 const isDeletingSession = ref<boolean>(false); // 防止重复删除操作
 const mcpManagerRef = ref<InstanceType<typeof MCPManager>>();
 
@@ -94,7 +93,7 @@ defineExpose({
     <!-- MCP 管理器 -->
     <div class="mcp-section" v-if="currentSessionId">
       <MCPManager
-        :current-session-id="currentSessionId"
+        v-model:sessionMCPConnections="sessionMCPConnections"
         ref="mcpManagerRef" />
     </div>
   </div>
