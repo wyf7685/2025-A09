@@ -48,7 +48,7 @@ const extractSuggestions = (content: string): string[] => {
   for (const line of lines) {
     if (/^\d+\.\s+/.test(line)) {
       inList = true;
-      suggestions.push(line.replace(/^\d+\.\s+/, '').trim());
+      suggestions.push(line.replace(/^\d+\.\s+/, '').replace('\\_', '_').trim());
     } else if (inList && !line.trim()) {
       // 有序列表后遇到空行则停止
       break;

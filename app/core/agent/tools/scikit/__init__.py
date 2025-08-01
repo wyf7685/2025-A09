@@ -632,8 +632,14 @@ def scikit_tools(
             dataset_id (str): 操作的数据集ID。
             features: 特征列名列表
             target: 目标变量列名
-            model_type: 模型类型，与optimize_hyperparameters_tool相同
-            task_type: 任务类型，"regression"、"classification"或"auto"
+            model_type: 模型类型，可选:
+                    - "random_forest" (默认): 随机森林
+                    - "decision_tree": 决策树
+                    - "svm": 支持向量机
+                    - "logistic_regression": 逻辑回归(仅分类)
+                    - "ridge": 岭回归(仅回归)
+                    - "lasso": Lasso回归(仅回归)
+            task_type: 任务类型，"regression"、"classification"或"auto"(默认，自动检测)
             cv_folds: 交叉验证折数
             scoring: 评分指标
             hyperparams: 模型超参数字典，为None时使用默认参数

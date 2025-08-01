@@ -530,7 +530,13 @@ def plot_learning_curve(
         df: 输入数据框
         features: 特征列名列表
         target: 目标变量列名
-        model_type: 模型类型，同optimize_hyperparameters函数
+        model_type: 模型类型，可选:
+                   - "random_forest" (默认): 随机森林
+                   - "decision_tree": 决策树
+                   - "svm": 支持向量机
+                   - "logistic_regression": 逻辑回归(仅分类)
+                   - "ridge": 岭回归(仅回归)
+                   - "lasso": Lasso回归(仅回归)
         task_type: 任务类型，"regression"、"classification"或"auto"
         cv_folds: 交叉验证折数
         scoring: 评分指标
