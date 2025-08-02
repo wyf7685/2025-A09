@@ -404,7 +404,7 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
         # TODO: 考虑其他删除方式
         for session in list(session_service.sessions.values()):
             if source_id in session.dataset_ids:
-                await session_service.delete_session(session.id)
+                await session_service.delete(session.id)
 
         return {"success": True, "message": f"Datasource {source_id} deleted"}
 

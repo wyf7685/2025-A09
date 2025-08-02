@@ -17,7 +17,7 @@ import docker
 import docker.errors
 from app.core.datasource import DataSource
 from app.log import logger
-from app.utils import run_sync
+from app.utils import escape_tag, run_sync
 
 
 class ExecuteResult(TypedDict):
@@ -151,7 +151,7 @@ class CodeExecutor:
         self.data_source.get_full().to_csv(self.temp_dir / "data.csv", index=False)
 
         try:
-            # 创建并启动容器，但不执行任何命令
+            # 创建并启动容器
             self.container = self.client.containers.run(
                 self.image,
                 command=["python", "/executor.py"],
@@ -163,23 +163,24 @@ class CodeExecutor:
                 working_dir="/data",
                 remove=True,
             )
-            # 等待容器完全启动
-            time.sleep(1)
-            logger.info(f"已启动Docker容器: {self.container.id}")
+            logger.opt(colors=True).info(f"已启动Docker容器: <c>{self.container.id}</>")
+            logger.opt(colors=True).info(f"临时目录: <y><u>{escape_tag(self.temp_dir)}</></>")
         except Exception as e:
             raise RuntimeError(f"启动Docker容器失败: {e}") from e
 
     def stop(self) -> None:
         """停止并移除Docker容器"""
         if self.container:
-            logger.info(f"停止Docker容器: {self.container.id}")
+            id = self.container.id
+            logger.opt(colors=True).info(f"停止Docker容器: <c>{id}</>")
             try:
                 self.container.stop(timeout=1)
                 self.container = None
             except docker.errors.DockerException:
-                logger.exception("停止Docker容器时出错")
+                logger.opt(colors=True).exception(f"停止Docker容器 <c>{id}</> 时出错")
+
         if self.temp_dir.exists():
-            logger.info(f"清理临时目录: {self.temp_dir}")
+            logger.opt(colors=True).info(f"清理临时目录: <y><u>{escape_tag(self.temp_dir)}</></>")
             shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     astop = run_sync(stop)

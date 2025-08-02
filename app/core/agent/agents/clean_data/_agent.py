@@ -135,9 +135,10 @@ class SmartCleanDataAgent:
             logger.error(f"处理和清洗文件失败: {err}")
             return OperationFailedModel.from_err(err)
 
-    @run_sync
-    def process_file(
-        self, file_path: Path, user_requirements: str | None = None
+    async def process_file(
+        self,
+        file_path: Path,
+        user_requirements: str | None = None,
     ) -> ProcessFileResult | OperationFailedModel:
         """处理数据文件的主要入口"""
         # 初始化状态
@@ -157,7 +158,7 @@ class SmartCleanDataAgent:
         try:
             # 执行工作流
             config = ensure_config({"configurable": {"thread_id": threading.get_ident()}})
-            result = cast("CleaningState", self._graph.invoke(initial_state, config))
+            result = cast("CleaningState", await self._graph.ainvoke(initial_state, config))
 
             # 构建返回结果
             if error_message := result.get("error_message"):
@@ -165,7 +166,7 @@ class SmartCleanDataAgent:
 
             # 构建质量报告
             source = load_source(result, "source_id")
-            df = source.get_full()
+            df = await run_sync(source.get_full)()
             quality_report = DataQualityReport(
                 overall_score=calculate_quality_score(result["quality_issues"]),
                 total_rows=len(df),

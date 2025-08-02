@@ -38,7 +38,7 @@ async def create_session(request: CreateSessionRequest) -> Session:
             if not await datasource_service.source_exists(dataset_id):
                 raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
-        return await session_service.create_session(request.dataset_ids)
+        return await session_service.create(request.dataset_ids)
 
     except HTTPException:
         raise
@@ -59,10 +59,10 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
     目前支持更新会话名称
     """
     try:
-        if not await session_service.session_exists(session_id):
+        if not await session_service.exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = await session_service.get_session(session_id)
+        session = await session_service.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -81,7 +81,7 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
 @router.get("/{session_id}")
 async def get_session(session_id: SessionID) -> Session:
     """获取会话信息"""
-    if session := await session_service.get_session(session_id):
+    if session := await session_service.get(session_id):
         return session_service.tool_name_repr(session)
 
     raise HTTPException(status_code=404, detail="Session not found")
@@ -91,7 +91,7 @@ async def get_session(session_id: SessionID) -> Session:
 async def get_sessions() -> list[SessionListItem]:
     """获取所有会话列表"""
     try:
-        return sorted(session_service.list_sessions(), key=lambda x: x.created_at, reverse=True)
+        return sorted(session_service.list_all(), key=lambda x: x.created_at, reverse=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {e}") from e
 
@@ -100,10 +100,10 @@ async def get_sessions() -> list[SessionListItem]:
 async def delete_session(session_id: SessionID) -> dict[str, Any]:
     """删除会话"""
     try:
-        if not await session_service.session_exists(session_id):
+        if not await session_service.exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        await session_service.delete_session(session_id)
+        await session_service.delete(session_id)
         return {"success": True, "message": f"Session {session_id} deleted"}
     except KeyError as e:
         logger.warning(f"删除会话时出现错误: {e}")
@@ -126,10 +126,10 @@ async def add_mcp_to_session(session_id: SessionID, request: AddMCPToSessionRequ
     """
     try:
         # 检查会话是否存在
-        if not await session_service.session_exists(session_id):
+        if not await session_service.exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = await session_service.get_session(session_id)
+        session = await session_service.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -179,10 +179,10 @@ async def remove_mcp_from_session(session_id: SessionID, request: RemoveMCPFromS
     """
     try:
         # 检查会话是否存在
-        if not await session_service.session_exists(session_id):
+        if not await session_service.exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = await session_service.get_session(session_id)
+        session = await session_service.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -214,10 +214,10 @@ async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnecti
     """
     try:
         # 检查会话是否存在
-        if not await session_service.session_exists(session_id):
+        if not await session_service.exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = await session_service.get_session(session_id)
+        session = await session_service.get(session_id)
         if not session or not session.mcp_ids:
             return []
 

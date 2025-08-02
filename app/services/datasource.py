@@ -57,7 +57,7 @@ class DataSourceService:
         @lifespan.on_startup
         async def _() -> None:
             await self._load_sources()
-            lifespan.task_group.start_soon(_sync)
+            lifespan.start_soon(_sync)
 
         lifespan.on_shutdown(self._save_sources)
 

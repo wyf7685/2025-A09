@@ -20,27 +20,27 @@ class SessionService:
         lifespan.on_startup(self._load_sessions)
         lifespan.on_shutdown(self._save_sessions)
 
-    async def session_exists(self, session_id: SessionID) -> bool:
+    async def exists(self, session_id: SessionID) -> bool:
         if session_id in self.sessions:
             return True
         try:
-            await self.load_session(session_id)
+            await self._load_session(session_id)
             return True
         except Exception:
             return False
 
-    async def create_session(self, dataset_ids: list[str], name: str | None = None) -> Session:
+    async def create(self, dataset_ids: list[str], name: str | None = None) -> Session:
         session_id = str(uuid.uuid4())
         session = Session(id=session_id, dataset_ids=dataset_ids, name=name)
         await self.save_session(session)
         self.sessions[session_id] = session
         return session
 
-    async def get_session(self, session_id: SessionID) -> Session | None:
+    async def get(self, session_id: SessionID) -> Session | None:
         if session_id in self.sessions:
             return self.sessions[session_id]
         with contextlib.suppress(Exception):
-            return await self.load_session(session_id)
+            return await self._load_session(session_id)
         return None
 
     async def _load_sessions(self) -> None:
@@ -49,7 +49,7 @@ class SessionService:
                 return
 
             try:
-                await self.load_session(fp)
+                await self._load_session(fp)
             except Exception as e:
                 logger.opt(exception=True).warning(f"Failed to load session from {fp}: {e}")
 
@@ -57,7 +57,7 @@ class SessionService:
             async for fp in _SESSION_DIR.iterdir():
                 tg.start_soon(load, fp)
 
-    async def load_session(self, session_id: SessionID | anyio.Path) -> Session:
+    async def _load_session(self, session_id: SessionID | anyio.Path) -> Session:
         fp = (_SESSION_DIR / f"{session_id}.json") if isinstance(session_id, str) else session_id
         if not await fp.exists():
             raise SessionNotFound(session_id if isinstance(session_id, str) else "<Unknown>")
@@ -84,7 +84,7 @@ class SessionService:
         except Exception:
             logger.opt(exception=True).warning(f"Failed to save session {session.id} to {fp}")
 
-    def list_sessions(self) -> list[SessionListItem]:
+    def list_all(self) -> list[SessionListItem]:
         return [
             SessionListItem(
                 id=session.id,
@@ -95,7 +95,7 @@ class SessionService:
             for session in self.sessions.values()
         ]
 
-    async def delete_session(self, session_id: SessionID) -> None:
+    async def delete(self, session_id: SessionID) -> None:
         fp = _SESSION_DIR / f"{session_id}.json"
         if session_id not in self.sessions:
             # 检查文件是否存在，如果存在则尝试加载后再删除
@@ -103,7 +103,7 @@ class SessionService:
                 raise SessionNotFound(session_id)
 
             try:
-                await self.load_session(session_id)
+                await self._load_session(session_id)
             except Exception:
                 # 如果加载失败，但文件存在，则直接删除文件
                 try:

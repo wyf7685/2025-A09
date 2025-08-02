@@ -130,3 +130,65 @@ def with_semaphore[T: Callable](initial_value: int) -> Callable[[T], T]:
         return cast("T", functools.update_wrapper(wrapper, func))
 
     return decorator
+
+
+_ANSI_TO_LOGURU_TAG = {
+    # Fore
+    "\033[30m": "<black>",
+    "\033[31m": "<red>",
+    "\033[32m": "<green>",
+    "\033[33m": "<yellow>",
+    "\033[34m": "<blue>",
+    "\033[35m": "<magenta>",
+    "\033[36m": "<cyan>",
+    "\033[37m": "<white>",
+    # Back
+    "\033[40m": "<BLACK>",
+    "\033[41m": "<RED>",
+    "\033[42m": "<GREEN>",
+    "\033[43m": "<YELLOW>",
+    "\033[44m": "<BLUE>",
+    "\033[45m": "<MAGENTA>",
+    "\033[46m": "<CYAN>",
+    "\033[47m": "<WHITE>",
+    # Style
+    # "\033[0m": "</>",  # RESET
+    "\033[1m": "<bold>",
+    "\033[2m": "<dim>",
+    "\033[3m": "<italic>",
+    "\033[4m": "<underline>",
+    "\033[5m": "<blink>",
+    "\033[7m": "<reverse>",
+    "\033[8m": "<hidden>",
+    "\033[9m": "<strike>",
+}
+_ANSI_RESET = "\033[0m"
+_ANSI_PATTERN = re.compile(r"(\033\[\d+(;\d+)*m)")
+
+
+def ansi_to_loguru_tag(text: str) -> str:
+    result: list[str] = []
+    open_tags: list[str] = []
+    last_end = 0
+
+    for match in _ANSI_PATTERN.finditer(text):
+        start, end = match.start(), match.end()
+        ansi_code = text[start:end]
+
+        if start > last_end:
+            result.append(text[last_end:start])
+
+        if ansi_code == _ANSI_RESET:
+            result.append("</>" * len(open_tags))
+            open_tags = []
+        elif ansi_code in _ANSI_TO_LOGURU_TAG:
+            loguru_tag = _ANSI_TO_LOGURU_TAG[ansi_code]
+            result.append(loguru_tag)
+            open_tags.append(loguru_tag)
+
+        last_end = end
+
+    if last_end < len(text):
+        result.append(text[last_end:])
+
+    return "".join(result)

@@ -8,6 +8,7 @@ from pydantic import TypeAdapter
 
 from app.const import DATA_DIR
 from app.core.lifespan import lifespan
+from app.exception import MCPServerAlreadyExists, MCPServerConnectionError, MCPServerNotFound
 from app.log import logger
 from app.schemas.mcp import MCPConnection
 
@@ -33,22 +34,22 @@ class MCPService:
 
     async def register(self, connection: MCPConnection) -> None:
         if connection.id in self.servers:
-            raise ValueError(f"MCP Server with id '{connection.id}' already exists.")
+            raise MCPServerAlreadyExists(connection.id)
 
         try:
             async with create_session(cast("LangChainMCPConnection", connection.connection)) as session:
                 await session.initialize()
                 await session.send_ping()
         except Exception as e:
-            logger.opt(exception=True).warning(f"Failed to connect to MCP Server: {connection.connection}")
-            raise ValueError(f"Failed to connect to MCP Server: {e}") from e
+            logger.opt(exception=True).warning(f"连接到 MCP 服务器 {connection.id} 失败")
+            raise MCPServerConnectionError(connection.id, e) from e
 
         self.servers[connection.id] = connection
         await self.save()
 
     async def delete(self, id: str) -> None:
         if id not in self.servers:
-            raise ValueError(f"MCP Server with id '{id}' does not exist.")
+            raise MCPServerNotFound(id)
         del self.servers[id]
         await self.save()
 
@@ -59,7 +60,7 @@ class MCPService:
     def get(self, id: str) -> MCPConnection:
         """Get a specific MCP server by ID."""
         if id not in self.servers:
-            raise ValueError(f"MCP Server with ID '{id}' does not exist.")
+            raise MCPServerNotFound(id)
         return self.servers[id]
 
     def gets(self, *ids: str) -> Sequence[MCPConnection]:

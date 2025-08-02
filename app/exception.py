@@ -68,3 +68,30 @@ class DataSourceNotFound(DataSourceServiceError):
 class DataSourceLoadFailed(DataSourceServiceError):
     def __init__(self, source_id: str) -> None:
         super().__init__(f"加载数据源 {source_id} 失败")
+
+
+class MCPServiceError(ServiceError):
+    service_name: str = "MCP Service"
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+class MCPServerNotFound(MCPServiceError):
+    status_code = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, server_id: str) -> None:
+        super().__init__(f"未找到 MCP 服务器 {server_id}")
+
+
+class MCPServerConnectionError(MCPServiceError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def __init__(self, server_id: str, error: Exception) -> None:
+        super().__init__(f"连接到 MCP 服务器 {server_id} 失败: {error!r}")
+        self.error = error
+
+
+class MCPServerAlreadyExists(MCPServiceError):
+    status_code = status.HTTP_400_BAD_REQUEST
+
+    def __init__(self, server_id: str) -> None:
+        super().__init__(f"MCP 服务器 {server_id} 已存在")

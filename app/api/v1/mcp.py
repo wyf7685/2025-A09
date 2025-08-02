@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.exception import MCPServiceError
 from app.log import logger
 from app.schemas.mcp import Connection, MCPConnection
 from app.services.mcp import mcp_service
@@ -21,14 +22,6 @@ class CreateMCPConnectionRequest(BaseModel):
     name: str
     description: str | None = None
     connection: Connection
-
-
-class UpdateMCPConnectionRequest(BaseModel):
-    """更新MCP连接请求"""
-
-    name: str | None = None
-    description: str | None = None
-    connection: Connection | None = None
 
 
 @router.post("", response_model=MCPConnection)
@@ -47,8 +40,8 @@ async def create_mcp_connection(request: CreateMCPConnectionRequest) -> MCPConne
         await mcp_service.register(connection)
         return connection
 
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except MCPServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     except Exception as e:
         logger.exception("创建MCP连接失败")
         raise HTTPException(status_code=500, detail=f"Failed to create MCP connection: {e}") from e
@@ -73,11 +66,19 @@ async def get_mcp_connection(connection_id: str) -> MCPConnection:
     """
     try:
         return mcp_service.get(connection_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MCPServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     except Exception as e:
         logger.exception("获取MCP连接失败")
         raise HTTPException(status_code=500, detail=f"Failed to get MCP connection: {e}") from e
+
+
+class UpdateMCPConnectionRequest(BaseModel):
+    """更新MCP连接请求"""
+
+    name: str | None = None
+    description: str | None = None
+    connection: Connection | None = None
 
 
 @router.put("/{connection_id}", response_model=MCPConnection)
@@ -103,8 +104,8 @@ async def update_mcp_connection(connection_id: str, request: UpdateMCPConnection
 
         return updated_connection
 
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MCPServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     except Exception as e:
         logger.exception("更新MCP连接失败")
         raise HTTPException(status_code=500, detail=f"Failed to update MCP connection: {e}") from e
@@ -118,8 +119,8 @@ async def delete_mcp_connection(connection_id: str) -> dict[str, Any]:
     try:
         await mcp_service.delete(connection_id)
         return {"success": True, "message": f"MCP connection {connection_id} deleted"}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MCPServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
     except Exception as e:
         logger.exception("删除MCP连接失败")
         raise HTTPException(status_code=500, detail=f"Failed to delete MCP connection: {e}") from e

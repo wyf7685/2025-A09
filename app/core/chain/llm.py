@@ -18,16 +18,19 @@ type LLM = Runnable[LanguageModelInput, str]
 
 def rate_limiter(max_call_per_minute: int) -> Runnable[Any, Any]:
     calls: list[datetime.datetime] = []
+    delta = datetime.timedelta(minutes=1)
 
     @RunnableLambda
     def limiter(input: Any) -> Any:
-        calls.append(datetime.datetime.now())
+        now = datetime.datetime.now()
+        calls.append(now)
         # 清理超过一分钟的调用记录
-        calls[:] = [call for call in calls if call > datetime.datetime.now() - datetime.timedelta(minutes=1)]
+        expired = now - delta
+        calls[:] = [call for call in calls if call > expired]
         if len(calls) > max_call_per_minute:
-            wait_time = 60 - (datetime.datetime.now() - calls[0]).total_seconds()
+            wait_time = 60 - (now - calls[0]).total_seconds()
             if wait_time > 0:
-                logger.warning(f"超过速率限制，等待 {wait_time:.2f} 秒")
+                logger.opt(colors=True).warning(f"超过速率限制，等待 <y>{wait_time:.2f}</> 秒")
                 threading.Event().wait(wait_time)
                 logger.info("等待结束，继续处理请求")
 
