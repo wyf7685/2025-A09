@@ -49,7 +49,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     try:
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
-        async with daa_service.use_agent(session, request.model_id, create_if_non_exist=True) as agent:
+        async with daa_service.use_agent(session, request.model_id) as agent:
             async for event in agent.stream(request.message):
                 try:
                     msg = event.model_dump_json() + "\n"
@@ -108,7 +108,7 @@ async def chat_summary(request: SummaryRequest) -> SummaryResponse:
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        async with daa_service.use_agent(session, request.model_id, create_if_non_exist=False) as agent:
+        async with daa_service.use_agent(session, request.model_id) as agent:
             summary, figures = await agent.summary()
             return SummaryResponse(
                 session_id=session.id,
@@ -290,7 +290,7 @@ async def generate_report(request: GenerateReportRequest) -> GenerateReportRespo
                 f"使用自定义模板: <y>{escape_tag(template_name)}</> <c>({escape_tag(request.template_id)})</>"
             )
 
-        async with daa_service.use_agent(session, request.model_id, create_if_non_exist=True) as agent:
+        async with daa_service.use_agent(session, request.model_id) as agent:
             # 检查是否有对话历史
             if not agent.has_messages():
                 raise HTTPException(

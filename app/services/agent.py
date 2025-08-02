@@ -108,8 +108,6 @@ class DataAnalyzerAgentService:
         self,
         session: Session,
         model_id: LLModelID | None = None,
-        *,
-        create_if_non_exist: bool,
     ) -> AsyncGenerator[DataAnalyzerAgent]:
         if session.id not in self._in_use:
             self._in_use[session.id] = anyio.Lock()
@@ -120,8 +118,6 @@ class DataAnalyzerAgentService:
         async with self._in_use[session.id]:
             agent = self._get(session, model_id)
             if agent is None:
-                if not create_if_non_exist:
-                    raise AgentNotFound(session.id)
                 agent = await self._create(session, model_id)
 
             with anyio.CancelScope() as scope:
@@ -144,24 +140,7 @@ class DataAnalyzerAgentService:
 
     async def refresh_mcp(self, session: Session) -> None:
         """刷新会话的 MCP 连接"""
-        # mcps = mcp_service.gets(*(session.mcp_ids or []))
-
-        ### v1
-        # async with self.use_agent(session, create_if_non_exist=True) as agent:
-        #     await agent.bind_mcp(mcp.connection for mcp in mcps)
-        # logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
-
-        ### v2
-        # try:
-        #     async with self.use_agent(session, create_if_non_exist=False) as agent:
-        #         await agent.bind_mcp(mcp.connection for mcp in mcps)
-        # except AgentNotFound:
-        #     return
-        # else:
-        #     logger.opt(colors=True).info(f"刷新会话 <c>{escape_tag(session.id)}</> 的 MCP 连接")
-
-        ### v3
-        # 直接删掉，下次用到就会创建带有新 MCP 的 Agent
+        # 直接销毁当前 Agent，下次调用会创建带有新 MCP 的 Agent
         with contextlib.suppress(AgentNotFound):
             await self.destroy(session.id)
 
