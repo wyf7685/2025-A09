@@ -3,7 +3,8 @@ from typing import Any, override
 import pandas as pd
 from pydantic import BaseModel
 
-from app.core.dremio import AbstractDremioClient, get_dremio_client
+from app.core.dremio import AbstractDremioClient, get_async_dremio_client, get_dremio_client
+from app.core.dremio.abstract import AbstractAsyncDremioClient
 from app.schemas.dremio import DremioSource
 
 from .source import DataSource, DataSourceMetadata
@@ -37,14 +38,16 @@ class DremioDataSource(DataSource):
 
         super().__init__(metadata)
         self.source = source
-        self._client: AbstractDremioClient | None = None
 
     @property
     def client(self) -> AbstractDremioClient:
         """获取 Dremio 客户端"""
-        if self._client is None:
-            self._client = get_dremio_client()
-        return self._client
+        return get_dremio_client()
+
+    @property
+    def async_client(self) -> AbstractAsyncDremioClient:
+        """获取异步 Dremio 客户端"""
+        return get_async_dremio_client()
 
     @override
     def _load(self, n_rows: int | None = None) -> pd.DataFrame:
@@ -52,9 +55,19 @@ class DremioDataSource(DataSource):
         return self.client.read_source(self.source.path, n_rows)
 
     @override
+    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+        """异步加载 Dremio 数据源数据"""
+        return await self.async_client.read_source(self.source.path, n_rows)
+
+    @override
     def _shape(self) -> tuple[int, int]:
         """获取 Dremio 数据源的形状"""
         return self.client.shape(self.source.path)
+
+    @override
+    async def _shape_async(self) -> tuple[int, int]:
+        """异步获取 Dremio 数据源的形状"""
+        return await self.async_client.shape(self.source.path)
 
     def get_source(self) -> DremioSource:
         """获取 Dremio 源"""

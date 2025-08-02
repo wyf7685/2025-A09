@@ -38,9 +38,21 @@ class InMemoryDataSource(DataSource):
         return self._data.head(n_rows)
 
     @override
+    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+        """异步从内存加载数据"""
+        # 直接调用同步方法避免线程切换开销
+        return self._load(n_rows)
+
+    @override
     def _shape(self) -> tuple[int, int]:
         """获取数据源的形状"""
         return self._data.shape
+
+    @override
+    async def _shape_async(self) -> tuple[int, int]:
+        """异步获取数据源的形状"""
+        # 直接调用同步方法避免线程切换开销
+        return self._shape()
 
     @override
     def copy(self) -> "InMemoryDataSource":

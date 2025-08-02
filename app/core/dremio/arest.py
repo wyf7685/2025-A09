@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, override
 
 import anyio
+import anyio.to_thread
 import httpx
 import pandas as pd
 from dremio import path_to_dotted
@@ -162,7 +163,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             pandas.DataFrame: 查询结果的 DataFrame
         """
         results = await self.execute_sql_query(sql_query)
-        return await run_sync(pd.DataFrame)(results["rows"])
+        return await anyio.to_thread.run_sync(pd.DataFrame, results["rows"])
 
     @override
     async def _add_data_source_csv(self, file: Path) -> DremioSource:
@@ -182,7 +183,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             raise ValueError("外部数据源目录未设置")
 
         source_name = f"{uuid.uuid4()}.csv"
-        await run_sync(shutil.copyfile)(file, self.external_dir / source_name)
+        await anyio.to_thread.run_sync(shutil.copyfile, file, self.external_dir / source_name)
 
         # 设置 "external"."{source_name}" 的属性: 自动读取文件首行作为列名
         payload = {
@@ -220,7 +221,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             suffix = ".xlsx"
 
         source_name = f"{uuid.uuid4()}{suffix}"
-        await run_sync(shutil.copyfile)(file, self.external_dir / source_name)
+        await anyio.to_thread.run_sync(shutil.copyfile, file, self.external_dir / source_name)
 
         source_cache.expire()
         return DremioSource(

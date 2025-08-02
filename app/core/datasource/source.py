@@ -2,6 +2,7 @@ import abc
 from datetime import datetime
 from typing import Any
 
+import anyio.to_thread
 import pandas as pd
 from pydantic import BaseModel, Field
 
@@ -51,6 +52,19 @@ class DataSource(abc.ABC):
         """
         raise NotImplementedError("子类必须实现_load方法")
 
+    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+        """
+        异步加载数据源，返回一个DataFrame
+
+        Args:
+            n_rows: 读取的行数，为None表示读取全部数据
+
+        Returns:
+            pd.DataFrame: 数据源的DataFrame
+        """
+        # 默认使用 run_sync 调用同步方法
+        return await anyio.to_thread.run_sync(self._load, n_rows)
+
     @abc.abstractmethod
     def _shape(self) -> tuple[int, int]:
         """
@@ -60,6 +74,16 @@ class DataSource(abc.ABC):
             tuple[int, int]: (行数, 列数)
         """
         raise NotImplementedError("子类必须实现get_shape方法")
+
+    async def _shape_async(self) -> tuple[int, int]:
+        """
+        异步获取数据源的形状
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        # 默认使用 run_sync 调用同步方法
+        return await anyio.to_thread.run_sync(self._shape)
 
     def get_shape(self) -> tuple[int, int]:
         """
@@ -72,6 +96,30 @@ class DataSource(abc.ABC):
         self.metadata.row_count = shape[0]
         self.metadata.column_count = shape[1]
         return shape
+
+    async def get_shape_async(self) -> tuple[int, int]:
+        """
+        异步获取数据源的形状
+
+        Returns:
+            tuple[int, int]: (行数, 列数)
+        """
+        shape = await self._shape_async()
+        self.metadata.row_count = shape[0]
+        self.metadata.column_count = shape[1]
+        return shape
+
+    def __set_metatadata_by_preview(self, df: pd.DataFrame) -> None:
+        """
+        根据预览数据设置元数据
+
+        Args:
+            df: 预览数据的DataFrame
+        """
+        self.metadata.column_count = len(df.columns)
+        self.metadata.columns = df.columns.tolist()
+        self.metadata.dtypes = {col: str(dtype) for col, dtype in df.dtypes.items()}
+        self.metadata.preview_rows = len(df)
 
     def get_preview(self, n_rows: int = 5, force_reload: bool = False) -> pd.DataFrame:
         """
@@ -86,17 +134,27 @@ class DataSource(abc.ABC):
         """
         if self._preview_data is None or force_reload or n_rows > self.metadata.preview_rows:
             logger.debug(f"读取数据源预览数据: {n_rows=}")
-            self._preview_data = self._load(n_rows)
-            self.metadata.preview_rows = n_rows
+            self._preview_data = df = self._load(n_rows)
+            self.__set_metatadata_by_preview(df)
+            return self._preview_data
 
-            # 更新元数据
-            if self.metadata.columns is None:
-                self.metadata.columns = self._preview_data.columns.tolist()
-            if self.metadata.column_count is None:
-                self.metadata.column_count = len(self._preview_data.columns)
-            if self.metadata.dtypes is None:
-                self.metadata.dtypes = {col: str(dtype) for col, dtype in self._preview_data.dtypes.items()}
+        return self._preview_data.head(n_rows)
 
+    async def get_preview_async(self, n_rows: int = 5, force_reload: bool = False) -> pd.DataFrame:
+        """
+        异步获取数据源的预览数据
+
+        Args:
+            n_rows: 预览行数，默认为5行
+            force_reload: 是否强制重新加载
+
+        Returns:
+            pd.DataFrame: 数据源的预览数据
+        """
+        if self._preview_data is None or force_reload or n_rows > self.metadata.preview_rows:
+            logger.debug(f"读取数据源预览数据: {n_rows=}")
+            self._preview_data = df = await self._load_async(n_rows)
+            self.__set_metatadata_by_preview(df)
             return self._preview_data
 
         return self._preview_data.head(n_rows)
@@ -122,6 +180,27 @@ class DataSource(abc.ABC):
 
         return self._load(n_rows)
 
+    async def get_data_async(self, n_rows: int | None = None) -> pd.DataFrame:
+        """
+        异步获取数据源的数据，支持部分加载
+
+        Args:
+            n_rows: 读取的行数，为None表示读取全部数据
+
+        Returns:
+            pd.DataFrame: 数据源的数据
+        """
+        if n_rows is None:
+            return await self.get_full_async()
+
+        if self._full_data is not None:
+            return self._full_data.head(n_rows)
+
+        if self._preview_data is not None and n_rows <= self.metadata.preview_rows:
+            return self._preview_data.head(n_rows)
+
+        return await self._load_async(n_rows)
+
     def get_full(self) -> pd.DataFrame:
         """
         获取数据源的完整数据
@@ -132,6 +211,20 @@ class DataSource(abc.ABC):
         logger.debug("获取数据源完整数据")
         if self._full_data is None:
             self.set_full_data(self._load())
+            assert self._full_data is not None
+
+        return self._full_data
+
+    async def get_full_async(self) -> pd.DataFrame:
+        """
+        异步获取数据源的完整数据
+
+        Returns:
+            pd.DataFrame: 数据源的完整数据
+        """
+        logger.debug("获取数据源完整数据")
+        if self._full_data is None:
+            self.set_full_data(await self._load_async())
             assert self._full_data is not None
 
         return self._full_data

@@ -54,7 +54,7 @@ class FileDataSource(DataSource):
 
     @override
     def _shape(self) -> tuple[int, int]:
-        return self._load().shape
+        return self._full_data.shape if self._full_data is not None else self._load().shape
 
     @override
     def copy(self) -> "FileDataSource":
