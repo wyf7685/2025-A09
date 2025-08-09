@@ -2,7 +2,6 @@
 数据源管理接口
 """
 
-import asyncio
 import contextlib
 import uuid
 from pathlib import Path
@@ -215,7 +214,7 @@ async def update_datasource(source_id: str, data: UpdateDataSourceRequest) -> Da
         raise HTTPException(status_code=500, detail=f"Failed to update datasource: {e}") from e
 
 
-list_ds_sem = asyncio.Semaphore(1)
+list_ds_sem = anyio.Semaphore(1)
 
 
 @router.get("")
@@ -370,7 +369,7 @@ async def delete_dremio_source(source: DremioDataSource) -> None:
             logger.warning("刷新external数据源失败")
 
         # 无论是否成功，都等待一段时间让Dremio处理
-        await asyncio.sleep(2)
+        await anyio.sleep(2)
 
 
 @router.delete("/{source_id}")

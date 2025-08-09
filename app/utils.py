@@ -192,3 +192,17 @@ def ansi_to_loguru_tag(text: str) -> str:
         result.append(text[last_end:])
 
     return "".join(result)
+
+
+def copy_param_annotations[**P, R](_: Callable[P, object], /) -> Callable[[Callable[..., R]], Callable[P, R]]:
+    def decorator(fn: Callable[..., R]) -> Callable[P, R]:
+        return cast("Callable[P, R]", fn)
+
+    return decorator
+
+
+def copy_signature[**P, R](_: Callable[P, R], /) -> Callable[[Callable[..., object]], Callable[P, R]]:
+    def decorator(fn: Callable[..., object]) -> Callable[P, R]:
+        return cast("Callable[P, R]", fn)
+
+    return decorator

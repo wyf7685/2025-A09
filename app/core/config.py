@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # 数据库配置
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/db.sqlite3"
 
+    # Docker Executor
+    DOCKER_RUNNER_IMAGE: str | None = None
+
     # LLM config
     TEST_MODEL_NAME: str
     GOOGLE_API_KEY: str | None = None

@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from typing import Any, cast
 
+import anyio.to_thread
 from langchain_core.runnables import ensure_config
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, StateGraph
@@ -15,19 +16,20 @@ from langgraph.graph.state import CompiledStateGraph
 from app.core.agent.schemas import OperationFailedModel, is_failed, is_success
 from app.log import logger
 from app.services.datasource import temp_source_service
-from app.utils import run_sync
+from app.utils import copy_param_annotations
 
-from ._clean import (
+from .clean import (
     apply_cleaning,
     apply_cleaning_actions,
     apply_user_selected_cleaning_with_ai,
     generate_cleaning_summary,
     generate_suggestions,
 )
-from ._fields import guess_field_names
-from ._load_data import load_data
-from ._quality import analyze_quality, calculate_quality_score
+from .fields import guess_field_names
+from .load_data import load_data
+from .quality import analyze_quality, calculate_quality_score
 from .schemas import (
+    ApplyCleaningResult,
     CleaningState,
     DataQualityReport,
     ProcessCleanFileResult,
@@ -69,9 +71,24 @@ class SmartCleanDataAgent:
     def __init__(self) -> None:
         self._graph = _create_graph()
 
-        # Export methods
-        self.apply_cleaning_actions = run_sync(apply_cleaning_actions)
-        self.apply_user_selected_cleaning = run_sync(apply_user_selected_cleaning_with_ai)
+    @staticmethod
+    @copy_param_annotations(apply_cleaning_actions)
+    async def apply_cleaning_actions(*args: Any, **kwargs: Any) -> ApplyCleaningResult | OperationFailedModel:
+        def wrapper() -> ApplyCleaningResult | OperationFailedModel:
+            return apply_cleaning_actions(*args, **kwargs)
+
+        return await anyio.to_thread.run_sync(wrapper, abandon_on_cancel=True)
+
+    @staticmethod
+    @copy_param_annotations(apply_user_selected_cleaning_with_ai)
+    async def apply_user_selected_cleaning(
+        *args: Any,
+        **kwargs: Any,
+    ) -> ApplyCleaningResult | OperationFailedModel:
+        def wrapper() -> ApplyCleaningResult | OperationFailedModel:
+            return apply_user_selected_cleaning_with_ai(*args, **kwargs)
+
+        return await anyio.to_thread.run_sync(wrapper, abandon_on_cancel=True)
 
     async def process_and_clean_file(
         self,
@@ -166,7 +183,7 @@ class SmartCleanDataAgent:
 
             # 构建质量报告
             source = load_source(result, "source_id")
-            df = await run_sync(source.get_full)()
+            df = await source.get_full_async()
             quality_report = DataQualityReport(
                 overall_score=calculate_quality_score(result["quality_issues"]),
                 total_rows=len(df),

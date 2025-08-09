@@ -1,7 +1,6 @@
 import ast
 import base64
 import json
-import os
 import shutil
 import tempfile
 import time
@@ -15,6 +14,7 @@ import pandas as pd
 
 import docker
 import docker.errors
+from app.core.config import settings
 from app.core.datasource import DataSource
 from app.log import logger
 from app.utils import escape_tag, run_sync
@@ -115,11 +115,11 @@ class CodeExecutor:
 
         Args:
             data_source: 数据源对象，提供数据访问接口
-            image: Docker镜像名称，如果为None则使用环境变量DOCKER_RUNNER_IMAGE
+            image: Docker镜像名称
             memory_limit: 内存限制
             cpu_shares: CPU使用限制
         """
-        image = image or os.getenv("DOCKER_RUNNER_IMAGE")
+        image = image or settings.DOCKER_RUNNER_IMAGE
         if not image:
             raise ValueError("Docker镜像名称未指定，请设置DOCKER_RUNNER_IMAGE环境变量")
 
@@ -127,9 +127,8 @@ class CodeExecutor:
         self.image = image
         self.memory_limit = memory_limit
         self.cpu_shares = cpu_shares
-        self.client = docker.DockerClient()
         self.container = None
-        self.temp_dir = Path(tempfile.mkdtemp())
+        self.temp_dir = None
 
         finalize(self, self.stop)
 
@@ -147,12 +146,13 @@ class CodeExecutor:
         if self.container:
             return
 
+        self.temp_dir = Path(tempfile.mkdtemp())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.data_source.get_full().to_csv(self.temp_dir / "data.csv", index=False)
 
         try:
             # 创建并启动容器
-            self.container = self.client.containers.run(
+            self.container = docker.DockerClient().containers.run(
                 self.image,
                 command=["python", "/executor.py"],
                 volumes={str(self.temp_dir): {"bind": "/data"}},
@@ -179,9 +179,10 @@ class CodeExecutor:
             except docker.errors.DockerException:
                 logger.opt(colors=True).exception(f"停止Docker容器 <c>{id}</> 时出错")
 
-        if self.temp_dir.exists():
+        if self.temp_dir and self.temp_dir.exists():
             logger.opt(colors=True).info(f"清理临时目录: <y><u>{escape_tag(self.temp_dir)}</></>")
             shutil.rmtree(self.temp_dir, ignore_errors=True)
+            self.temp_dir = None
 
     astop = run_sync(stop)
 
@@ -208,9 +209,9 @@ class CodeExecutor:
             }
 
         # 确保容器已启动
-        if not self.container:
+        if not self.container or not self.temp_dir:
             self.start()
-            assert self.container, "容器启动失败"
+            assert self.container and self.temp_dir, "容器启动失败"  # noqa: PT018
 
         logger.info(f"正在执行代码:\n{code}")
         (self.temp_dir / "input.py").write_text(code, encoding="utf-8")

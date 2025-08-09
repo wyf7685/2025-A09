@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
 
 import anyio
+import anyio.to_thread
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
@@ -210,7 +211,6 @@ class DataAnalyzerAgent:
     async def summary(self, report_template: str | None = None) -> tuple[str, list[str]]:
         return await _summary_chain(self.llm, self.get_messages()).ainvoke(report_template or DEFAULT_REPORT_TEMPLATE)
 
-    @run_sync
     def _resume_from_state(self, state: DataAnalyzerAgentState) -> None:
         """从状态恢复 agent"""
         self.agent.update_state(self.config, state.values)
@@ -233,7 +233,7 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        await self._resume_from_state(state)
+        await anyio.to_thread.run_sync(self._resume_from_state, state)
 
     async def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
