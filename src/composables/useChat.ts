@@ -48,7 +48,12 @@ const extractSuggestions = (content: string): string[] => {
   for (const line of lines) {
     if (/^\d+\.\s+/.test(line)) {
       inList = true;
-      suggestions.push(line.replace(/^\d+\.\s+/, '').replace('\\_', '_').trim());
+      suggestions.push(
+        line
+          .replace(/^\d+\.\s+/, '')
+          .replace('\\_', '_')
+          .trim(),
+      );
     } else if (inList && !line.trim()) {
       // 有序列表后遇到空行则停止
       break;
@@ -69,6 +74,7 @@ const fakeFlowPanel = {
   updateRouteStep: (_: number, __: 'active' | 'completed') => {},
   autoSelectRoute: (_: string): 'route1' | 'route2' => 'route1',
   logRouteStatus: (_: string) => {},
+  getActiveStepModel: () => 'gemini-2.0-flash', // 默认模型ID
 } as FlowPanel;
 
 export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
@@ -281,37 +287,21 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
               flowPanel.route2Steps.value[4]?.nextLoop &&
               flowPanel.route2Steps.value[4].nextLoop.length > 0;
 
-            // 设置工具名称 - 正确处理循环情况
+            // 设置工具名称 - 每次只调用一个工具
             if (flowPanel.route2Steps.value[3]) {
               if (isInLoop) {
-                // 如果处于循环中，下一个工具调用应该设置在循环节点中
-                // 保留现有工具列表以记录历史
-                const existingTools = flowPanel.route2Steps.value[3].toolName || '';
-                const toolsList = existingTools ? existingTools.split(', ') : [];
-
-                if (!toolsList.includes(name)) {
-                  toolsList.push(name);
-                  flowPanel.route2Steps.value[3].toolName = toolsList.join(', ');
-                }
-
-                // 同时在循环节点单独设置当前工具
+                // 如果处于循环中，在循环节点设置当前工具
+                // 后端每次调用都是独立的一个工具，所以直接设置当前工具名称
                 if (flowPanel.route2Steps.value[4]?.nextLoop?.[0]) {
+                  // 在循环节点单独设置当前工具
                   flowPanel.route2Steps.value[4].nextLoop[0].toolName = name;
-                  flowPanel.route2Steps.value[4].nextLoop[0].description = `执行相应的数据处理工具（循环）：${name}`;
+                  flowPanel.route2Steps.value[4].nextLoop[0].description = `执行单个数据处理工具（循环）：${name}`;
                 }
               } else {
-                // 如果不在循环中，正常添加工具名称
-                const existingTools = flowPanel.route2Steps.value[3].toolName || '';
-                const toolsList = existingTools ? existingTools.split(', ') : [];
-
-                // 如果当前工具不在列表中，则添加
-                if (!toolsList.includes(name)) {
-                  toolsList.push(name);
-                  flowPanel.route2Steps.value[3].toolName = toolsList.join(', ');
-                } else if (!existingTools) {
-                  // 如果没有现有工具，直接设置
-                  flowPanel.route2Steps.value[3].toolName = name;
-                }
+                // 如果不在循环中，直接设置当前工具名称
+                // 后端每次流程只调用一个工具，所以不需要拼接多个工具名称
+                flowPanel.route2Steps.value[3].toolName = name;
+                flowPanel.route2Steps.value[3].description = `执行单个数据处理工具：${name}`;
               }
             }
 
@@ -341,63 +331,27 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           if (selectedRouteForThisMessage === 'route2') {
             // 只有当工具步骤处于活动状态时才更新
             if (flowPanel.route2Steps.value[3]?.status === 'active') {
-              // 确保工具名称包含所有已执行的工具
+              // 后端每次只调用一个工具，保持工具名称与当前执行的工具一致
               if (flowPanel.route2Steps.value[3]) {
-                // 确保当前工具已被包含在工具名称列表中
                 const currentName = toolCall?.name || '未知工具';
-                const existingTools = flowPanel.route2Steps.value[3].toolName || '';
-                const toolsList = existingTools ? existingTools.split(', ') : [];
-
-                // 如果当前工具不在列表中，添加它
-                if (currentName && !toolsList.includes(currentName)) {
-                  toolsList.push(currentName);
-                  flowPanel.route2Steps.value[3].toolName = toolsList.join(', ');
+                if (currentName) {
+                  flowPanel.route2Steps.value[3].toolName = currentName;
                 }
               }
 
               flowPanel.updateRouteStep(3, 'completed'); // 调用执行工具完成
               flowPanel.logRouteStatus(`工具 ${toolCall?.name || '未知工具'} 执行完成`);
 
-              // 准备处理下一个工具调用或完成
-              if (Object.keys(assistantMessage.tool_calls || {}).length > 1) {
-                // 有多个工具调用，需要循环处理
-                const toolCallIds = Object.keys(assistantMessage.tool_calls || {});
-                const completedTools = Object.values(assistantMessage.tool_calls || {}).filter(
-                  (tool) => (tool as any).status === 'success',
-                ).length;
-
-                // 还有工具未执行完
-                if (completedTools < toolCallIds.length) {
-                  flowPanel.updateRouteStep(4, 'active'); // 激活循环判断
-                  flowPanel.logRouteStatus('循环：是，需要执行更多工具');
-
-                  // 标记循环完成后，会在下一轮开始执行下一个工具
-                  setTimeout(() => {
-                    if (flowPanel.route2Steps.value[4]?.status === 'active') {
-                      flowPanel.updateRouteStep(4, 'completed');
-                      flowPanel.logRouteStatus('循环：是，继续执行下一个工具');
-                    }
-                  }, 1000);
-                } else {
-                  // 所有工具都执行完了
-                  flowPanel.updateRouteStep(4, 'active');
-                  setTimeout(() => {
-                    if (flowPanel.route2Steps.value[4]?.status === 'active') {
-                      flowPanel.updateRouteStep(4, 'completed');
-                      flowPanel.logRouteStatus('全部工具执行完成，不需要继续循环');
-                    }
-                  }, 1000);
+              // 准备进入循环判断阶段
+              // 后端每次只调用一个工具，工具执行完后直接判断是否需要继续
+              flowPanel.updateRouteStep(4, 'active'); // 激活循环判断
+              flowPanel.logRouteStatus('工具执行完成，判断是否需要继续处理');
+              setTimeout(() => {
+                if (flowPanel.route2Steps.value[4]?.status === 'active') {
+                  flowPanel.updateRouteStep(4, 'completed');
+                  flowPanel.logRouteStatus('全部工具执行完成，不需要继续循环');
                 }
-              } else {
-                // 只有一个工具调用，直接激活判断步骤
-                flowPanel.updateRouteStep(4, 'active');
-                setTimeout(() => {
-                  if (flowPanel.route2Steps.value[4]?.status === 'active') {
-                    flowPanel.updateRouteStep(4, 'completed');
-                    flowPanel.logRouteStatus('工具执行完成，不需要循环');
-                  }
-                }, 1000);
-              }
+              }, 1000);
             }
           }
 
@@ -625,7 +579,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           nextTick(() => scrollToBottom?.());
         },
-        flowPanel.selectedModel.value, // 传递选择的模型ID
+        flowPanel.getActiveStepModel(), // 传递当前活动步骤的模型ID，每次调用时都会获取最新选择的模型
       );
 
       assistantMessage.loading = false;
