@@ -1,13 +1,15 @@
+import asyncio
 import contextlib
+import dataclasses
 from collections.abc import AsyncGenerator
-from typing import NamedTuple
 
 import anyio
-from anyio.lowlevel import checkpoint
+import anyio.lowlevel
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.chain import get_chat_model_async, get_llm_async
+from app.core.datasource import DataSource
 from app.core.lifespan import lifespan
 from app.exception import AgentCancelled, AgentInUse, AgentNotFound
 from app.log import logger
@@ -18,16 +20,21 @@ from app.services.mcp import mcp_service
 from app.utils import escape_tag
 
 
-class AgentTuple(NamedTuple):
+@dataclasses.dataclass
+class AgentState:
     agent: DataAnalyzerAgent
     model_id: LLModelID | None
+    lock: anyio.Lock = dataclasses.field(default_factory=anyio.Lock)
+    scope: anyio.CancelScope | None = None
+
+
+async def dataset_id_to_sources(dataset_ids: list[str]) -> dict[str, DataSource]:
+    return {id: (await datasource_service.get_source(id)).copy() for id in dataset_ids}
 
 
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
-        self.agents: dict[SessionID, AgentTuple] = {}
-        self._in_use: dict[SessionID, anyio.Lock] = {}
-        self._scope: dict[SessionID, anyio.CancelScope] = {}
+        self.agents: dict[SessionID, AgentState] = {}
 
         lifespan.on_shutdown(self._destroy_all)
 
@@ -37,22 +44,15 @@ class DataAnalyzerAgentService:
         model_id: LLModelID | None = None,
     ) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
-        state_file = STATE_DIR / f"{session.id}.json"
-        if existing := self._get(session, None):
-            try:
-                self.cancel(session.id)
-                await existing.save_state(state_file)
-                await existing.destroy()
-            except Exception:
-                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session.id)}</> 的 Agent 失败")
-            finally:
-                self.agents.pop(session.id, None)
-                del existing
+        if self._get(session, None):
+            await self.destroy(session.id, save_state=True)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
-        sources = {id: (await datasource_service.get_source(id)).copy() for id in session.dataset_ids}
-        llm = await get_llm_async(model_id)
-        chat_model = await get_chat_model_async(model_id)
+        sources, llm, chat_model = await asyncio.gather(
+            dataset_id_to_sources(session.dataset_ids),
+            get_llm_async(model_id),
+            get_chat_model_async(model_id),
+        )
         agent = await DataAnalyzerAgent.create(
             sources_dict=sources,
             llm=llm,
@@ -60,36 +60,35 @@ class DataAnalyzerAgentService:
             session_id=session.id,
             mcp_connections=(mcp.connection for mcp in mcps),
         )
-        await agent.load_state(state_file)
+        await agent.load_state(STATE_DIR / f"{session.id}.json")
 
-        self.agents[session.id] = AgentTuple(agent, model_id)
+        self.agents[session.id] = AgentState(agent, model_id)
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
         )
         return agent
 
-    def _get(
-        self,
-        session: Session,
-        model_id: LLModelID | None = None,
-    ) -> DataAnalyzerAgent | None:
+    def _get(self, session: Session, model_id: LLModelID | None = None) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
-        t = self.agents.get(session.id)
-        if t is None or (model_id is not None and t.model_id != model_id):
+        state = self.agents.get(session.id)
+        if state is None or (model_id is not None and state.model_id != model_id):
             return None
-        return t.agent
+        return state.agent
 
-    async def destroy(self, session_id: SessionID) -> None:
+    async def destroy(self, session_id: SessionID, *, save_state: bool = False) -> None:
         """销毁会话的 Agent"""
         if session_id not in self.agents:
             raise AgentNotFound(session_id)
 
-        self.cancel(session_id)
-        await checkpoint()
+        await self.cancel(session_id)
 
-        agent, *_ = self.agents.pop(session_id)
-        self._scope.pop(session_id, None)
-        self._in_use.pop(session_id, None)
+        agent = self.agents.pop(session_id).agent
+
+        if save_state:
+            try:
+                await agent.save_state(STATE_DIR / f"{session_id}.json")
+            except Exception:
+                logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
 
         try:
             await agent.destroy()
@@ -97,10 +96,11 @@ class DataAnalyzerAgentService:
         except Exception:
             logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
-    def cancel(self, session_id: SessionID) -> None:
+    async def cancel(self, session_id: SessionID) -> None:
         """取消会话的 Agent 操作"""
-        if scope := self._scope.get(session_id):
+        if (state := self.agents.get(session_id)) and (scope := state.scope):
             scope.cancel()
+            await anyio.lowlevel.cancel_shielded_checkpoint()
             logger.opt(colors=True).info(f"取消会话 <c>{escape_tag(session_id)}</> 的 Agent 操作")
 
     @contextlib.asynccontextmanager
@@ -109,24 +109,21 @@ class DataAnalyzerAgentService:
         session: Session,
         model_id: LLModelID | None = None,
     ) -> AsyncGenerator[DataAnalyzerAgent]:
-        if session.id not in self._in_use:
-            self._in_use[session.id] = anyio.Lock()
-
-        if self._in_use[session.id].locked():
+        if self.agents[session.id].lock.locked():
             raise AgentInUse(session.id)
 
-        async with self._in_use[session.id]:
+        async with self.agents[session.id].lock:
             agent = self._get(session, model_id)
             if agent is None:
                 agent = await self._create(session, model_id)
 
             with anyio.CancelScope() as scope:
-                self._scope[session.id] = scope
+                self.agents[session.id].scope = scope
                 try:
                     yield agent
                 finally:
                     with anyio.CancelScope(shield=True):
-                        self._scope.pop(session.id, None)
+                        self.agents[session.id].scope = None
 
                         try:
                             await agent.save_state(STATE_DIR / f"{session.id}.json")
