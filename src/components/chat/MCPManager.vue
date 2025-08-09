@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
-import type { MCPConnection, MCPConnectionTransport } from '@/types/mcp';
+import type { MCPConnection } from '@/types/mcp';
 import {
   Connection,
   Delete,
