@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import dataclasses
 from collections.abc import AsyncGenerator
@@ -8,7 +7,7 @@ import anyio.lowlevel
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
-from app.core.chain import get_chat_model_async, get_llm_async
+from app.core.chain import get_models_async
 from app.core.datasource import DataSource
 from app.core.lifespan import lifespan
 from app.exception import AgentCancelled, AgentInUse, AgentNotFound
@@ -29,7 +28,14 @@ class AgentState:
 
 
 async def dataset_id_to_sources(dataset_ids: list[str]) -> dict[str, DataSource]:
-    return {id: (await datasource_service.get_source(id)).copy() for id in dataset_ids}
+    async def fetch(id: str) -> None:
+        result[id] = (await datasource_service.get_source(id)).copy()
+
+    result: dict[str, DataSource] = {}
+    async with anyio.create_task_group() as tg:
+        for id in dataset_ids:
+            tg.start_soon(fetch, id)
+    return result
 
 
 class DataAnalyzerAgentService:
@@ -48,11 +54,8 @@ class DataAnalyzerAgentService:
             await self.destroy(session.id, save_state=True)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
-        sources, llm, chat_model = await asyncio.gather(
-            dataset_id_to_sources(session.dataset_ids),
-            get_llm_async(model_id),
-            get_chat_model_async(model_id),
-        )
+        sources = await dataset_id_to_sources(session.dataset_ids)
+        llm, chat_model = await get_models_async(model_id)
         agent = await DataAnalyzerAgent.create(
             sources_dict=sources,
             llm=llm,
@@ -109,21 +112,22 @@ class DataAnalyzerAgentService:
         session: Session,
         model_id: LLModelID | None = None,
     ) -> AsyncGenerator[DataAnalyzerAgent]:
-        if self.agents[session.id].lock.locked():
+        state = self.agents[session.id]
+        if state.lock.locked():
             raise AgentInUse(session.id)
 
-        async with self.agents[session.id].lock:
+        async with state.lock:
             agent = self._get(session, model_id)
             if agent is None:
                 agent = await self._create(session, model_id)
 
             with anyio.CancelScope() as scope:
-                self.agents[session.id].scope = scope
+                state.scope = scope
                 try:
                     yield agent
                 finally:
                     with anyio.CancelScope(shield=True):
-                        self.agents[session.id].scope = None
+                        state.scope = None
 
                         try:
                             await agent.save_state(STATE_DIR / f"{session.id}.json")

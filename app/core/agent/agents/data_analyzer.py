@@ -1,7 +1,8 @@
+import contextlib
+import functools
 import itertools
 import threading
 from collections.abc import AsyncIterator, Iterable
-from contextlib import suppress
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
@@ -27,7 +28,7 @@ from app.core.lifespan import Lifespan
 from app.log import logger
 from app.schemas.mcp import Connection
 from app.schemas.session import SessionID
-from app.utils import escape_tag, run_sync
+from app.utils import escape_tag
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -122,7 +123,7 @@ class DataAnalyzerAgent:
 
     async def _create_graph(self) -> CompiledStateGraph[Any, Any, Any]:
         if self._lifespan is not None:
-            with anyio.CancelScope(), suppress(Exception):
+            with anyio.CancelScope(), contextlib.suppress(Exception):
                 await self._lifespan.shutdown()
             self._lifespan = None
 
@@ -140,10 +141,8 @@ class DataAnalyzerAgent:
         mcp_tools: list[BaseTool] = []
         if self.mcp_connections is not None:
             for connection in self.mcp_connections:
-                connection = cast("LangChainMCPConnection", deepcopy(connection))
-                # session = await self._stack.enter_async_context(create_session(connection))
-                # await session.initialize()
-                mcp_tools.extend(await load_mcp_tools(None, connection=connection))
+                conn = cast("LangChainMCPConnection", deepcopy(connection))
+                mcp_tools.extend(await load_mcp_tools(None, connection=conn))
 
         # All Tools
         all_tools = builtin_tools + mcp_tools
@@ -155,13 +154,15 @@ class DataAnalyzerAgent:
         )
 
         # Create Agent
-        self.agent = await run_sync(create_react_agent)(
+        _fn = functools.partial(
+            create_react_agent,
             model=self.chat_model,
             tools=all_tools,
             prompt=system_prompt,
             checkpointer=InMemorySaver(),
             pre_model_hook=self.pre_model_hook,
         )
+        self.agent = await anyio.to_thread.run_sync(_fn)
         self.config = ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
         self.saved_models = saved_models
         logger.opt(colors=True).info(

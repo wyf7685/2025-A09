@@ -1,5 +1,6 @@
 # ruff: noqa: S608
 
+import functools
 import shutil
 import uuid
 from pathlib import Path
@@ -14,7 +15,7 @@ from dremio import path_to_dotted
 from app.core.config import settings
 from app.log import logger
 from app.schemas.dremio import BaseDatabaseConnection, DremioContainer, DremioDatabaseType, DremioSource
-from app.utils import escape_tag, run_sync
+from app.utils import escape_tag
 
 from ._cache import container_cache, source_cache
 from .abstract import AbstractAsyncDremioClient
@@ -314,7 +315,11 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
                     tg.start_soon(fetch, idx, offset, size)
 
             if dfs := [all_data[idx] for idx in sorted(all_data.keys())]:
-                result = await run_sync(pd.concat)(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+                result = (
+                    await anyio.to_thread.run_sync(functools.partial(pd.concat, dfs, ignore_index=True))
+                    if len(dfs) > 1
+                    else dfs[0]
+                )
                 logger.info(f"通过分批查询共获取 {len(result)} 条数据")
                 return result
 

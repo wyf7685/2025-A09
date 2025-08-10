@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Self, TypedDict
 from weakref import finalize
 
+import anyio.to_thread
 import numpy as np
 import pandas as pd
 
@@ -17,7 +18,7 @@ import docker.errors
 from app.core.config import settings
 from app.core.datasource import DataSource
 from app.log import logger
-from app.utils import escape_tag, run_sync
+from app.utils import escape_tag
 
 
 class ExecuteResult(TypedDict):
@@ -184,7 +185,8 @@ class CodeExecutor:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
             self.temp_dir = None
 
-    astop = run_sync(stop)
+    async def astop(self) -> None:
+        await anyio.to_thread.run_sync(self.stop)
 
     def execute(self, code: str) -> ExecuteResult:
         """
