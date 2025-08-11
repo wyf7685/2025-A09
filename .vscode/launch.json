@@ -16,13 +16,7 @@
       "name": "后端: Launch FastAPI",
       "type": "debugpy",
       "request": "launch",
-      "module": "uvicorn",
-      "args": [
-        "app.main:app",
-        "--use-colors",
-        "--port",
-        "8081"
-      ]
+      "module": "app"
     }
   ],
   "compounds": [

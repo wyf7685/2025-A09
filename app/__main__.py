@@ -1,7 +1,3 @@
-"""
-智能数据分析平台 - FastAPI 后端
-"""
-
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +8,7 @@ from app.utils import configure_matplotlib_fonts
 configure_matplotlib_fonts()
 configure_logging()
 
-from app.api.v1 import router as api_router
+from app import api
 from app.core.lifespan import lifespan
 
 # 创建 FastAPI 应用
@@ -36,13 +32,8 @@ app.add_middleware(
 )
 
 # 注册API路由
-app.include_router(api_router)
+app.include_router(api.router)
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",  # noqa: S104
-        port=8081,
-        reload=True,
-    )
+    uvicorn.run("app.__main__:app", host="0.0.0.0", port=8081)  # noqa: S104
