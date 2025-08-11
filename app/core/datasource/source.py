@@ -40,30 +40,32 @@ class DataSource(abc.ABC):
         self._preview_data: pd.DataFrame | None = None
 
     @abc.abstractmethod
-    def _load(self, n_rows: int | None = None) -> pd.DataFrame:
+    def _load(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """
         加载数据源，返回一个DataFrame
 
         Args:
             n_rows: 读取的行数，为None表示读取全部数据
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pd.DataFrame: 数据源的DataFrame
         """
         raise NotImplementedError("子类必须实现_load方法")
 
-    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+    async def _load_async(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """
         异步加载数据源，返回一个DataFrame
 
         Args:
             n_rows: 读取的行数，为None表示读取全部数据
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pd.DataFrame: 数据源的DataFrame
         """
         # 默认使用 run_sync 调用同步方法
-        return await anyio.to_thread.run_sync(self._load, n_rows)
+        return await anyio.to_thread.run_sync(self._load, n_rows, skip)
 
     @abc.abstractmethod
     def _shape(self) -> tuple[int, int]:
@@ -159,47 +161,46 @@ class DataSource(abc.ABC):
 
         return self._preview_data.head(n_rows)
 
-    def get_data(self, n_rows: int | None = None) -> pd.DataFrame:
+    def get_data(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """
         获取数据源的数据，支持部分加载
 
         Args:
             n_rows: 读取的行数，为None表示读取全部数据
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pd.DataFrame: 数据源的数据
         """
-        if n_rows is None:
+
+        if n_rows is None and skip is None:
             return self.get_full()
 
         if self._full_data is not None:
-            return self._full_data.head(n_rows)
+            start = skip or 0
+            return self._full_data.iloc[start:] if n_rows is None else self._full_data.iloc[start : start + n_rows]
 
-        if self._preview_data is not None and n_rows <= self.metadata.preview_rows:
-            return self._preview_data.head(n_rows)
+        return self._load(n_rows, skip)
 
-        return self._load(n_rows)
-
-    async def get_data_async(self, n_rows: int | None = None) -> pd.DataFrame:
+    async def get_data_async(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """
         异步获取数据源的数据，支持部分加载
 
         Args:
             n_rows: 读取的行数，为None表示读取全部数据
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pd.DataFrame: 数据源的数据
         """
-        if n_rows is None:
+        if n_rows is None and skip is None:
             return await self.get_full_async()
 
         if self._full_data is not None:
-            return self._full_data.head(n_rows)
+            start = skip or 0
+            return self._full_data.iloc[start:] if n_rows is None else self._full_data.iloc[start : start + n_rows]
 
-        if self._preview_data is not None and n_rows <= self.metadata.preview_rows:
-            return self._preview_data.head(n_rows)
-
-        return await self._load_async(n_rows)
+        return await self._load_async(n_rows, skip)
 
     def get_full(self) -> pd.DataFrame:
         """

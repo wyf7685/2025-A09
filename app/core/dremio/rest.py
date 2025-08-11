@@ -12,12 +12,12 @@ import requests
 from dremio import path_to_dotted
 
 from app.core.config import settings
-from app.core.dremio.abstract import AbstractDremioClient
 from app.log import logger
 from app.schemas.dremio import BaseDatabaseConnection, DremioContainer, DremioDatabaseType, DremioSource
 from app.utils import escape_tag
 
 from ._cache import container_cache, source_cache
+from .abstract import DREMIO_REST_FETCH_LIMIT, AbstractDremioClient
 
 
 class DremioRestClient(AbstractDremioClient):
@@ -269,8 +269,8 @@ class DremioRestClient(AbstractDremioClient):
         self,
         source_name: str | list[str],
         limit: int | None = None,
+        skip: int | None = None,
         *,
-        fetch_all: bool = False,
         max_workers: int = 10,
     ) -> pd.DataFrame:
         """
@@ -279,19 +279,17 @@ class DremioRestClient(AbstractDremioClient):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
             max_workers: 分批查询时的最大线程数
 
         Returns:
             pandas.DataFrame: 数据源数据
         """
         source_name = path_to_dotted(source_name)
+        skip = skip or 0
 
-        if limit is None:
-            fetch_all = True
-
-        if not fetch_all and limit is not None and limit <= 100:
-            sql_query = f"SELECT * FROM {source_name} FETCH FIRST {limit} ROWS ONLY"
+        if limit is not None and limit <= 100:
+            sql_query = f"SELECT * FROM {source_name} OFFSET {skip} ROWS FETCH NEXT {limit} ROWS ONLY"
             return self.execute_sql_to_dataframe(sql_query)
 
         try:
@@ -301,10 +299,10 @@ class DremioRestClient(AbstractDremioClient):
             total_rows = int(count_df.iloc[0]["row_count"])
             logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
-            batch_size = 100  # Dremio REST api 单次查询最大数据量
-            total_rows = total_rows if fetch_all or limit is None else min(total_rows, limit)
+            total_rows = total_rows if limit is None else min(total_rows, limit)
             batch_ranges = (
-                (offset, min(batch_size, total_rows - offset)) for offset in range(0, total_rows, batch_size)
+                (offset, min(DREMIO_REST_FETCH_LIMIT, total_rows - offset))
+                for offset in range(0, total_rows, DREMIO_REST_FETCH_LIMIT)
             )
             all_data: dict[int, pd.DataFrame] = {}
 
@@ -316,10 +314,10 @@ class DremioRestClient(AbstractDremioClient):
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for idx, (offset, size) in enumerate(batch_ranges):
-                    executor.submit(fetch, idx, offset, size)
+                    executor.submit(fetch, idx, skip + offset, size)
 
             if dfs := [all_data[idx] for idx in sorted(all_data.keys())]:
-                result = pd.concat(dfs, ignore_index=True)
+                result = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
                 logger.info(f"通过分批查询共获取 {len(result)} 条数据")
                 return result
 

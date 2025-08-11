@@ -58,8 +58,7 @@ class DremioFlightClient(AbstractDremioClient):
         self,
         source_name: str | list[str],
         limit: int | None = None,
-        *,
-        fetch_all: bool = False,
+        skip: int | None = None,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -67,26 +66,32 @@ class DremioFlightClient(AbstractDremioClient):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pandas.DataFrame: 数据源数据
         """
         formatted = path_to_dotted(source_name)
+        skip = skip or 0
+
         try:
             count_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
             count_df = self.execute_sql_to_dataframe(count_query)
             total_rows = int(count_df.iloc[0]["row_count"])
             logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
-            n_rows = total_rows if fetch_all or limit is None else min(limit, total_rows)
-            query = f"SELECT * FROM {formatted} FETCH NEXT {n_rows} ROWS ONLY"
+            total_rows -= skip
+            n_rows = total_rows if limit is None else min(limit, total_rows)
+            if n_rows <= 0:
+                return pd.DataFrame()  # 如果没有数据，返回空 DataFrame
+
+            query = f"SELECT * FROM {formatted} OFFSET {skip} ROWS FETCH NEXT {n_rows} ROWS ONLY"
             return self.execute_sql_to_dataframe(query)
         except Exception:
             logger.opt(exception=True).warning(f"读取数据源 {source_name} 时出错")
 
         logger.warning("回退到使用 REST API 读取数据源")
-        return self._rest.read_source(source_name, limit=limit, fetch_all=fetch_all)
+        return self._rest.read_source(source_name, limit=limit, skip=skip)
 
     def execute_sql_to_dataframe(self, sql_query: str) -> pd.DataFrame:
         """

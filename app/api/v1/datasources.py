@@ -308,12 +308,8 @@ async def get_datasource_data(
                 }
 
             # 获取数据
-            data = await source.get_data_async(limit + skip)
+            data = await source.get_data_async(limit, skip if skip > 0 else None)
             logger.info(f"成功获取数据: {len(data)} 行")
-
-            if skip > 0:
-                data = data.iloc[skip:]
-                logger.info(f"跳过 {skip} 行后剩余: {len(data)} 行")
 
             return {
                 "data": data.to_dict(orient="records"),

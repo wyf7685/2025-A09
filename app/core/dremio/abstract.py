@@ -6,6 +6,8 @@ import pandas as pd
 
 from app.schemas.dremio import BaseDatabaseConnection, DremioDatabaseType, DremioSource
 
+DREMIO_REST_FETCH_LIMIT = 100
+
 
 class AbstractDremioClient(abc.ABC):
     @abc.abstractmethod
@@ -86,8 +88,7 @@ class AbstractDremioClient(abc.ABC):
         self,
         source_name: str | list[str],
         limit: int | None = None,
-        *,
-        fetch_all: bool = False,
+        skip: int | None = None,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -95,7 +96,7 @@ class AbstractDremioClient(abc.ABC):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pandas.DataFrame: 数据源数据
@@ -228,8 +229,7 @@ class AbstractAsyncDremioClient(abc.ABC):
         self,
         source_name: str | list[str],
         limit: int | None = None,
-        *,
-        fetch_all: bool = False,
+        skip: int | None = None,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -237,7 +237,7 @@ class AbstractAsyncDremioClient(abc.ABC):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pandas.DataFrame: 数据源数据

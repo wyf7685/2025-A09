@@ -39,11 +39,18 @@ class Lifespan:
             raise RuntimeError("Lifespan already started")
         self._task_group = task_group
 
+    @property
+    def started(self) -> bool:
+        return self._task_group is not None
+
     def start_soon[*Ts](self, func: Callable[[*Ts], Awaitable[object]], /, *args: *Ts, name: object = None) -> None:
         self.task_group.start_soon(func, *args, name=name)
 
     def on_startup[F: LifespanFunc](self, func: F) -> F:
-        self._startup_funcs.append(_ensure_async(func))
+        f = _ensure_async(func)
+        self._startup_funcs.append(f)
+        if self.started:
+            self.start_soon(f)
         return func
 
     def on_shutdown[F: LifespanFunc](self, func: F) -> F:
@@ -51,7 +58,10 @@ class Lifespan:
         return func
 
     def on_ready[F: LifespanFunc](self, func: F) -> F:
-        self._ready_funcs.append(_ensure_async(func))
+        f = _ensure_async(func)
+        self._ready_funcs.append(f)
+        if self.started:
+            self.start_soon(f)
         return func
 
     async def _run_lifespan_func(self, funcs: Iterable[AsyncLifespanFunc]) -> None:
@@ -71,12 +81,12 @@ class Lifespan:
         # run startup funcs
         if self._startup_funcs:
             self._log(f"执行生命周期函数: <g>startup</> - <y>{len(self._startup_funcs)}</>")
-            await self._run_lifespan_func(self._startup_funcs)
+            await self._run_lifespan_func(self._startup_funcs[:])
 
         # run ready funcs
         if self._ready_funcs:
             self._log(f"执行生命周期函数: <g>ready</> - <y>{len(self._ready_funcs)}</>")
-            await self._run_lifespan_func(self._ready_funcs)
+            await self._run_lifespan_func(self._ready_funcs[:])
 
         self._log("生命周期启动完成")
 
@@ -89,7 +99,7 @@ class Lifespan:
     ) -> None:
         if self._shutdown_funcs:
             self._log(f"执行生命周期函数: <y>shutdown</> - <y>{len(self._shutdown_funcs)}</>")
-            await self._run_lifespan_func(reversed(self._shutdown_funcs))
+            await self._run_lifespan_func(reversed(self._shutdown_funcs[:]))
 
         # shutdown background task group
         self._log("正在关闭任务组")

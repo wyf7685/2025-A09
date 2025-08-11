@@ -18,7 +18,7 @@ from app.schemas.dremio import BaseDatabaseConnection, DremioContainer, DremioDa
 from app.utils import escape_tag
 
 from ._cache import container_cache, source_cache
-from .abstract import AbstractAsyncDremioClient
+from .abstract import DREMIO_REST_FETCH_LIMIT, AbstractAsyncDremioClient
 
 
 class AsyncDremioRestClient(AbstractAsyncDremioClient):
@@ -265,8 +265,8 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         self,
         source_name: str | list[str],
         limit: int | None = None,
+        skip: int | None = None,
         *,
-        fetch_all: bool = False,
         max_workers: int = 10,
     ) -> pd.DataFrame:
         """
@@ -275,19 +275,17 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
             max_workers: 分批查询时的最大线程数
 
         Returns:
             pandas.DataFrame: 数据源数据
         """
         source_name = path_to_dotted(source_name)
+        skip = skip or 0
 
-        if limit is None:
-            fetch_all = True
-
-        if not fetch_all and limit is not None and limit <= 100:
-            sql_query = f"SELECT * FROM {source_name} FETCH FIRST {limit} ROWS ONLY"
+        if limit is not None and limit <= 100:
+            sql_query = f"SELECT * FROM {source_name} OFFSET {skip} ROWS FETCH NEXT {limit} ROWS ONLY"
             return await self.execute_sql_to_dataframe(sql_query)
 
         try:
@@ -297,10 +295,10 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             total_rows = int(count_df.iloc[0]["row_count"])
             logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
-            batch_size = 100  # Dremio REST api 单次查询最大数据量
-            total_rows = total_rows if fetch_all or limit is None else min(total_rows, limit)
+            total_rows = total_rows if limit is None else min(total_rows, limit)
             batch_ranges = (
-                (offset, min(batch_size, total_rows - offset)) for offset in range(0, total_rows, batch_size)
+                (offset, min(DREMIO_REST_FETCH_LIMIT, total_rows - offset))
+                for offset in range(0, total_rows, DREMIO_REST_FETCH_LIMIT)
             )
             all_data: dict[int, pd.DataFrame] = {}
 
@@ -312,7 +310,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
 
             async with anyio.create_task_group() as tg:
                 for idx, (offset, size) in enumerate(batch_ranges):
-                    tg.start_soon(fetch, idx, offset, size)
+                    tg.start_soon(fetch, idx, skip + offset, size)
 
             if dfs := [all_data[idx] for idx in sorted(all_data.keys())]:
                 result = (

@@ -44,11 +44,13 @@ class FileDataSource(DataSource):
         self.pandas_kwargs = pandas_kwargs
 
     @override
-    def _load(self, n_rows: int | None = None) -> pd.DataFrame:
+    def _load(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """加载 CSV 文件数据"""
         kwargs = self.pandas_kwargs.copy()
         if n_rows is not None:
             kwargs["nrows"] = n_rows
+        if skip is not None:
+            kwargs["skiprows"] = skip
 
         return (pd.read_csv if self.file_path.suffix == ".csv" else pd.read_excel)(self.file_path, **kwargs)
 

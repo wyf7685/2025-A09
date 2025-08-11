@@ -50,14 +50,14 @@ class DremioDataSource(DataSource):
         return get_async_dremio_client()
 
     @override
-    def _load(self, n_rows: int | None = None) -> pd.DataFrame:
+    def _load(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """加载 Dremio 数据源数据"""
-        return self.client.read_source(self.source.path, n_rows)
+        return self.client.read_source(self.source.path, n_rows, skip)
 
     @override
-    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+    async def _load_async(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """异步加载 Dremio 数据源数据"""
-        return await self.async_client.read_source(self.source.path, n_rows)
+        return await self.async_client.read_source(self.source.path, n_rows, skip)
 
     @override
     def _shape(self) -> tuple[int, int]:

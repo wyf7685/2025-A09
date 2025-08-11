@@ -1,4 +1,4 @@
-from typing import Any, override
+from typing import Any, cast, override
 
 import pandas as pd
 
@@ -31,17 +31,20 @@ class InMemoryDataSource(DataSource):
         self._data = df
 
     @override
-    def _load(self, n_rows: int | None = None) -> pd.DataFrame:
+    def _load(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """从内存加载数据"""
+        data = self._data
+        if skip is not None:
+            data = cast("pd.DataFrame", data[skip:])
         if n_rows is None:
-            return self._data
-        return self._data.head(n_rows)
+            return data
+        return data.head(n_rows)
 
     @override
-    async def _load_async(self, n_rows: int | None = None) -> pd.DataFrame:
+    async def _load_async(self, n_rows: int | None = None, skip: int | None = None) -> pd.DataFrame:
         """异步从内存加载数据"""
         # 直接调用同步方法避免线程切换开销
-        return self._load(n_rows)
+        return self._load(n_rows, skip)
 
     @override
     def _shape(self) -> tuple[int, int]:

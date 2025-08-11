@@ -1,5 +1,6 @@
 # ruff: noqa: S608
 
+import threading
 from pathlib import Path
 from typing import override
 
@@ -9,6 +10,7 @@ from dremio import Dremio, FlightConfig, JobResult, path_to_dotted
 from app.core.config import settings
 from app.core.dremio.abstract import AbstractAsyncDremioClient
 from app.core.dremio.arest import AsyncDremioRestClient
+from app.core.lifespan import lifespan
 from app.log import logger
 from app.schemas.dremio import BaseDatabaseConnection, DremioDatabaseType, DremioSource
 from app.utils import run_sync
@@ -18,13 +20,20 @@ class AsyncDremioFlightClient(AbstractAsyncDremioClient):
     def __init__(self) -> None:
         self._client = Dremio(
             hostname=settings.DREMIO_BASE_URL,
-            username=settings.DREMIO_USERNAME,
-            password=settings.DREMIO_PASSWORD.get_secret_value(),
             flight_config=FlightConfig(port=settings.DREMIO_FLIGHT_PORT),
         )
         self._rest = AsyncDremioRestClient()
         self.external_dir = settings.DREMIO_EXTERNAL_DIR
         self.external_name = settings.DREMIO_EXTERNAL_NAME
+        self._login_finished = threading.Event()
+
+        @lifespan.on_startup
+        def _() -> None:
+            self._client.login(
+                username=settings.DREMIO_USERNAME,
+                password=settings.DREMIO_PASSWORD.get_secret_value(),
+            )
+            self._login_finished.set()
 
     @override
     async def _add_data_source_csv(self, file: Path) -> DremioSource:
@@ -59,8 +68,7 @@ class AsyncDremioFlightClient(AbstractAsyncDremioClient):
         self,
         source_name: str | list[str],
         limit: int | None = None,
-        *,
-        fetch_all: bool = False,
+        skip: int | None = None,
     ) -> pd.DataFrame:
         """
         读取数据源的数据
@@ -68,26 +76,32 @@ class AsyncDremioFlightClient(AbstractAsyncDremioClient):
         Args:
             source_name: 数据源名称
             limit: 返回的行数限制
-            fetch_all: 是否获取全部数据（会忽略limit参数）
+            skip: 跳过的行数，为None表示不跳过
 
         Returns:
             pandas.DataFrame: 数据源数据
         """
         formatted = path_to_dotted(source_name)
+        skip = skip or 0
+
         try:
             count_query = f"SELECT COUNT(*) as row_count FROM {formatted}"
             count_df = await self.execute_sql_to_dataframe(count_query)
             total_rows = int(count_df.iloc[0]["row_count"])
             logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
 
-            n_rows = total_rows if fetch_all or limit is None else min(limit, total_rows)
-            query = f"SELECT * FROM {formatted} FETCH NEXT {n_rows} ROWS ONLY"
+            total_rows -= skip
+            n_rows = total_rows if limit is None else min(limit, total_rows)
+            if n_rows <= 0:
+                return pd.DataFrame()  # 如果没有数据，返回空 DataFrame
+
+            query = f"SELECT * FROM {formatted} OFFSET {skip} ROWS FETCH NEXT {n_rows} ROWS ONLY"
             return await self.execute_sql_to_dataframe(query)
         except Exception:
             logger.opt(exception=True).warning(f"读取数据源 {source_name} 时出错")
 
         logger.warning("回退到使用 REST API 读取数据源")
-        return await self._rest.read_source(source_name, limit=limit, fetch_all=fetch_all)
+        return await self._rest.read_source(source_name, limit=limit, skip=skip)
 
     @run_sync
     def execute_sql_to_dataframe(self, sql_query: str) -> pd.DataFrame:
@@ -101,6 +115,7 @@ class AsyncDremioFlightClient(AbstractAsyncDremioClient):
             pandas.DataFrame: 查询结果的 DataFrame
         """
         logger.info(f"执行 SQL 查询: {sql_query}")
+        self._login_finished.wait()
         table = self._client.flight.query(sql_query, flight_config=self._client.flight_config)
         return JobResult.from_arrow_table(table).to_pandas()
 
