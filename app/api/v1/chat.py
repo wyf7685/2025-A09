@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.const import REPORT_TEMPLATE_DIR
-from app.core.agent import DEFAULT_REPORT_TEMPLATE
+from app.core.agent.prompts.data_analyzer import PROMPTS as DATA_ANALYZER_PROMPTS
 from app.exception import DAAServiceError
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
@@ -145,7 +145,7 @@ async def list_templates() -> list[ReportTemplate]:
             id="default",
             name="默认分析报告模板",
             description="系统内置的标准数据分析报告模板",
-            content=DEFAULT_REPORT_TEMPLATE,
+            content=DATA_ANALYZER_PROMPTS.default_report_template,
             is_default=True,
             created_at="2024-01-01T00:00:00",
         )

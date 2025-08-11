@@ -19,6 +19,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import create_react_agent
 
 from app.core.agent.events import StreamEvent, fix_message_content, process_stream_event
+from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.resume import resume_tool_call
 from app.core.agent.schemas import AgentValues, DataAnalyzerAgentState, SourcesDict, format_sources_overview
 from app.core.agent.sources import Sources
@@ -34,18 +35,6 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
 
-PROMPT_DIR = Path(__file__).parent.parent / "prompts" / "data_analyzer"
-
-
-def _read_prompt_file(filename: str) -> str:
-    return (PROMPT_DIR / filename).read_text(encoding="utf-8")
-
-
-TOOL_INTRO = _read_prompt_file("tool_intro.md")
-SYSTEM_PROMPT = _read_prompt_file("system.md")
-CREATE_TITLE_PROMPT = _read_prompt_file("create_title.md")
-SUMMARY_PROMPT = _read_prompt_file("summary.md")
-DEFAULT_REPORT_TEMPLATE = _read_prompt_file("default_report_template.md")
 
 
 def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
@@ -93,16 +82,16 @@ def format_conversation(messages: list[AnyMessage], *, include_figures: bool) ->
 
 def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, str]:
     input = {"conversation": format_conversation(messages, include_figures=False)[0]}
-    prompt = PromptTemplate(template=CREATE_TITLE_PROMPT, input_variables=["conversation"])
+    prompt = PromptTemplate(template=PROMPTS.create_title, input_variables=["conversation"])
     return (lambda _: input) | prompt | llm
 
 
 def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[str, list[str]]]:
     def params(report_template: str) -> dict[str, str]:
-        return {"conversation": conversation, "tool_intro": TOOL_INTRO, "report_template": report_template}
+        return {"conversation": conversation, "tool_intro": PROMPTS.tool_intro, "report_template": report_template}
 
     conversation, figures = format_conversation(messages, include_figures=True)
-    prompt = PromptTemplate(template=SUMMARY_PROMPT, input_variables=["conversation", "tool_intro", "report_template"])
+    prompt = PromptTemplate(template=PROMPTS.summary, input_variables=["conversation", "tool_intro", "report_template"])
     return params | prompt | llm | (lambda s: (s, figures))
 
 
@@ -131,7 +120,7 @@ class DataAnalyzerAgent:
         await self._lifespan.startup()
 
         # Builtin Tools
-        analyzer = analyzer_tool(self.sources, self.llm, self._lifespan)
+        analyzer = analyzer_tool(self.sources, self.llm)
         df_tools = dataframe_tools(self.sources)
         sk_tools, saved_models = scikit_tools(self.sources, self.session_id)
         sc_tools = sources_tools(self.sources)
@@ -148,9 +137,9 @@ class DataAnalyzerAgent:
         all_tools = builtin_tools + mcp_tools
 
         # Prompt
-        system_prompt = SYSTEM_PROMPT.format(
+        system_prompt = PROMPTS.system.format(
             overview=format_sources_overview(self.sources.sources),
-            tool_intro=TOOL_INTRO,
+            tool_intro=PROMPTS.tool_intro,
         )
 
         # Create Agent
@@ -210,7 +199,8 @@ class DataAnalyzerAgent:
         return await _create_title_chain(self.llm, self.get_messages()).ainvoke(...)
 
     async def summary(self, report_template: str | None = None) -> tuple[str, list[str]]:
-        return await _summary_chain(self.llm, self.get_messages()).ainvoke(report_template or DEFAULT_REPORT_TEMPLATE)
+        input = report_template or PROMPTS.default_report_template
+        return await _summary_chain(self.llm, self.get_messages()).ainvoke(input)
 
     def _resume_from_state(self, state: DataAnalyzerAgentState) -> None:
         """从状态恢复 agent"""

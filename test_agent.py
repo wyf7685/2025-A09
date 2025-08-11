@@ -2,14 +2,15 @@ import builtins
 from pathlib import Path
 
 import anyio
+import anyio.to_thread
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
 from app.core.agent.schemas import SourcesDict
-from app.core.chain import get_chat_model, get_llm, rate_limiter
+from app.core.chain import get_models, rate_limiter
 from app.core.datasource import create_file_source
 from app.log import configure_logging, logger
-from app.utils import configure_matplotlib_fonts, escape_tag, run_sync
+from app.utils import configure_matplotlib_fonts, escape_tag
 
 configure_matplotlib_fonts()
 configure_logging()
@@ -42,10 +43,6 @@ def prefetch_data(sources: SourcesDict) -> None:
 
 
 async def prepare_agent() -> DataAnalyzerAgent:
-    # 速率限制
-    limiter = rate_limiter(14)
-    llm = limiter | get_llm()
-
     # See 飞桨/碳中和—工业废气排放检测
     test_data_dir = Path("data/test")
     sources: SourcesDict = {
@@ -54,13 +51,22 @@ async def prepare_agent() -> DataAnalyzerAgent:
     }
     prefetch_data(sources)
 
+    llm, chat_model = get_models()
+    limiter = rate_limiter(14)
     return await DataAnalyzerAgent.create(
         sources_dict=sources,
-        llm=llm,
-        chat_model=get_chat_model(),
+        llm=limiter | llm,
+        chat_model=chat_model,
         session_id="TEST",
         pre_model_hook=limiter,
     )
+
+
+async def input(prompt: str) -> str:
+    try:
+        return await anyio.to_thread.run_sync(builtins.input, prompt)
+    except KeyboardInterrupt:
+        return ""
 
 
 async def test_agent() -> None:
@@ -69,7 +75,6 @@ async def test_agent() -> None:
     state_file = Path("state.json")
     await agent.load_state(state_file)
 
-    input = run_sync(builtins.input)
     while user_input := (await input(">>> ")).strip():
         reader = BufferedStreamEventReader()
         try:
@@ -92,4 +97,7 @@ async def test_agent() -> None:
 
 
 if __name__ == "__main__":
-    anyio.run(test_agent)
+    from contextlib import suppress
+
+    with suppress(KeyboardInterrupt):
+        anyio.run(test_agent)

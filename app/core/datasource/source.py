@@ -133,7 +133,7 @@ class DataSource(abc.ABC):
             pd.DataFrame: 数据源的预览数据
         """
         if self._preview_data is None or force_reload or n_rows > self.metadata.preview_rows:
-            logger.debug(f"读取数据源预览数据: {n_rows=}")
+            logger.debug(f"读取数据源预览数据: id={self.metadata.id} {n_rows=}")
             self._preview_data = df = self._load(n_rows)
             self.__set_metatadata_by_preview(df)
             return self._preview_data
@@ -152,7 +152,7 @@ class DataSource(abc.ABC):
             pd.DataFrame: 数据源的预览数据
         """
         if self._preview_data is None or force_reload or n_rows > self.metadata.preview_rows:
-            logger.debug(f"读取数据源预览数据: {n_rows=}")
+            logger.debug(f"异步读取数据源预览数据: id={self.metadata.id} {n_rows=}")
             self._preview_data = df = await self._load_async(n_rows)
             self.__set_metatadata_by_preview(df)
             return self._preview_data
@@ -208,7 +208,7 @@ class DataSource(abc.ABC):
         Returns:
             pd.DataFrame: 数据源的完整数据
         """
-        logger.debug("获取数据源完整数据")
+        logger.debug(f"获取数据源完整数据: id={self.metadata.id}")
         if self._full_data is None:
             self.set_full_data(self._load())
             assert self._full_data is not None
@@ -222,7 +222,7 @@ class DataSource(abc.ABC):
         Returns:
             pd.DataFrame: 数据源的完整数据
         """
-        logger.debug("获取数据源完整数据")
+        logger.debug(f"异步获取数据源完整数据: id={self.metadata.id}")
         if self._full_data is None:
             self.set_full_data(await self._load_async())
             assert self._full_data is not None

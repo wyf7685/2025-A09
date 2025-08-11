@@ -83,6 +83,7 @@ def _select_model(
     model_id: LLModelID,
     type: Literal["LLM", "ChatModel", "ALL"],  # noqa: A002
 ) -> LLM | BaseChatModel | tuple[LLM, BaseChatModel]:
+    logger.debug(f"选择模型: {model_id} {type=}")
     model_name = model_id or settings.TEST_MODEL_NAME
 
     # 检查是否是自定义模型

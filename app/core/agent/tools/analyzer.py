@@ -1,5 +1,4 @@
 import base64
-from typing import TYPE_CHECKING
 
 from langchain_core.tools import BaseTool, tool
 
@@ -7,14 +6,10 @@ from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.executor import CodeExecutor, format_result
-from app.core.lifespan import Lifespan
 from app.log import logger
 from app.utils import escape_tag
 
 from ._registry import register_tool
-
-if TYPE_CHECKING:
-    from app.core.agent.schemas import DatasetID
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -43,7 +38,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(sources: Sources, llm: LLM, lifespan: Lifespan) -> BaseTool:
+def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -54,20 +49,14 @@ def analyzer_tool(sources: Sources, llm: LLM, lifespan: Lifespan) -> BaseTool:
     Returns:
         Tool: 用于数据分析的LangChain工具。
     """
-    analyzers: dict[DatasetID, NL2DataAnalysis] = {}
 
     @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
     @register_tool("通用数据分析工具")
     def analyze_data(dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
         source = sources.get(dataset_id)
-
-        if dataset_id not in analyzers:
-            executor = CodeExecutor(source)
-            lifespan.on_shutdown(executor.astop)
-            analyzers[dataset_id] = NL2DataAnalysis(llm, executor=executor)
-
-        logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = analyzers[dataset_id].invoke((source, query))
+        with CodeExecutor(source) as executor:
+            logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
+            result = NL2DataAnalysis(llm, executor=executor).invoke((source, query))
 
         # 处理图片结果
         artifact = {}
