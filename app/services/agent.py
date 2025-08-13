@@ -21,8 +21,8 @@ from app.utils import escape_tag
 
 @dataclasses.dataclass
 class AgentState:
-    agent: DataAnalyzerAgent
-    model_id: LLModelID | None
+    agent: DataAnalyzerAgent | None = None
+    model_id: LLModelID | None = None
     lock: anyio.Lock = dataclasses.field(default_factory=anyio.Lock)
     scope: anyio.CancelScope | None = None
 
@@ -51,7 +51,7 @@ class DataAnalyzerAgentService:
     ) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
         if self._get(session, None):
-            await self.destroy(session.id, save_state=True)
+            await self._destroy(session.id, save_state=True, pop=False)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
         sources = await dataset_id_to_sources(session.dataset_ids)
@@ -65,7 +65,8 @@ class DataAnalyzerAgentService:
         )
         await agent.load_state(STATE_DIR / f"{session.id}.json")
 
-        self.agents[session.id] = AgentState(agent, model_id)
+        self.agents[session.id].agent = agent
+        self.agents[session.id].model_id = model_id
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
         )
@@ -78,14 +79,15 @@ class DataAnalyzerAgentService:
             return None
         return state.agent
 
-    async def destroy(self, session_id: SessionID, *, save_state: bool = False) -> None:
+    async def _destroy(self, session_id: SessionID, *, save_state: bool = False, pop: bool = True) -> None:
         """销毁会话的 Agent"""
-        if session_id not in self.agents:
+        if session_id not in self.agents or (state := self.agents[session_id]).agent is None:
             raise AgentNotFound(session_id)
 
-        await self.cancel(session_id)
+        await self._cancel(session_id)
 
-        agent = self.agents.pop(session_id).agent
+        agent = state.agent
+        state.agent = state.model_id = None
 
         if save_state:
             try:
@@ -99,12 +101,28 @@ class DataAnalyzerAgentService:
         except Exception:
             logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
-    async def cancel(self, session_id: SessionID) -> None:
+        if pop:
+            self.agents.pop(session_id, None)
+
+    async def _cancel(self, session_id: SessionID) -> None:
         """取消会话的 Agent 操作"""
         if (state := self.agents.get(session_id)) and (scope := state.scope):
             scope.cancel()
             await anyio.lowlevel.cancel_shielded_checkpoint()
             logger.opt(colors=True).info(f"取消会话 <c>{escape_tag(session_id)}</> 的 Agent 操作")
+
+    async def _destroy_all(self) -> None:
+        async def destroy(session_id: SessionID) -> None:
+            try:
+                await self._destroy(session_id, pop=True)
+            except AgentNotFound:
+                pass
+            except Exception:
+                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
+
+        async with anyio.create_task_group() as tg:
+            for session_id in self.agents:
+                tg.start_soon(destroy, session_id)
 
     @contextlib.asynccontextmanager
     async def use_agent(
@@ -112,6 +130,9 @@ class DataAnalyzerAgentService:
         session: Session,
         model_id: LLModelID | None = None,
     ) -> AsyncGenerator[DataAnalyzerAgent]:
+        if session.id not in self.agents:
+            self.agents[session.id] = AgentState()
+
         state = self.agents[session.id]
         if state.lock.locked():
             raise AgentInUse(session.id)
@@ -143,20 +164,7 @@ class DataAnalyzerAgentService:
         """刷新会话的 MCP 连接"""
         # 直接销毁当前 Agent，下次调用会创建带有新 MCP 的 Agent
         with contextlib.suppress(AgentNotFound):
-            await self.destroy(session.id)
-
-    async def _destroy_all(self) -> None:
-        async def destroy(session_id: SessionID) -> None:
-            try:
-                await self.destroy(session_id)
-            except AgentNotFound:
-                pass
-            except Exception:
-                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
-
-        async with anyio.create_task_group() as tg:
-            for session_id in self.agents:
-                tg.start_soon(destroy, session_id)
+            await self._destroy(session.id, pop=False)
 
 
 daa_service = DataAnalyzerAgentService()

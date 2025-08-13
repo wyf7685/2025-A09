@@ -3,18 +3,12 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS venv
 WORKDIR /app
 
 ADD docker/debian.sources /etc/apt/sources.list.d/debian.sources
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates 
-# git python3-dev gcc g++ build-essential \
-# libffi-dev libssl-dev zlib1g-dev liblzma-dev libbz2-dev \
-# libfreetype6-dev pkg-config
-
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN uv venv /opt/venv
 
 ENV UV_LINK_MODE=copy
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
@@ -39,7 +33,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fc-cache -f -v
 
 ENV PYTHONPATH=/app \
-    VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
 COPY --from=venv /opt/venv /opt/venv

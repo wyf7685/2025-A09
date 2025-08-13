@@ -65,7 +65,11 @@ class MCPService:
 
     def gets(self, *ids: str) -> Sequence[MCPConnection]:
         """Get multiple MCP servers by IDs."""
-        return [self.get(id) for id in ids] if ids else list(self.servers.values())
+        return [self.get(id) for id in ids]
+
+    def get_all(self) -> Sequence[MCPConnection]:
+        """Get all registered MCP servers."""
+        return list(self.servers.values())
 
 
 mcp_service = MCPService()
