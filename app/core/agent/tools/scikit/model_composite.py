@@ -88,7 +88,7 @@ def create_composite_model(
     _validate_model_compatibility(models)
 
     # 确定模型类型（分类或回归）
-    is_classification = "classifier" in models[0]["model_type"]
+    is_classification = "classifier" in models[0].model_type
 
     # 根据集成类型创建相应模型
     if composite_type == "voting":
@@ -104,21 +104,21 @@ def create_composite_model(
 def _validate_model_compatibility(models: list[TrainModelResult]) -> None:
     """验证模型兼容性"""
     # 确定模型类型（分类或回归）
-    is_classification = "classifier" in models[0]["model_type"]
+    is_classification = "classifier" in models[0].model_type
 
     # 验证所有模型类型一致
     for model in models[1:]:
-        current_is_classification = "classifier" in model["model_type"]
+        current_is_classification = "classifier" in model.model_type
         if current_is_classification != is_classification:
             raise ValueError("所有模型必须是同一类型（分类或回归）")
 
     # 验证所有模型训练特征输入
-    feature_sets = [set(model["feature_columns"]) for model in models]
+    feature_sets = [set(model.feature_columns) for model in models]
     if not all(feature_sets[0] == features for features in feature_sets):
         raise ValueError("所有模型的特征列必须一致")
 
     # 验证所有模型的目标列一致
-    target_columns = {model["target_column"] for model in models}
+    target_columns = {model.target_column for model in models}
     if len(target_columns) != 1:
         raise ValueError("所有模型的目标列必须一致")
 
@@ -135,7 +135,7 @@ def _create_voting_model(
         raise ValueError(f"权重列表长度({len(weights)})必须与模型数量({len(models)})相同")
 
     # 准备构建投票模型
-    estimators = [(f"model_{i}", model["model"]) for i, model in enumerate(models)]
+    estimators = [(f"model_{i}", m.model) for i, m in enumerate(models)]
 
     if is_classification:
         voting = options.get("voting", "hard")
@@ -188,7 +188,7 @@ def _create_stacking_model(
     meta_estimator = meta_estimator_info["model"]
 
     # 准备基础模型
-    estimators = [(f"model_{i}", model["model"]) for i, model in enumerate(models)]
+    estimators = [(f"model_{i}", m.model) for i, m in enumerate(models)]
 
     if is_classification:
         from sklearn.ensemble import StackingClassifier
@@ -326,7 +326,7 @@ def _create_blending_model(
     meta_estimator = meta_estimator_info["model"]
 
     # 准备基础模型
-    base_models = [model["model"] for model in models]
+    base_models = [m.model for m in models]
 
     if is_classification:
         composite_model = BlendingClassifier(base_models, meta_estimator, validation_split)

@@ -58,13 +58,13 @@ def _format_train_result_for_llm(model_id: str, result: TrainModelResult) -> str
     """
     output = (
         f"训练结果 (ID='{model_id}'):\n"
-        f"模型类型: {result['model_type']}\n"
-        f"特征列: {', '.join(result['feature_columns'])}\n"
-        f"目标列: {result['target_column']}"
+        f"模型类型: {result.model_type}\n"
+        f"特征列: {', '.join(result.feature_columns)}\n"
+        f"目标列: {result.target_column}"
     )
 
     # 如果使用了自定义超参数，添加到输出中
-    if hyperparams := result.get("hyperparams"):
+    if hyperparams := result.hyperparams:
         output += "\n超参数:"
         for param, value in hyperparams.items():
             output += f"\n  - {param}: {value}"
@@ -299,19 +299,17 @@ def scikit_tools(
 
         # 创建复合模型
         logger.opt(colors=True).info(
-            f"<g>创建复合模型</>: 类型=<e>{escape_tag(composite_type)}</e>, 基础模型数量=<c>{len(model_ids)}</c>"
+            f"<g>创建复合模型</>: 类型=<e>{composite_type}</>, 基础模型数量=<c>{len(model_ids)}</>"
         )
         model_info = create_composite_model(models, composite_type, options)
 
         # 生成唯一ID并缓存结果
-        model_id = str(uuid.uuid4())
-        model_instance_cache[model_id] = model_info
+        model_id = _cache_model_info(model_info)
 
-        base_models = [f"{i + 1}. {mid}" for i, mid in enumerate(model_ids)]
         return (
             f"复合模型创建成功 (ID={model_id})\n"
             f"模型类型: {model_info['model_type']}\n"
-            f"基础模型: {', '.join(base_models)}\n"
+            f"基础模型: \n{'\n'.join(f'  {i + 1}. {mid}' for i, mid in enumerate(model_ids))}\n"
             f"超参数: \n{json.dumps(model_info['hyperparams'], indent=2) if model_info['hyperparams'] else '无'}\n"
         )
 
@@ -367,21 +365,20 @@ def scikit_tools(
             train_result = train_model_cache[model_id]
             # 计算模型性能指标
             evaluation = evaluate_model(train_result)
-            metrics = evaluation.get("metrics", {})
 
             # 生成模型名称
-            model_name = f"{train_result['model_type']}_{model_id[:8]}"
+            model_name = f"{train_result.model_type}_{model_id[:8]}"
 
             # 注册模型
             registry_id = model_registry.register_model(
                 name=model_name,
-                model_type=train_result["model_type"],
+                model_type=train_result.model_type,
                 session_id=session_id,
                 dataset_id="TODO",
                 description=f"模型ID: {model_id}",
-                features=train_result["feature_columns"],
-                target_column=train_result["target_column"],
-                metrics=metrics,
+                features=train_result.feature_columns,
+                target_column=train_result.target_column,
+                metrics=evaluation["metrics"],
                 model_path=file_path.with_suffix(".joblib"),
                 metadata_path=file_path.with_suffix(".metadata.json"),
             )

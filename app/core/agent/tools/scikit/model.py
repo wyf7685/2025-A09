@@ -1,3 +1,4 @@
+import dataclasses
 import inspect
 import json
 from pathlib import Path
@@ -200,7 +201,8 @@ def create_model(
     }
 
 
-class TrainModelResult(TypedDict):
+@dataclasses.dataclass(eq=False)
+class TrainModelResult:
     model: EstimatorLike
     X_test: Any
     Y_test: Any
@@ -208,8 +210,8 @@ class TrainModelResult(TypedDict):
     message: str
     feature_columns: list[str]
     target_column: str
-    label_encoder: LabelEncoder | None  # 可选的标签编码器，用于分类任务
-    hyperparams: NotRequired[dict[str, Any] | None]  # 存储使用的超参数
+    label_encoder: LabelEncoder | None = dataclasses.field(default=None)
+    hyperparams: dict[str, Any] | None = dataclasses.field(default=None)
 
 
 def fit_model(
@@ -266,17 +268,17 @@ def fit_model(
     # 训练模型
     model.fit(X_train, Y_train)
 
-    return {
-        "model": model,
-        "X_test": X_test,
-        "Y_test": Y_test,
-        "model_type": model_type,
-        "message": f"模型训练成功。模型类型: {model_type}",
-        "feature_columns": features,
-        "target_column": target,
-        "label_encoder": le,
-        "hyperparams": hyperparams,
-    }
+    return TrainModelResult(
+        model=model,
+        X_test=X_test,
+        Y_test=Y_test,
+        model_type=model_type,
+        message=f"模型训练成功。模型类型: {model_type}",
+        feature_columns=features,
+        target_column=target,
+        label_encoder=le,
+        hyperparams=hyperparams,
+    )
 
 
 class EvaluateModelResult(TypedDict):
@@ -296,10 +298,10 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     Returns:
         dict: 包含模型评估指标、消息和预测结果摘要的字典。
     """
-    model = trained_model_info["model"]
-    X_test = trained_model_info["X_test"]
-    y_test = trained_model_info["Y_test"]
-    model_type = trained_model_info["model_type"]
+    model = trained_model_info.model
+    X_test = trained_model_info.X_test
+    y_test = trained_model_info.Y_test
+    model_type = trained_model_info.model_type
 
     y_pred = model.predict(X_test)
 
@@ -313,7 +315,7 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
         metrics["r2_score"] = r2_score(y_test, y_pred)
         message = "模型评估完成 (回归任务)。"
     elif task_type == "classification":  # 分类任务
-        if le := trained_model_info.get("label_encoder"):  # 如果目标变量被编码过，需要将预测结果也转换为整数
+        if le := trained_model_info.label_encoder:  # 如果目标变量被编码过，需要将预测结果也转换为整数
             # 对于分类模型，y_pred通常是类别索引，但如果模型输出是概率，可能需要argmax
             if hasattr(model, "predict_classes"):  # scikit-learn的旧版本API
                 y_pred_classes = model.predict_classes(X_test)
@@ -379,18 +381,18 @@ def save_model(model_info: TrainModelResult, file_path: Path) -> SaveModelResult
     Returns:
         dict: 包含保存结果消息和文件路径的字典。
     """
-    model = model_info["model"]
+    model = model_info.model
     try:
         joblib.dump(model, file_path.with_suffix(".joblib"))
         # 保存模型的元数据，例如特征列表、目标列、编码器等
         meta_data: ModelMetadata = {
-            "model_type": model_info["model_type"],
-            "feature_columns": model_info["feature_columns"],
-            "target_column": model_info["target_column"],
-            "hyperparams": model_info.get("hyperparams", None),
+            "model_type": model_info.model_type,
+            "feature_columns": model_info.feature_columns,
+            "target_column": model_info.target_column,
+            "hyperparams": model_info.hyperparams,
         }
         # 如果有标签编码器，也保存它的类别信息
-        if le := model_info.get("label_encoder"):
+        if le := model_info.label_encoder:
             meta_data["label_encoder_classes"] = cast("np.ndarray", le.classes_).tolist()
 
         file_path.with_suffix(".metadata.json").write_bytes(
@@ -420,17 +422,17 @@ def resume_train_result(df: pd.DataFrame, metadata: ModelMetadata, model: Estima
         le = LabelEncoder()
         Y = le.fit_transform(Y)
 
-    return {
-        "model": model,
-        "X_test": df[metadata["feature_columns"]],
-        "Y_test": df[metadata["target_column"]],
-        "model_type": metadata["model_type"],
-        "message": "从文件加载模型",
-        "feature_columns": metadata["feature_columns"],
-        "target_column": metadata["target_column"],
-        "label_encoder": le,
-        "hyperparams": metadata.get("hyperparams", None),  # 超参数需要重新应用
-    }
+    return TrainModelResult(
+        model=model,
+        X_test=df[metadata["feature_columns"]],
+        Y_test=Y,
+        model_type=metadata["model_type"],
+        message="从文件加载模型",
+        feature_columns=metadata["feature_columns"],
+        target_column=metadata["target_column"],
+        label_encoder=le,
+        hyperparams=metadata.get("hyperparams", None),  # 超参数需要重新应用
+    )
 
 
 def load_model(df: pd.DataFrame, file_path: Path) -> tuple[ModelMetadata, TrainModelResult]:
@@ -497,8 +499,8 @@ def predict_with_model(
     Returns:
         tuple[pd.DataFrame, PredictionResult]: 包含预测结果的新DataFrame和预测结果信息字典的元组
     """
-    model = model_info["model"]
-    model_type = model_info["model_type"]
+    model = model_info.model
+    model_type = model_info.model_type
     task_type = MODEL_TASK_TYPE.get(model_type)
 
     if task_type is None:
@@ -506,7 +508,7 @@ def predict_with_model(
 
     # 如果没有指定特征列，则使用模型训练时的特征列
     if input_features is None:
-        input_features = model_info["feature_columns"]
+        input_features = model_info.feature_columns
 
     # 验证所有特征列是否都存在
     missing_features = [f for f in input_features if f not in input_data.columns]
@@ -528,7 +530,7 @@ def predict_with_model(
 
     # 处理分类模型的解码
     decoded: np.ndarray | None = None
-    if task_type == "classification" and (le := model_info.get("label_encoder")):
+    if task_type == "classification" and (le := model_info.label_encoder):
         try:
             decoded = cast("np.ndarray", le.inverse_transform(predictions.astype(int)))
         except Exception as e:
