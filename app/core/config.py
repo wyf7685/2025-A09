@@ -14,6 +14,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    HOST: str = "0.0.0.0"  # noqa: S104
+    PORT: int = 8081
+
     # 数据库配置
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/db.sqlite3"
 

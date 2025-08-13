@@ -45,4 +45,4 @@ OLLAMA_API_URL=xxx
 ## 说明
 
 - 需要使用 `docker build` 命令构建 runner 镜像，将镜像 ID 写入 .env 的 `DOCKER_RUNNER_IMAGE` 变量
-- 命令参考: `docker build . -f docker/Dockerfile.runner -t langchain-runner`
+- 命令参考: `docker build . -f docker/Dockerfile.runner -t analyzer-executor`

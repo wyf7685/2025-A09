@@ -1,31 +1,85 @@
 services:
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - backend_data:/app/data
+      - external_data:/external
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8081 # see nginx.conf
+      - DREMIO_BASE_URL=http://dremio:9047
+      - DREMIO_USERNAME=user
+      - DREMIO_PASSWORD=password123
+      - DREMIO_EXTERNAL_DIR=/external
+      - DREMIO_EXTERNAL_NAME=external
+      - DOCKER_RUNNER_IMAGE=analyzer-executor
+    depends_on:
+      dremio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsSL -o /dev/null --max-time 5 http://localhost:8081/api/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 前端服务 (Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    restart: always
+    ports:
+      - '8081:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # Dremio 服务
   dremio:
     image: dremio/dremio-oss:latest
     ports:
-      - "9047:9047" # UI 端口
-      - "32010:32010" # Arrow Flight 端口
+      - '9047:9047' # UI 端口
+      - '32010:32010' # Arrow Flight 端口
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置
-      - ./external:/external # 挂载外部目录
+      - external_data:/external # 挂载外部目录
     environment:
       - DREMIO_HEAP_SIZE_MB=4096 # 设置堆内存大小
       - DREMIO_MAX_DIRECT_MEMORY_MB=8192 # 设置直接内存大小
     depends_on:
       - postgres
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsSLI -o /dev/null --max-time 5 http://localhost:9047 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
+  # [调试用] PostgreSQL 服务
   postgres:
     image: postgres:latest
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       - POSTGRES_DB=database
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
     volumes:
-      - postgres_data:/var/lib/postgresql/data # 持久化 PostgreSQL 数据
+      - postgres_data:/var/lib/postgresql/data # 持久化数据库
 
 volumes:
+  backend_data:
   dremio_data:
   dremio_conf:
+  external_data:
   postgres_data:

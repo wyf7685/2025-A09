@@ -9,6 +9,7 @@ configure_matplotlib_fonts()
 configure_logging()
 
 from app import api
+from app.core.config import settings
 from app.core.lifespan import lifespan
 
 # 创建 FastAPI 应用
@@ -36,4 +37,4 @@ app.include_router(api.router)
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.__main__:app", host="0.0.0.0", port=8081)  # noqa: S104
+    uvicorn.run("app.__main__:app", host=settings.HOST, port=settings.PORT)

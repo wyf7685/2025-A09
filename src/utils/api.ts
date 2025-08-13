@@ -9,7 +9,7 @@ import type { ReportTemplate } from '@/types/report';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
 
-export const API_BASE_URL = 'http://127.0.0.1:8081/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // 创建 axios 实例
 const api = axios.create({
