@@ -22,7 +22,8 @@
   "compounds": [
     {
       "name": "全栈: 启动前端+后端",
-      "configurations": ["后端: Launch FastAPI", "前端: Launch Vue"]
+      "configurations": ["后端: Launch FastAPI", "前端: Launch Vue"],
+      "preLaunchTask": "Launch Dremio"
     }
   ]
 }

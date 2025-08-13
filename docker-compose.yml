@@ -8,7 +8,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_data:/app/data
-      - external_data:/external
+      - ./external:/external
     environment:
       - HOST=0.0.0.0
       - PORT=8081 # see nginx.conf
@@ -50,7 +50,7 @@ services:
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置
-      - external_data:/external # 挂载外部目录
+      - ./external:/external # 挂载外部目录
     environment:
       - DREMIO_HEAP_SIZE_MB=4096 # 设置堆内存大小
       - DREMIO_MAX_DIRECT_MEMORY_MB=8192 # 设置直接内存大小
@@ -59,7 +59,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - curl -fsSLI -o /dev/null --max-time 5 http://localhost:9047 || exit 1
+        - curl -fsSL -o /dev/null --max-time 5 http://localhost:9047 || exit 1
       interval: 10s
       timeout: 5s
       retries: 5
@@ -81,5 +81,5 @@ volumes:
   backend_data:
   dremio_data:
   dremio_conf:
-  external_data:
+  # external_data:
   postgres_data:

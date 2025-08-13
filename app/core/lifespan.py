@@ -98,7 +98,7 @@ class Lifespan:
         exc_tb: TracebackType | None = None,
     ) -> None:
         if self._shutdown_funcs:
-            self._log(f"执行生命周期函数: <y>shutdown</> - <y>{len(self._shutdown_funcs)}</>")
+            self._log(f"执行生命周期函数: <g>shutdown</> - <y>{len(self._shutdown_funcs)}</>")
             await self._run_lifespan_func(reversed(self._shutdown_funcs[:]))
 
         # shutdown background task group
