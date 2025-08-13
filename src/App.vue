@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
-import { ChatDotRound, Collection, Connection, DataAnalysis, House, Menu, Monitor, Link } from '@element-plus/icons-vue';
+import { ChatDotRound, Collection, Connection, DataAnalysis, House, Link, Menu, Monitor } from '@element-plus/icons-vue';
 import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElMenu, ElMenuItem } from 'element-plus';
-import { onMounted, ref } from 'vue';
+import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
 import { RouterView } from 'vue-router';
 
 // 响应式数据
@@ -119,7 +119,22 @@ onMounted(async () => {
 
       <!-- 内容区域 -->
       <main class="layout-content">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <template v-if="Component">
+            <Transition mode="out-in">
+              <KeepAlive>
+                <Suspense>
+                  <!-- 主要内容 -->
+                  <component :is="Component"></component>
+                  <!-- 加载中状态 -->
+                  <template #fallback>
+                    正在加载...
+                  </template>
+                </Suspense>
+              </KeepAlive>
+            </Transition>
+          </template>
+        </RouterView>
       </main>
     </div>
   </div>
