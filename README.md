@@ -4,7 +4,7 @@
 
 - 后端: [uv](https://github.com/astral-sh/uv) + Docker (Desktop if on Windows)
   - 安装后在项目根目录执行 `uv sync`
-  - 构建 CodeExecutor 所用的镜像: `docker build . -f docker/Dockerfile.runner -t {DOCKER_RUNNER_IMAGE}`
+  - 构建 CodeExecutor 所用的镜像: `docker build . -f docker/Dockerfile.executor -t $DOCKER_RUNNER_IMAGE`
 - [Dremio](https://www.dremio.com/):
   - 使用 docker
     - 安装后在项目根目录执行 `docker compose pull` 和 `docker compose up -d`
@@ -44,5 +44,12 @@ OLLAMA_API_URL=xxx
 
 ## 说明
 
-- 需要使用 `docker build` 命令构建 runner 镜像，将镜像 ID 写入 .env 的 `DOCKER_RUNNER_IMAGE` 变量
-- 命令参考: `docker build . -f docker/Dockerfile.runner -t analyzer-executor`
+- 需要使用 `docker build` 命令构建 executor 镜像，将镜像 ID 写入 .env 的 `DOCKER_RUNNER_IMAGE` 变量
+- 命令参考: `docker build . -f docker/Dockerfile.executor -t analyzer-executor`
+
+# 生产环境部署
+
+- 使用 `docker compose pull` 拉取 Dremio 等服务镜像
+- 使用 `docker compose build` 构建前后端镜像
+- 修改 `docker-compose.yml` 中的环境变量配置
+- 执行 `docker compose up -d --wait` 启动服务

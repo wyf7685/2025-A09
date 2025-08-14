@@ -10,12 +10,13 @@ COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
-COPY . .
+COPY index.html tsconfig* *.ts ./
+COPY src/ ./src/
 RUN pnpm run build
 
-FROM nginx:alpine
+FROM nginx:alpine AS app
 
-COPY --from=builder /app/dist /usr/share/nginx/html
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 CMD ["nginx", "-g", "daemon off;"]

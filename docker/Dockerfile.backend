@@ -2,10 +2,11 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS venv
 
 WORKDIR /app
 
-ADD docker/debian.sources /etc/apt/sources.list.d/debian.sources
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
-RUN uv venv /opt/venv
+RUN --mount=type=bind,source=docker/debian.sources,target=/etc/apt/sources.list.d/debian.sources \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates
 
+RUN uv venv /opt/venv
 ENV UV_LINK_MODE=copy
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -21,19 +22,18 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN.UTF-8 \
-    LC_ALL=zh_CN.UTF-8
+    LC_ALL=zh_CN.UTF-8 \
+    PYTHONPATH=/app \
+    PATH="/opt/venv/bin:$PATH"
 
-ADD docker/setup-docker-apt.sh /setup-docker-apt.sh
-ADD docker/debian.sources /etc/apt/sources.list.d/debian.sources
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=bind,source=docker/debian.sources,target=/etc/apt/sources.list.d/debian.sources \
+    --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt.sh \
+    apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig && \
-    bash /setup-docker-apt.sh && rm /setup-docker-apt.sh && \
+    bash /setup-docker-apt.sh && \
     apt-get update && apt-get install -y --no-install-recommends docker-ce-cli && \
     rm -rf /var/lib/apt/lists/* && \
     fc-cache -f -v
-
-ENV PYTHONPATH=/app \
-    PATH="/opt/venv/bin:$PATH"
 
 COPY --from=venv /opt/venv /opt/venv
 COPY app/ /app/app

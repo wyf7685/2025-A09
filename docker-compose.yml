@@ -5,10 +5,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
     restart: always
+    tty: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_data:/app/data
-      - ./external:/external
+      - ./external:/external  # TODO: 生产环境改为挂载卷 external_data
+      - ./.env:/app/.env  # 挂载环境变量文件
     environment:
       - HOST=0.0.0.0
       - PORT=8081 # see nginx.conf
@@ -50,7 +52,7 @@ services:
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置
-      - ./external:/external # 挂载外部目录
+      - ./external:/external # 挂载外部目录  # TODO: 生产环境改为挂载卷 external_data
     environment:
       - DREMIO_HEAP_SIZE_MB=4096 # 设置堆内存大小
       - DREMIO_MAX_DIRECT_MEMORY_MB=8192 # 设置直接内存大小
@@ -81,5 +83,5 @@ volumes:
   backend_data:
   dremio_data:
   dremio_conf:
-  # external_data:
+  # external_data:  # TODO: 生产环境取消注释卷 external_data
   postgres_data:
