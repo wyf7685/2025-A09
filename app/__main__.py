@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.log import configure_logging
 from app.utils import configure_matplotlib_fonts
 
-configure_matplotlib_fonts()
 configure_logging()
+configure_matplotlib_fonts()
 
 from app import api
 from app.core.config import settings
@@ -23,13 +23,10 @@ app = FastAPI(
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vue 开发服务器默认端口
-        "http://localhost:8081",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ALLOW_ORIGINS,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=settings.CORS_ALLOW_METHODS,
+    allow_headers=settings.CORS_ALLOW_HEADERS,
 )
 
 # 注册API路由
