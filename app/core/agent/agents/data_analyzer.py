@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Self, cast
 
 import anyio
 import anyio.to_thread
-from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig, ensure_config
@@ -36,9 +35,10 @@ if TYPE_CHECKING:
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
 
 
-
 def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
-    for tool_call in itertools.chain(*(m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls)):
+    for tool_call in itertools.chain.from_iterable(
+        m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls
+    ):
         try:
             resume_tool_call(tool_call, {"sources": sources})
         except Exception as e:
@@ -75,24 +75,31 @@ def format_conversation(messages: list[AnyMessage], *, include_figures: bool) ->
                 ):
                     artifact_info = f"[包含图片输出, ID={len(figures)}]\n"
                     figures.append(base64_data)
-                formatted.append(f"工具调用结果({id}): {status}\n<tool-call>\n{content!r}\n{artifact_info}</tool-call>")
+                formatted.append(
+                    f"工具调用结果({id}): {status=}\n"
+                    f"<tool-call-result>\n{content!r}\n{artifact_info}</tool-call-result>"
+                )
 
-    return f"<conversation>\n{'\n'.join(formatted) if formatted else '无对话记录'}\n</conversation>", figures
+    conversations = f"<conversation>\n{'\n'.join(formatted) if formatted else '无对话记录'}\n</conversation>"
+    return conversations, figures
 
 
 def _create_title_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[object, str]:
-    input = {"conversation": format_conversation(messages, include_figures=False)[0]}
-    prompt = PromptTemplate(template=PROMPTS.create_title, input_variables=["conversation"])
-    return (lambda _: input) | prompt | llm
+    conversation = format_conversation(messages, include_figures=False)[0]
+    prompt = PROMPTS.create_title.format(conversation=conversation)
+    return (lambda _: prompt) | llm
 
 
 def _summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[str, list[str]]]:
-    def params(report_template: str) -> dict[str, str]:
-        return {"conversation": conversation, "tool_intro": PROMPTS.tool_intro, "report_template": report_template}
+    def prompt(report_template: str) -> str:
+        return PROMPTS.summary.format(
+            conversation=conversation,
+            tool_intro=PROMPTS.tool_intro,
+            report_template=report_template,
+        )
 
     conversation, figures = format_conversation(messages, include_figures=True)
-    prompt = PromptTemplate(template=PROMPTS.summary, input_variables=["conversation", "tool_intro", "report_template"])
-    return params | prompt | llm | (lambda s: (s, figures))
+    return prompt | llm | (lambda s: (s, figures))
 
 
 class DataAnalyzerAgent:
