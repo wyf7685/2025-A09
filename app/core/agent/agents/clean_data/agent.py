@@ -39,7 +39,7 @@ from .schemas import (
 )
 
 
-def _create_graph() -> CompiledStateGraph[CleaningState, CleaningState, CleaningState]:
+def _create_graph() -> CompiledStateGraph[CleaningState, None, CleaningState, CleaningState]:
     """创建数据清洗工作流图"""
     graph = StateGraph(CleaningState)
 

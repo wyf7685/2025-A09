@@ -9,7 +9,7 @@ import loguru
 from app.utils import ansi_to_loguru_tag, escape_tag
 
 if TYPE_CHECKING:
-    from loguru import Logger
+    from loguru import Logger, Record
 
 logger: "Logger" = loguru.logger
 
@@ -67,6 +67,21 @@ logger_id_file = logger.add(
     enqueue=True,
     format=log_format,
 )
+
+_HIDDEN_NAMES = ("uvicorn", "starlette", "httpx")
+
+
+def _hidden_upsteam(record: "Record") -> None:
+    if (name := record["name"]) is None:
+        return
+
+    for hidden_name in _HIDDEN_NAMES:
+        if name.startswith(hidden_name):
+            record["name"] = hidden_name
+            return
+
+
+logger.configure(patcher=_hidden_upsteam)
 
 
 def configure_logging() -> None:
