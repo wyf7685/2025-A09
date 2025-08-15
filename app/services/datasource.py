@@ -22,11 +22,7 @@ _TEMP_DIR = anyio.Path(TEMP_DIR)
 @with_semaphore(1)
 async def _fetch_dremio_source() -> list[DremioSource]:
     logger.info("从 Dremio 同步数据源...")
-    try:
-        return await get_async_dremio_client().list_sources()
-    except Exception as e:
-        logger.warning(f"从Dremio获取数据源列表失败: {e}")
-        return []
+    return await get_async_dremio_client().list_sources()
 
 
 class _DataSourceStruct(BaseModel):
@@ -222,7 +218,7 @@ class TempFileService:
 
         lifespan.on_shutdown(self.delete_all)
 
-    async def register(self, file_path: Path) -> str:
+    async def register(self, file_path: Path, ttl: float | None = None) -> str:
         """
         注册临时文件
 
@@ -236,6 +232,10 @@ class TempFileService:
         temp_path = _TEMP_DIR / f"{file_id}{file_path.suffix}"
         await anyio.Path(file_path).rename(temp_path)
         self._data[file_id] = temp_path
+
+        if ttl is not None and ttl > 0:
+            lifespan.start_soon(self._delete_after, file_id, ttl)
+
         return file_id
 
     def get(self, file_id: str) -> Path | None:
@@ -270,6 +270,10 @@ class TempFileService:
         logger.info("清理所有临时文件...")
         for file_id in list(self._data):
             await self.delete(file_id)
+
+    async def _delete_after(self, file_id: str, delay: float) -> None:
+        await anyio.sleep(delay)
+        await self.delete(file_id)
 
 
 class TempSourceService:

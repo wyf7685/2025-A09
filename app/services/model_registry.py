@@ -2,19 +2,22 @@
 模型注册表 - 统一管理所有训练好的模型
 """
 
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import anyio
+import anyio.to_thread
 from pydantic import TypeAdapter
 
-from app.const import DATA_DIR, MODEL_DIR
+from app.const import DATA_DIR, MODEL_DIR, TEMP_DIR
 from app.core.lifespan import lifespan
 from app.log import logger
 from app.schemas.ml_model import MLModelInfo
 from app.schemas.session import SessionID
+from app.services.datasource import temp_file_service
 
 _models_ta = TypeAdapter(dict[str, MLModelInfo])
 
@@ -109,20 +112,6 @@ class ModelRegistry:
             models = [m for m in models if m.session_id == session_id]
         return sorted(models, key=lambda x: x.created_at, reverse=True)
 
-    async def update_model(self, model_id: str, **kwargs: Any) -> bool:
-        """更新模型信息"""
-        if model_id not in self._models:
-            return False
-
-        model = self._models[model_id]
-        for key, value in kwargs.items():
-            if hasattr(model, key):
-                setattr(model, key, value)
-
-        model.last_used = datetime.now().isoformat()
-        await self._save_registry()
-        return True
-
     async def delete_model(self, model_id: str) -> bool:
         """删除模型"""
         if model_id not in self._models:
@@ -156,6 +145,37 @@ class ModelRegistry:
     def get_session_models(self, session_id: SessionID) -> list[MLModelInfo]:
         """获取会话的所有模型"""
         return [m for m in self._models.values() if m.session_id == session_id]
+
+    def _pack_model_archive(self, model_id: str) -> Path:
+        """打包模型为二进制数据"""
+        model = self.get_model(model_id)
+        if not model:
+            raise ValueError(f"Model {model_id} not found")
+
+        temp_dir = TEMP_DIR / f"pack_model_{uuid.uuid4()}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # 复制模型文件到临时目录
+            shutil.copyfile(model.model_path, temp_dir / model.model_path.name)
+            shutil.copyfile(model.metadata_path, temp_dir / model.metadata_path.name)
+
+            # 打包为 zip 文件
+            archive = temp_dir.with_suffix(".zip")
+            shutil.make_archive(archive.stem, "zip", temp_dir)
+
+            logger.info(f"模型 {model_id} 已打包为 {archive}")
+            return archive
+
+        finally:
+            # 清理临时目录
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def pack_model(self, model_id: str) -> Path:
+        archive = await anyio.to_thread.run_sync(self._pack_model_archive, model_id)
+        file_id = await temp_file_service.register(archive, ttl=3600)
+        temp_path = temp_file_service.get(file_id)
+        assert temp_path is not None
+        return temp_path
 
 
 # 全局模型注册表实例

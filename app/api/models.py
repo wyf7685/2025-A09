@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.log import logger
@@ -15,14 +16,14 @@ from app.schemas.ml_model import MLModelInfoOut
 from app.schemas.session import SessionID
 from app.services.model_registry import model_registry
 
-router = APIRouter()
+router = APIRouter(prefix="/models")
 
 
 class GetModelsResponse(BaseModel):
     models: list[MLModelInfoOut]
 
 
-@router.get("/models")
+@router.get("")
 async def get_trained_models(session_id: SessionID) -> dict[str, Sequence[MLModelInfoOut]]:
     """获取已训练的模型列表"""
     try:
@@ -38,7 +39,7 @@ async def get_trained_models(session_id: SessionID) -> dict[str, Sequence[MLMode
         raise HTTPException(status_code=500, detail=f"Failed to get models: {e}") from e
 
 
-@router.get("/models/all")
+@router.get("/all")
 async def get_all_models() -> dict[str, Sequence[MLModelInfoOut]]:
     """获取所有模型列表"""
     try:
@@ -55,7 +56,7 @@ class CreateModelRequest(BaseModel):
     config: dict[str, Any] = {}
 
 
-@router.post("/models")
+@router.post("")
 async def create_model(request: CreateModelRequest) -> dict[str, Any]:
     """创建新模型"""
     try:
@@ -92,7 +93,7 @@ class UpdateModelRequest(BaseModel):
     status: str
 
 
-@router.put("/models/{model_id}")
+@router.put("/{model_id}")
 async def update_model(model_id: str, request: UpdateModelRequest) -> dict[str, Any]:
     """更新模型状态"""
     try:
@@ -107,7 +108,7 @@ async def update_model(model_id: str, request: UpdateModelRequest) -> dict[str, 
         raise HTTPException(status_code=500, detail=f"Failed to update model: {e}") from e
 
 
-@router.delete("/models/{model_id}")
+@router.delete("/{model_id}")
 async def delete_model(model_id: str) -> dict[str, Any]:
     """删除模型"""
     try:
@@ -124,3 +125,16 @@ async def delete_model(model_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.exception("删除模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {e}") from e
+
+
+@router.get("/{model_id}")
+async def download_model(model_id: str) -> FileResponse:
+    """下载模型文件"""
+    try:
+        model_archive = await model_registry.pack_model(model_id)
+        return FileResponse(model_archive, media_type="application/zip", filename=f"model_{model_id}.zip")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail="Model not found") from e
+    except Exception as e:
+        logger.exception("下载模型失败")
+        raise HTTPException(status_code=500, detail=f"Failed to download model: {e}") from e

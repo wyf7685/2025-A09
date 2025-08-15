@@ -97,9 +97,12 @@ class Lifespan:
         exc_val: BaseException | None = None,
         exc_tb: TracebackType | None = None,
     ) -> None:
+        self._log("正在关闭生命周期...")
+
         if self._shutdown_funcs:
             self._log(f"执行生命周期函数: <g>shutdown</> - <y>{len(self._shutdown_funcs)}</>")
-            await self._run_lifespan_func(reversed(self._shutdown_funcs[:]))
+            with anyio.CancelScope(shield=True):
+                await self._run_lifespan_func(reversed(self._shutdown_funcs[:]))
 
         # shutdown background task group
         self._log("正在关闭任务组")
