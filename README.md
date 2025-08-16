@@ -7,7 +7,7 @@
   - 构建 CodeExecutor 所用的镜像: `docker build . -f docker/Dockerfile.executor -t $DOCKER_RUNNER_IMAGE`
 - [Dremio](https://www.dremio.com/):
   - 使用 docker
-    - 安装后在项目根目录执行 `docker compose pull` 和 `docker compose up -d`
+    - 安装后在项目根目录执行 `docker compose pull` 和 `docker compose up dremio -d --wait`
   - 单独部署
     - 参考 Dremio 文档安装
 - 前端: [node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/)
@@ -38,7 +38,7 @@ OLLAMA_API_URL=xxx
 
 ## 启动调试
 
-推荐使用 `VS Code` (或 `Cursor` 等) 侧边栏调试，一键启动前端+后端
+推荐使用 `VS Code` (或 `Cursor` 等) 侧边栏调试，一键启动前端+后端+Dremio容器
 
 其他 IDE 请自行配置运行和调试
 
