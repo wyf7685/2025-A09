@@ -107,7 +107,7 @@ def _get_model_instance(model_type: SupportedBaseModelType, random_state: int = 
 
     # 尝试导入模型
     try:
-        ModelClass = resolve_dot_notation(model_path, default_attr="")
+        ModelClass = resolve_dot_notation(model_path)
     except (ImportError, AttributeError) as e:
         if "xgboost" in model_path:
             raise ImportError(f"未安装XGBoost库，无法使用 xgb 模型: {model_path}") from e

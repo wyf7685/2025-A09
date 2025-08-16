@@ -81,16 +81,18 @@ def run_sync[**P, R](call: Callable[P, R]) -> Callable[P, Coroutine[None, None, 
     return _wrapper
 
 
-def resolve_dot_notation(obj_str: str, default_attr: str, default_prefix: str | None = None) -> Any:
+def resolve_dot_notation(obj_str: str, default_attr: str | None = None, default_prefix: str | None = None) -> Any:
     """解析并导入点分表示法的对象"""
-    modulename, _, cls = obj_str.partition(":")
+    modulename, _, attrs = obj_str.partition(":")
     if default_prefix is not None and modulename.startswith("~"):
         modulename = default_prefix + modulename[1:]
     module = importlib.import_module(modulename)
-    if not cls:
+    if not attrs:
+        if default_attr is None:
+            raise ImportError(f"'{obj_str}' does not specify an attribute to import.")
         return getattr(module, default_attr)
     instance = module
-    for attr_str in cls.split("."):
+    for attr_str in attrs.split("."):
         instance = getattr(instance, attr_str)
     return instance
 

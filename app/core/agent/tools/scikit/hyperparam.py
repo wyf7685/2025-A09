@@ -355,7 +355,7 @@ def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int
     # 尝试导入模型
     try:
         # 使用resolve_dot_notation函数导入模型类
-        ModelClass = resolve_dot_notation(model_config["model"], default_attr="")
+        ModelClass = resolve_dot_notation(model_config["model"])
     except (ImportError, AttributeError) as e:
         if "xgboost" in model_config["model"]:
             raise ImportError(f"未安装XGBoost库，无法使用 xgb 模型: {model_config['model']}") from e
