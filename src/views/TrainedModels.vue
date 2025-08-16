@@ -2,7 +2,7 @@
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { Model } from '@/types';
-import { Calendar, DataAnalysis, Delete, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
+import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
 import { ElButton, ElCard, ElDialog, ElEmpty, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
@@ -150,6 +150,12 @@ onMounted(async () => {
                   <View />
                 </el-icon>
                 查看
+              </el-button>
+              <el-button size="small" @click="modelStore.downloadModel(model.id)">
+                <el-icon>
+                  <Download />
+                </el-icon>
+                下载
               </el-button>
               <el-button size="small" type="danger" @click="deleteModel(model.id)">
                 <el-icon>

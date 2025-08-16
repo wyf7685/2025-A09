@@ -127,7 +127,7 @@ async def delete_model(model_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {e}") from e
 
 
-@router.get("/{model_id}")
+@router.get("/download/{model_id}")
 async def download_model(model_id: str) -> FileResponse:
     """下载模型文件"""
     try:

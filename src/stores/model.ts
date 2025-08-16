@@ -1,5 +1,5 @@
 import type { LLMModel, ModelsResponse } from '@/types';
-import api from '@/utils/api';
+import api, { API_BASE_URL } from '@/utils/api';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
@@ -149,6 +149,14 @@ export const useModelStore = defineStore('model', () => {
     }
   };
 
+  const downloadModel = (modelId: string) => {
+    const link = document.createElement('a');
+    link.href = `${API_BASE_URL}/models/download/${modelId}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return {
     selectedModel: computed(() => selectedModel.value),
     availableModels: computed(() => availableModels.value),
@@ -161,5 +169,6 @@ export const useModelStore = defineStore('model', () => {
     submitCustomModel,
     deleteCustomModel,
     updateCustomModel,
+    downloadModel,
   };
 });
