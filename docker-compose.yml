@@ -10,10 +10,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_data:/app/data
       - ./external:/external  # TODO: 生产环境改为挂载卷 external_data
-      - ./.env:/app/.env  # 挂载环境变量文件
+      - ./.env:/app/.env  # 开发测试: 挂载环境变量文件
     environment:
       - HOST=0.0.0.0
       - PORT=8081 # see nginx.conf
+      - MAX_WORKERS=1
       - DREMIO_BASE_URL=http://dremio:9047
       - DREMIO_USERNAME=user
       - DREMIO_PASSWORD=password123
@@ -47,8 +48,8 @@ services:
   dremio:
     image: dremio/dremio-oss:latest
     ports:
-      - '9047:9047' # UI 端口
-      - '32010:32010' # Arrow Flight 端口
+      - "9047:9047" # UI 端口
+      - "32010:32010" # Arrow Flight 端口
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置
@@ -71,7 +72,7 @@ services:
   postgres:
     image: postgres:latest
     ports:
-      - '5432:5432'
+      - "5432:5432"
     environment:
       - POSTGRES_DB=database
       - POSTGRES_USER=user
