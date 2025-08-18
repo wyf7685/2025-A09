@@ -28,7 +28,7 @@ router = APIRouter(prefix="/chat")
 class ChatRequest(BaseModel):
     session_id: SessionID
     message: str
-    model_id: str = "gemini-2.0-flash"  # 默认模型
+    model_id: str = "gemini-2.0-flash"  # deprecated
 
     @field_validator("message", mode="after")
     @classmethod
@@ -49,7 +49,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
     try:
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
-        async with daa_service.use_agent(session, request.model_id) as agent:
+        async with daa_service.use_agent(session) as agent:
             async for event in agent.stream(request.message):
                 try:
                     msg = event.model_dump_json() + "\n"
@@ -90,7 +90,7 @@ async def chat_analysis_stream(request: ChatRequest) -> StreamingResponse:
 
 class SummaryRequest(BaseModel):
     session_id: SessionID
-    model_id: str | None = None
+    model_id: str | None = None  # deprecated
 
 
 class SummaryResponse(BaseModel):
@@ -108,7 +108,7 @@ async def chat_summary(request: SummaryRequest) -> SummaryResponse:
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        async with daa_service.use_agent(session, request.model_id) as agent:
+        async with daa_service.use_agent(session) as agent:
             summary, figures = await agent.summary()
             return SummaryResponse(
                 session_id=session.id,
@@ -237,7 +237,7 @@ class GenerateReportRequest(BaseModel):
 
     session_id: str
     template_id: str | None = None
-    model_id: str | None = None
+    model_id: str | None = None  # deprecated
 
 
 class GenerateReportResponse(BaseModel):
@@ -290,7 +290,7 @@ async def generate_report(request: GenerateReportRequest) -> GenerateReportRespo
                 f"使用自定义模板: <y>{escape_tag(template_name)}</> <c>({escape_tag(request.template_id)})</>"
             )
 
-        async with daa_service.use_agent(session, request.model_id) as agent:
+        async with daa_service.use_agent(session) as agent:
             # 检查是否有对话历史
             if not agent.has_messages():
                 raise HTTPException(

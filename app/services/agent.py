@@ -1,18 +1,16 @@
 import contextlib
 import dataclasses
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator, Iterator
 
 import anyio
 import anyio.lowlevel
 
 from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
-from app.core.chain import get_models_async
 from app.core.datasource import DataSource
 from app.core.lifespan import lifespan
 from app.exception import AgentCancelled, AgentInUse, AgentNotFound
 from app.log import logger
-from app.schemas.custom_model import LLModelID
 from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
 from app.services.mcp import mcp_service
@@ -22,9 +20,20 @@ from app.utils import escape_tag
 @dataclasses.dataclass
 class AgentState:
     agent: DataAnalyzerAgent | None = None
-    model_id: LLModelID | None = None
-    lock: anyio.Lock = dataclasses.field(default_factory=anyio.Lock)
+    model_hash: int | None = None
+    locked: bool = False
     scope: anyio.CancelScope | None = None
+
+    @contextlib.contextmanager
+    def lock(self) -> Iterator[None]:
+        if self.locked:
+            raise AgentInUse("Agent is already in use")
+
+        self.locked = True
+        try:
+            yield
+        finally:
+            self.locked = False
 
 
 async def dataset_id_to_sources(dataset_ids: list[str]) -> dict[str, DataSource]:
@@ -44,40 +53,44 @@ class DataAnalyzerAgentService:
 
         lifespan.on_shutdown(self._destroy_all)
 
-    async def _create(
-        self,
-        session: Session,
-        model_id: LLModelID | None = None,
-    ) -> DataAnalyzerAgent:
+    async def _create(self, session: Session) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
-        if self._get(session, None):
+        if self._get(session, check_model_hash=False):
             await self._destroy(session.id, save_state=True, pop=False)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
         sources = await dataset_id_to_sources(session.dataset_ids)
-        llm, chat_model = await get_models_async(model_id)
+        model_config = session.agent_model_config
         agent = await DataAnalyzerAgent.create(
-            sources_dict=sources,
-            llm=llm,
-            chat_model=chat_model,
             session_id=session.id,
-            mcp_connections=(mcp.connection for mcp in mcps),
+            sources_dict=sources,
+            model_config=model_config,
+            mcp_connections=[mcp.connection for mcp in mcps],
         )
         await agent.load_state(STATE_DIR / f"{session.id}.json")
 
         self.agents[session.id].agent = agent
-        self.agents[session.id].model_id = model_id
+        self.agents[session.id].model_hash = model_config.hash
         logger.opt(colors=True).info(
-            f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent，使用模型: <y>{escape_tag(model_id)}</>"
+            f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent, "
+            f"使用模型配置: <y>{escape_tag(model_config.model_dump(exclude_none=True))}</>"
         )
         return agent
 
-    def _get(self, session: Session, model_id: LLModelID | None = None) -> DataAnalyzerAgent | None:
+    def _get(self, session: Session, *, check_model_hash: bool) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
         state = self.agents.get(session.id)
-        if state is None or (model_id is not None and state.model_id != model_id):
+        if state is None or state.agent is None or state.model_hash is None:
+            return None
+        if check_model_hash and state.model_hash != session.agent_model_config.hash:
             return None
         return state.agent
+
+    async def _get_or_create(self, session: Session) -> DataAnalyzerAgent:
+        """获取或创建会话的 Agent"""
+        if agent := self._get(session, check_model_hash=True):
+            return agent
+        return await self._create(session)
 
     async def _destroy(self, session_id: SessionID, *, save_state: bool = False, pop: bool = True) -> None:
         """销毁会话的 Agent"""
@@ -87,7 +100,7 @@ class DataAnalyzerAgentService:
         await self._cancel(session_id)
 
         agent = state.agent
-        state.agent = state.model_id = None
+        state.agent = state.model_hash = None
 
         if save_state:
             try:
@@ -125,22 +138,13 @@ class DataAnalyzerAgentService:
                 tg.start_soon(destroy, session_id)
 
     @contextlib.asynccontextmanager
-    async def use_agent(
-        self,
-        session: Session,
-        model_id: LLModelID | None = None,
-    ) -> AsyncGenerator[DataAnalyzerAgent]:
+    async def use_agent(self, session: Session) -> AsyncIterator[DataAnalyzerAgent]:
         if session.id not in self.agents:
             self.agents[session.id] = AgentState()
 
         state = self.agents[session.id]
-        if state.lock.locked():
-            raise AgentInUse(session.id)
-
-        async with state.lock:
-            agent = self._get(session, model_id)
-            if agent is None:
-                agent = await self._create(session, model_id)
+        with state.lock():
+            agent = await self._get_or_create(session)
 
             with anyio.CancelScope() as scope:
                 state.scope = scope

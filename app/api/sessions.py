@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.exception import MCPServerNotFound
 from app.log import logger
 from app.schemas.mcp import MCPConnection
 from app.schemas.session import Session, SessionID, SessionListItem
@@ -134,13 +135,11 @@ async def add_mcp_to_session(session_id: SessionID, request: AddMCPToSessionRequ
             raise HTTPException(status_code=404, detail="Session not found")
 
         # 检查MCP连接是否存在
-        from app.services.mcp import mcp_service
-
         for mcp_id in request.mcp_ids:
             try:
                 mcp_service.get(mcp_id)
-            except ValueError as e:
-                raise HTTPException(status_code=404, detail=f"MCP connection {mcp_id} not found") from e
+            except MCPServerNotFound as e:
+                raise HTTPException(status_code=e.status_code, detail=str(e)) from e
 
         # 添加MCP连接ID到会话
         if session.mcp_ids is None:
@@ -225,7 +224,7 @@ async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnecti
         for mcp_id in session.mcp_ids:
             try:
                 connections.append(mcp_service.get(mcp_id))
-            except ValueError:
+            except MCPServerNotFound:
                 # MCP连接不存在，跳过
                 logger.warning(f"MCP connection {mcp_id} not found in session {session_id}")
                 continue

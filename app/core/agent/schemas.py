@@ -1,29 +1,9 @@
 from collections.abc import MutableMapping
-from pathlib import Path
 from typing import Literal, NotRequired, Protocol, TypedDict, TypeGuard
 
-from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
 
 from app.core.datasource import DataSource
-
-
-class AgentValues(TypedDict):
-    messages: NotRequired[list[AnyMessage]]
-
-
-class DataAnalyzerAgentState(BaseModel):
-    values: AgentValues
-    models: dict[str, Path]
-    sources_random_state: int
-
-    def colorize(self) -> str:
-        return (
-            f"消息数=<y>{len(self.values.get('messages', []))}</>, "
-            f"模型数=<y>{len(self.models)}</>, "
-            f"随机状态=<y>{self.sources_random_state}</>"
-        )
-
 
 type DatasetID = str
 type SourcesDict = MutableMapping[DatasetID, DataSource]

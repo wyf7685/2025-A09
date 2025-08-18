@@ -7,9 +7,10 @@ import anyio.to_thread
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
 from app.core.agent.schemas import SourcesDict
-from app.core.chain import get_models, rate_limiter
+from app.core.chain import rate_limiter
 from app.core.datasource import create_file_source
 from app.log import configure_logging, logger
+from app.schemas.session import AgentModelConfig
 from app.utils import configure_matplotlib_fonts, escape_tag
 
 configure_matplotlib_fonts()
@@ -51,13 +52,11 @@ async def prepare_agent() -> DataAnalyzerAgent:
     }
     prefetch_data(sources)
 
-    llm, chat_model = get_models()
     limiter = rate_limiter(14)
     return await DataAnalyzerAgent.create(
-        sources_dict=sources,
-        llm=limiter | llm,
-        chat_model=chat_model,
         session_id="TEST",
+        sources_dict=sources,
+        model_config=AgentModelConfig.default_config(),
         pre_model_hook=limiter,
     )
 
@@ -87,7 +86,7 @@ async def test_agent() -> None:
         # 保存 agent 状态
         await agent.save_state(state_file)
 
-    for model_id, model_path in agent.saved_models.items():
+    for model_id, model_path in agent.ctx.saved_models.items():
         logger.info(f"模型 {model_id} 已保存到: {model_path}")
 
     if (await input("是否生成总结报告? [y/N]: ")).strip().lower() == "y":
