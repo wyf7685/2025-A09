@@ -1,12 +1,10 @@
-from .._prompts import PromptLoader as _PromptLoader
+from .._prompts import make_loader
 
 
-class _Loader(_PromptLoader):
+@make_loader(__file__)
+class PROMPTS:
     create_title: str
     default_report_template: str
     summary: str
     system: str
     tool_intro: str
-
-
-PROMPTS = _Loader(__file__)

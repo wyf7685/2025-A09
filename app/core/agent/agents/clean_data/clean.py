@@ -7,6 +7,7 @@ from langchain.prompts import PromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
+from app.core.agent.prompts.clean_data import PROMPTS
 from app.core.agent.schemas import OperationFailedModel
 from app.core.chain import get_llm
 from app.core.chain.nl_analysis import code_parser
@@ -17,44 +18,11 @@ from app.services.datasource import temp_source_service
 
 from .schemas import ApplyCleaningResult, ApplyCleaningSummary, CleaningState, load_source
 
-# AI代码生成的提示模板
-CODE_GENERATION_PROMPT = """
-你是一位专业的数据清洗专家。基于用户的要求，为以下数据生成Python代码来执行数据清洗操作。
-
-数据信息:
-{data_overview}
-
-用户选择的清洗操作:
-{selected_suggestions}
-
-用户自定义要求:
-{user_requirements}
-
-请生成Python代码来执行以下操作:
-1. 执行用户选择的清洗操作
-2. 确保最终的DataFrame列名是映射后的名称
-
-要求:
-- 使用变量名 `df` 来表示DataFrame
-- 最终返回清洗后的DataFrame: `result = df`
-- 代码要安全、高效
-- 包含适当的错误处理
-- 添加注释说明每个步骤
-
-生成的代码:
-```python
-import pandas as pd
-import numpy as np
-
-# 你的清洗代码
-```
-"""
-
 
 def _create_code_generator_chain() -> Runnable[dict[str, Any], str]:
     prompt = PromptTemplate(
         input_variables=["data_overview", "selected_suggestions", "user_requirements"],
-        template=CODE_GENERATION_PROMPT,
+        template=PROMPTS.generate_clean_code,
     )
     return prompt | get_llm() | code_parser
 
@@ -304,42 +272,9 @@ def create_cleaning_suggestion(issue: dict[str, Any], df: pd.DataFrame) -> dict[
 
     return None
 
-
-PROMPT_CLEANING_SUGGESTION = """
-基于用户的清洗要求，为以下数据集生成具体的清洗建议。
-
-数据概览:
-{data_overview}
-
-用户要求:
-{user_requirements}
-
-请生成清洗建议，以JSON格式返回:
-{{
-  "suggestions": [
-    {{
-      "column": "列名",
-      "issue_type": "问题类型",
-      "description": "问题描述",
-      "suggested_action": "建议的清洗动作",
-      "priority": "优先级(high/medium/low)",
-      "parameters": {{"参数名": "参数值"}},
-      "auto_apply": false
-    }}
-  ]
-}}
-
-要求:
-1. 建议要具体、可执行
-2. 优先级要合理
-3. 参数要完整
-4. 只有安全的操作才设置auto_apply为true
-"""
-
-
 def _chain_prompt(input: tuple[pd.DataFrame, str]) -> str:
     df, user_requirements = input
-    return PROMPT_CLEANING_SUGGESTION.format(
+    return PROMPTS.clean_suggestion.format(
         data_overview=df.describe().to_json(),
         user_requirements=user_requirements or "无特殊要求",
     )

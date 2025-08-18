@@ -3,43 +3,11 @@ import re
 
 from pydantic import BaseModel
 
+from app.core.agent.prompts.clean_data import PROMPTS
 from app.core.chain import get_llm
 from app.log import logger
 
 from .schemas import CleaningState, load_source
-
-PROMPT_FIELD_MAPPING = """
-你是一位专业的数据分析师，擅长理解数据结构和字段含义。
-请分析以下数据集的字段，并为每个字段提供标准化的名称和描述。
-
-字段信息:
-{columns_info}
-
-数据样本:
-{sample_data}
-
-用户要求:
-{user_requirements}
-
-请为每个字段提供以下信息，以JSON格式返回:
-{{
-  "field_mappings": [
-    {{
-      "original_name": "原始字段名",
-      "suggested_name": "建议的标准字段名",
-      "confidence": 0.95,
-      "field_type": "字段类型(如: 数值型、文本型、日期型等)",
-      "description": "字段含义的详细描述"
-    }}
-  ]
-}}
-
-要求:
-1. 建议的字段名应该简洁、清晰、符合命名规范
-2. 置信度应该基于数据样本的清晰程度
-3. 字段类型要准确反映数据的实际类型
-4. 描述要详细说明字段的业务含义
-"""
 
 
 def create_field_mapping_prompt(state: CleaningState) -> str:
@@ -55,7 +23,7 @@ def create_field_mapping_prompt(state: CleaningState) -> str:
         }
         for col in df.columns
     ]
-    return PROMPT_FIELD_MAPPING.format(
+    return PROMPTS.field_mapping.format(
         columns_info=json.dumps(columns_info, ensure_ascii=False, indent=2),
         sample_data=json.dumps(df.head(5).to_dict("records"), ensure_ascii=False, indent=2),
         user_requirements=state.get("user_requirements") or "无特殊要求",
