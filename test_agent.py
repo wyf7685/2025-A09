@@ -1,8 +1,6 @@
-import builtins
 from pathlib import Path
 
 import anyio
-import anyio.to_thread
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
@@ -31,16 +29,10 @@ def log_event(event: StreamEvent) -> None:
             logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
 
 
-def prefetch_data(sources: SourcesDict) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
-    with ThreadPoolExecutor() as executor:
-        futures = {source_id: executor.submit(source.get_full) for source_id, source in sources.items()}
-        for source_id, future in futures.items():
-            try:
-                future.result()
-            except Exception:
-                logger.exception(f"数据加载失败: {source_id}")
+async def prefetch_data(sources: SourcesDict) -> None:
+    async with anyio.create_task_group() as tg:
+        for source in sources.values():
+            tg.start_soon(source.get_full_async)
 
 
 async def prepare_agent() -> DataAnalyzerAgent:
@@ -50,7 +42,7 @@ async def prepare_agent() -> DataAnalyzerAgent:
         "train": create_file_source(test_data_dir / "train.csv", sep="\t"),
         "test": create_file_source(test_data_dir / "test.csv", sep="\t"),
     }
-    prefetch_data(sources)
+    await prefetch_data(sources)
 
     limiter = rate_limiter(14)
     return await DataAnalyzerAgent.create(
@@ -61,20 +53,13 @@ async def prepare_agent() -> DataAnalyzerAgent:
     )
 
 
-async def input(prompt: str) -> str:
-    try:
-        return await anyio.to_thread.run_sync(builtins.input, prompt)
-    except KeyboardInterrupt:
-        return ""
-
-
 async def test_agent() -> None:
     agent = await prepare_agent()
 
     state_file = Path("state.json")
     await agent.load_state(state_file)
 
-    while user_input := (await input(">>> ")).strip():
+    while user_input := input(">>> ").strip():
         reader = BufferedStreamEventReader()
         try:
             async for event in reader.aread(agent.stream(user_input)):
@@ -86,10 +71,12 @@ async def test_agent() -> None:
         # 保存 agent 状态
         await agent.save_state(state_file)
 
+        await anyio.sleep(0.1)
+
     for model_id, model_path in agent.ctx.saved_models.items():
         logger.info(f"模型 {model_id} 已保存到: {model_path}")
 
-    if (await input("是否生成总结报告? [y/N]: ")).strip().lower() == "y":
+    if input("是否生成总结报告? [y/N]: ").strip().lower() == "y":
         summary, figures = await agent.summary()
         logger.info(f"\n{summary}\n")
         logger.info(f"包含图表: {len(figures)}")
