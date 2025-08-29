@@ -11,6 +11,7 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { MCPConnection } from '@/types';
+import { sleep } from '@/utils/tools';
 import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
@@ -282,7 +283,7 @@ const reprocessWithModel = async (modelId: string): Promise<void> => {
   console.log('使用新模型重新处理:', modelId);
 
   // 等待一小段时间以确保UI状态更新
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await sleep(100);
 
   // 显示处理中的提示
   if (isVisualizationRequest) {
@@ -292,7 +293,7 @@ const reprocessWithModel = async (modelId: string): Promise<void> => {
   }
 
   // 在更新模型后，等待一小段时间确保模型选择已经被正确应用
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await sleep(200);
 
   // 在热力图等复杂图表的情况下，可能需要额外处理
   // 使用前面已经定义的 isVisualizationRequest 变量
@@ -303,7 +304,7 @@ const reprocessWithModel = async (modelId: string): Promise<void> => {
     flowPanelRef.value?.flowPanel?.clearFlowSteps();
 
     // 延迟稍微长一点，确保之前的处理完全清除
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await sleep(300);
   }
 
   // 发送消息进行处理

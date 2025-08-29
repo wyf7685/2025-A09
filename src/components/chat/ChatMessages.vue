@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { ChatMessage } from '@/types';
+import { Loading } from '@element-plus/icons-vue';
+import { ElIcon } from 'element-plus';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AssistantMessage from './message/AssistantMessage.vue';
+import AssistantSuggestions from './message/AssistantSuggestions.vue';
 import UserMessage from './message/UserMessage.vue';
-import { ElIcon, ElButton } from 'element-plus';
-import { Loading } from '@element-plus/icons-vue';
 
 type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[]; };
 
@@ -21,18 +22,6 @@ const emit = defineEmits<{
 const messagesContainer = ref<HTMLElement | null>(null);
 
 const lastMessage = computed(() => props.messages.length ? props.messages[props.messages.length - 1] : null);
-
-// 工具函数：去除markdown粗体、冒号和多余空格，只取建议标题部分
-const stripSuggestion = (s: string) => {
-  const clean = s.replace(/\*\*/g, '').trim();
-  const idx = clean.indexOf('：');
-  return idx !== -1 ? clean.slice(0, idx) : clean;
-};
-
-// 添加建议问题
-const addSampleQuestion = (question: string) => {
-  emit('add-sample-question', stripSuggestion(question));
-};
 
 // 滚动到底部
 const scrollToBottom = (): void => {
@@ -96,12 +85,8 @@ onMounted(() => {
           <span>正在处理...</span>
         </div>
         <!-- 建议按钮 -->
-        <div v-if="!lastMessage.loading && lastMessage.suggestions?.length" class="suggestion-buttons">
-          <el-button v-for="(suggestion, idx) in lastMessage.suggestions" :key="idx" size="small"
-            @click="addSampleQuestion(suggestion)" style="margin: 4px 4px 0 0;">
-            {{ stripSuggestion(suggestion) }}
-          </el-button>
-        </div>
+        <AssistantSuggestions v-if="!lastMessage.loading && lastMessage.suggestions?.length"
+          :suggestions="lastMessage.suggestions" @set="emit('add-sample-question', $event)" />
       </template>
     </template>
   </div>
@@ -167,30 +152,6 @@ onMounted(() => {
 
   .el-icon {
     font-size: 16px;
-  }
-}
-
-.suggestion-buttons {
-  margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-
-  .el-button {
-    border-radius: 20px;
-    font-size: 12px;
-    padding: 4px 12px;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    color: #6b7280;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background: #e5e7eb;
-      color: #374151;
-      border-color: #d1d5db;
-      transform: translateY(-1px);
-    }
   }
 }
 
