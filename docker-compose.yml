@@ -21,6 +21,7 @@ services:
       - DREMIO_EXTERNAL_DIR=/external
       - DREMIO_EXTERNAL_NAME=external
       - DOCKER_RUNNER_IMAGE=analyzer-executor
+      - REDIS_HOST=redis
     depends_on:
       dremio:
         condition: service_healthy
