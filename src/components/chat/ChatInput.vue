@@ -147,7 +147,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
 
 <style lang="scss" scoped>
 .chat-input-area {
-  padding: 12px 20px 6px;
+  padding: 7px 16px;
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
 }

@@ -93,7 +93,7 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
 
 <style lang="scss" scoped>
 .session-sidebar {
-  width: 260px;
+  width: 240px;
   flex-shrink: 0;
   background-color: #ffffff;
   color: #374151;

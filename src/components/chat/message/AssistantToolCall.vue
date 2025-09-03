@@ -45,6 +45,8 @@ watch(() => artifact.value?.base64_data, (newValue) => {
     const blob = base64ToBlob(newValue);
     if (blob) {
       artifactImageUrl.value = URL.createObjectURL(blob);
+      // 默认展开图片生成内容
+      isExpanded.value = sectionExpanded.artifact = true;
     } else {
       console.error('无法将 Base64 数据转换为 Blob 对象');
     }
