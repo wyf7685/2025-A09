@@ -72,7 +72,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
 <template>
   <div class="chat-input-area">
     <div class="chat-input-wrapper">
-      <el-input v-model="input" placeholder="输入你的问题..." @keydown="handleKeydown($event as KeyboardEvent)" resize="none"
+      <el-input v-model="input" placeholder="输入你的指令..." @keydown="handleKeydown($event as KeyboardEvent)" resize="none"
         type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" :disabled="isProcessingChat" />
       <el-button @click="sendMessage" :disabled="isProcessingChat || !input.trim()" type="primary" class="send-button">
         发送
