@@ -5,7 +5,7 @@
       "label": "Launch Dremio",
       "type": "shell",
       "command": "docker",
-      "args": ["compose", "up", "dremio", "-d", "--wait"]
+      "args": ["compose", "up", "-d", "--wait", "dremio", "redis"],
     }
   ]
 }

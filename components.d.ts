@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AnalysisStepComponent: typeof import('./src/components/data/upload/cleaning/AnalysisStepComponent.vue')['default']
     AssistantMessage: typeof import('./src/components/chat/message/AssistantMessage.vue')['default']
+    AssistantSuggestions: typeof import('./src/components/chat/message/AssistantSuggestions.vue')['default']
     AssistantText: typeof import('./src/components/chat/message/AssistantText.vue')['default']
     AssistantToolCall: typeof import('./src/components/chat/message/AssistantToolCall.vue')['default']
     ChatInput: typeof import('./src/components/chat/ChatInput.vue')['default']

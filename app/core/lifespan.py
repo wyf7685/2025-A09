@@ -1,7 +1,8 @@
 import contextlib
+import threading
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
-from typing import cast
+from typing import Any, cast
 
 import anyio
 from anyio.abc import TaskGroup
@@ -45,6 +46,28 @@ class Lifespan:
 
     def start_soon[*Ts](self, func: Callable[[*Ts], Awaitable[object]], /, *args: *Ts, name: object = None) -> None:
         self.task_group.start_soon(func, *args, name=name)
+
+    def from_thread[*Ts, R](self, func: Callable[[*Ts], Awaitable[R]], /, *args: *Ts) -> R:
+        event = threading.Event()
+        _unset = object()
+        result: Any = _unset
+
+        async def _wrapper() -> None:
+            nonlocal result
+            try:
+                result = await func(*args)
+            except Exception as e:
+                result = e
+            finally:
+                event.set()
+
+        self.start_soon(_wrapper)
+        event.wait()
+
+        if isinstance(result, Exception):
+            raise result
+        assert result is not _unset
+        return result
 
     def on_startup[F: LifespanFunc](self, func: F) -> F:
         f = _ensure_async(func)

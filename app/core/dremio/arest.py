@@ -205,7 +205,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             json=payload,
         )
 
-        source_cache.expire()
+        await source_cache.aexpire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -224,7 +224,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         source_name = f"{uuid.uuid4()}{suffix}"
         await anyio.to_thread.run_sync(shutil.copyfile, file, self.external_dir / source_name)
 
-        source_cache.expire()
+        await source_cache.aexpire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
             path=[self.external_name, source_name],
@@ -253,7 +253,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         }
 
         await self._request("POST", "/api/v3/catalog", json=payload)
-        container_cache.expire()
+        await container_cache.aexpire()
         return DremioSource(
             id=f"{source_name}",
             path=[source_name],
@@ -368,15 +368,15 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             logger.info(f"成功从Dremio中删除数据源: {source_path}")
 
             # 清除缓存
-            source_cache.expire()
-            container_cache.expire()
+            await source_cache.aexpire()
+            await container_cache.aexpire()
 
             return True
         except Exception as e:
             logger.warning(f"从Dremio中删除数据源失败: {source_path}, 错误: {e}")
             # 即使API删除失败，也清除缓存，强制重新获取
-            source_cache.expire()
-            container_cache.expire()
+            await source_cache.aexpire()
+            await container_cache.aexpire()
             return False
 
     @override
@@ -393,19 +393,19 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             logger.info(f"成功刷新external数据源: {self.external_name}")
 
             # 清除缓存
-            source_cache.expire()
+            await source_cache.aexpire()
 
             return True
         except Exception as e:
             logger.warning(f"刷新external数据源失败: {e}")
             # 即使刷新失败，也清除缓存
-            source_cache.expire()
-            container_cache.expire()
+            await source_cache.aexpire()
+            await container_cache.aexpire()
             return False
 
     async def _list_containers(self) -> list[DremioContainer]:
         logger.info("查询 Dremio 中的所有容器...")
-        if (cache := container_cache.get()) is not None:
+        if (cache := await container_cache.aget()) is not None:
             logger.info("使用缓存的容器列表")
             return cache
 
@@ -415,7 +415,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
-        container_cache.set(containers)
+        await container_cache.aset(containers)
         logger.opt(colors=True).info(f"共找到 <y>{len(containers)}</> 个容器")
         return containers
 
@@ -456,12 +456,12 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
     @override
     async def list_sources(self) -> list[DremioSource]:
         logger.info("查询 Dremio 中的所有数据源...")
-        if (cache := source_cache.get()) is not None:
+        if (cache := await source_cache.aget()) is not None:
             logger.info("使用缓存的数据源列表")
             return cache
 
         containers = await self._list_containers()
         sources = await self._query_source_children(*(c.path for c in containers))
-        source_cache.set(sources)
+        await source_cache.aset(sources)
         logger.opt(colors=True).info(f"共找到 <y>{len(sources)}</> 个数据源")
         return sources
