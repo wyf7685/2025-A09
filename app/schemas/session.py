@@ -31,6 +31,7 @@ class Session(BaseModel):
     id: SessionID
     dataset_ids: list[str] = Field(default_factory=list)
     mcp_ids: list[str] | None = Field(default=None)
+    model_ids: list[str] | None = Field(default=None)  # 关联的ML模型ID列表
     name: str | None = Field(default=None)
     chat_history: list[ChatEntry] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())

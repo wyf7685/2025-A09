@@ -9,6 +9,7 @@ const props = defineProps<{
   isProcessingChat: boolean;
   currentDatasets?: DataSourceMetadata[] | null;
   mcpConnections?: MCPConnection[] | null;
+  sessionModels?: any[] | null;
 }>();
 
 const input = defineModel<string>('input', { required: true });
@@ -55,6 +56,12 @@ const formatMCPTooltip = (connections: MCPConnection[]) => {
   if (connections.length === 0) return '无 MCP 连接';
   if (connections.length === 1) return connections[0].name;
   return `共 ${connections.length} 个 MCP 连接: ${connections.slice(0, 2).map(c => turncateString(c.name, 20)).join(', ')} ${connections.length > 2 ? '等' : ''}`;
+};
+
+const formatModelsTooltip = (models: any[]) => {
+  if (models.length === 0) return '无外部模型';
+  if (models.length === 1) return `模型: ${models[0].name || models[0].model_type}`;
+  return `共 ${models.length} 个外部模型: ${models.slice(0, 2).map(m => turncateString(m.name || m.model_type, 20)).join(', ')} ${models.length > 2 ? '等' : ''}`;
 };
 
 // 获取传输类型标签样式
@@ -131,6 +138,37 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
         </div>
       </el-tooltip>
 
+      <!-- 模型指示器 -->
+      <el-tooltip placement="top" :content="formatModelsTooltip(sessionModels || [])">
+        <div class="models-indicator">
+          <el-icon>
+            <DataAnalysis />
+          </el-icon>
+          <template v-if="sessionModels?.length">
+            模型:
+            <strong>
+              {{ sessionModels.length }} 个
+            </strong>
+            <div class="model-tags" v-if="sessionModels.length > 0">
+              <el-tag
+                v-for="model in sessionModels.slice(0, 3)"
+                :key="model.id"
+                type="success"
+                size="small"
+                style="margin-left: 4px;">
+                {{ turncateString(model.name || model.model_type, 8) }}
+              </el-tag>
+              <el-tag v-if="sessionModels.length > 3" size="small" style="margin-left: 4px;">
+                +{{ sessionModels.length - 3 }}
+              </el-tag>
+            </div>
+          </template>
+          <span v-else class="no-models">
+            无外部模型
+          </span>
+        </div>
+      </el-tooltip>
+
       <el-divider direction="vertical" style="margin: 0 8px;" />
       <div class="quick-prompt-tags">
         <el-tag v-for="(question, index) in quickQuestions" :key="index" class="action-tag"
@@ -202,7 +240,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
   }
 }
 
-.mcp-indicator {
+.mcp-indicator, .models-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -226,7 +264,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
     font-style: italic;
   }
 
-  .mcp-tags {
+  .mcp-tags, .model-tags {
     display: flex;
     align-items: center;
     margin-left: 4px;

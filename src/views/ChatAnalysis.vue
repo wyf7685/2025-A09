@@ -3,6 +3,7 @@ import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import FlowPanel from '@/components/chat/FlowPanel.vue';
+import ModelSelector from '@/components/chat/ModelSelector.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
@@ -10,7 +11,7 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
-import type { MCPConnection } from '@/types';
+import type { MCPConnection, Model } from '@/types';
 import { sleep } from '@/utils/tools';
 import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
@@ -29,6 +30,9 @@ const selectDatasetDialogVisible = ref<boolean>(false);
 const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
+
+// 当前会话的模型
+const sessionModels = ref<Model[]>([]);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -55,6 +59,22 @@ const loadCurrentMCPConnections = async () => {
   } catch (error) {
     console.error('加载会话 MCP 连接失败:', error);
     currentMCPConnections.value = [];
+  }
+};
+
+// 加载当前会话的模型
+const loadCurrentSessionModels = async () => {
+  if (!currentSessionId.value) {
+    sessionModels.value = [];
+    return;
+  }
+
+  try {
+    const models = await sessionStore.getSessionModels(currentSessionId.value);
+    sessionModels.value = models;
+  } catch (error) {
+    console.error('加载会话模型失败:', error);
+    sessionModels.value = [];
   }
 };
 
@@ -159,8 +179,9 @@ const switchSession = async (sessionId: string) => {
   const session = sessions.value.find(s => s.id === sessionId);
   await refreshChatHistory();
 
-  // 加载当前会话的MCP连接
+  // 加载当前会话的MCP连接和模型
   await loadCurrentMCPConnections();
+  await loadCurrentSessionModels();
 
   ElMessage.success(`切换到会话: ${session?.name || sessionId.slice(0, 8)}...`);
 };
@@ -225,6 +246,7 @@ const sendMessage = async (): Promise<void> => {
   const userMessage = userInput.value.trim();
   userInput.value = '';
 
+  // 直接发送用户消息（模型提示已移至后端处理）
   await chat.sendMessage(
     userMessage,
     currentSessionId.value || null,
@@ -263,9 +285,9 @@ const reprocessWithModel = async (modelId: string): Promise<void> => {
 
   // 对热力图等特定请求进行检查，确保它们被正确重新处理
   const isVisualizationRequest = userMessage.includes('热力图') ||
-                               userMessage.includes('相关性') ||
-                               userMessage.includes('可视化') ||
-                               userMessage.includes('绘制');
+    userMessage.includes('相关性') ||
+    userMessage.includes('可视化') ||
+    userMessage.includes('绘制');
 
   console.log(`使用模型 ${modelId} 重新处理${isVisualizationRequest ? '可视化' : ''}消息: "${userMessage.substring(0, 30)}..."`);
 
@@ -325,6 +347,7 @@ onMounted(async () => {
   if (currentSessionId.value) {
     await refreshChatHistory();
     await loadCurrentMCPConnections(); // 加载当前会话的MCP连接
+    await loadCurrentSessionModels(); // 加载当前会话的模型
   }
 });
 </script>
@@ -351,6 +374,10 @@ onMounted(async () => {
           </span>
         </div>
         <div class="header-right">
+          <ModelSelector
+            v-if="currentSessionId"
+            v-model:sessionModels="sessionModels"
+            :currentSessionId="currentSessionId" />
           <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
             生成报告
           </el-button>
@@ -372,12 +399,14 @@ onMounted(async () => {
         :isProcessingChat="isProcessingChat"
         :currentDatasets="currentDatasets"
         :mcpConnections="currentMCPConnections"
+        :sessionModels="sessionModels"
         @send="sendMessage"
         @go-to-data="goToAddData" />
     </div>
 
     <!-- Flow Panel -->
-    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" @reprocessWithModel="reprocessWithModel" />
+    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef"
+      @reprocessWithModel="reprocessWithModel" />
 
     <!-- Select Dataset Dialog -->
     <DatasetSelector v-model:visible="selectDatasetDialogVisible"

@@ -422,15 +422,28 @@ def scikit_tools(
 
     @tool
     @register_tool("列出所有已保存的模型")
-    def list_saved_models_tool() -> dict[ModelID, ModelMetadata]:
+    def list_saved_models_tool(include_external: bool = True) -> dict[ModelID, ModelMetadata]:
         """
-        列出所有已保存的模型元信息。
+        列出所有已保存的模型元信息，包括当前会话和外部会话的模型。
+
+        Args:
+            include_external (bool): 是否包含从外部会话导入的模型，默认为True。
 
         Returns:
-            list[ModelMetadata]: 包含所有已保存模型的元信息字典的列表。
+            dict[ModelID, ModelMetadata]: 包含所有已保存模型的元信息字典，键为模型ID。
         """
         logger.opt(colors=True).info("<g>列出所有已保存的模型</>")
-        return {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
+
+        # 获取当前会话已保存的模型
+        models_dict = {model_id: load_model_metadata(file_path) for model_id, file_path in saved_models.items()}
+
+        # 如果需要包含外部会话的模型
+        if include_external:
+            logger.opt(colors=True).info("<g>包含外部会话的模型</>")
+            # 所有模型来源都存储在saved_models字典中，无需额外处理
+            # 外部模型会在AgentContext初始化或通过前端操作时添加到saved_models中
+
+        return models_dict
 
     @tool
     @register_tool("使用模型进行预测")
@@ -655,6 +668,69 @@ def scikit_tools(
 
         return result, artifact
 
+    @tool
+    @register_tool("检查模型兼容性")
+    def check_model_compatibility_tool(dataset_id: DatasetID, model_id: ModelID) -> dict[str, Any]:
+        """
+        检查数据集与模型的兼容性，返回缺失特征和数据类型不匹配的特征。
+
+        当使用来自其他会话的模型时，需要确保当前数据集包含模型所需的所有特征，
+        且这些特征的数据类型与模型训练时使用的类型兼容。
+
+        Args:
+            dataset_id (str): 当前使用的数据集ID。
+            model_id (str): 待检查兼容性的模型ID，来自其他分析会话的预训练模型列表，可由 `list_saved_models_tool` 列出。
+
+        Returns:
+            dict: 包含兼容性检查结果的字典，包括:
+                - compatible (bool): 是否完全兼容
+                - missing_features (list): 当前数据集中缺失的特征列表
+                - type_mismatches (dict): 数据类型不匹配的特征及其类型信息
+                - suggestions (list): 处理兼容性问题的建议
+        """
+        if model_id not in saved_models:
+            raise ValueError(f"未找到模型 ID '{model_id}'")
+
+        logger.opt(colors=True).info(f"<g>检查模型兼容性</>，模型ID: <c>{escape_tag(model_id)}</>")
+
+        # 加载模型元数据
+        model_metadata = load_model_metadata(saved_models[model_id])
+        df = sources.read(dataset_id)
+
+        # 检查特征缺失情况
+        required_features = model_metadata.get("feature_columns", [])
+        missing_features = [feat for feat in required_features if feat not in df.columns]
+
+        # 检查数据类型兼容性 (如果有保存类型信息)
+        type_mismatches = {}
+        feature_dtypes = model_metadata.get("feature_dtypes", {})
+        for feat, dtype in feature_dtypes.items():
+            if feat in df.columns and str(df[feat].dtype) != dtype:
+                type_mismatches[feat] = {"expected": dtype, "actual": str(df[feat].dtype)}
+
+        # 生成兼容性结果
+        is_compatible = len(missing_features) == 0 and len(type_mismatches) == 0
+
+        # 生成建议
+        suggestions = []
+        if missing_features:
+            suggestions.append("使用create_column_tool创建缺失的特征")
+        if type_mismatches:
+            suggestions.append("使用infer_and_convert_dtypes_tool修复数据类型不匹配")
+
+        return {
+            "compatible": is_compatible,
+            "missing_features": missing_features,
+            "type_mismatches": type_mismatches,
+            "model_info": {
+                "model_type": model_metadata.get("model_type", "未知"),
+                "target_column": model_metadata.get("target_column", "未知"),
+                "feature_columns": required_features,
+                "hyperparams": model_metadata.get("hyperparams", {}),
+            },
+            "suggestions": suggestions,
+        }
+
     tools = [
         # 特征选择和分析
         select_features_tool,
@@ -672,6 +748,7 @@ def scikit_tools(
         save_model_tool,
         load_model_tool,
         list_saved_models_tool,
+        check_model_compatibility_tool,
         predict_with_model_tool,
     ]
 

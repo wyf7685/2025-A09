@@ -8,3 +8,4 @@ class PROMPTS:
     summary: str
     system: str
     tool_intro: str
+    external_ml_model: str

@@ -10,10 +10,12 @@ from pydantic import BaseModel
 from app.exception import MCPServerNotFound
 from app.log import logger
 from app.schemas.mcp import MCPConnection
+from app.schemas.ml_model import MLModelInfoOut
 from app.schemas.session import Session, SessionID, SessionListItem
 from app.services.agent import daa_service
 from app.services.datasource import datasource_service
 from app.services.mcp import mcp_service
+from app.services.model_registry import model_registry
 from app.services.session import session_service
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
@@ -236,3 +238,81 @@ async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnecti
     except Exception as e:
         logger.exception("获取会话MCP连接失败")
         raise HTTPException(status_code=500, detail=f"Failed to get session MCP connections: {e}") from e
+
+
+class AddModelsToSessionRequest(BaseModel):
+    model_ids: list[str]
+
+
+@router.post("/{session_id}/models")
+async def add_models_to_session(session_id: SessionID, request: AddModelsToSessionRequest) -> None:
+    """向会话添加外部模型引用"""
+    try:
+        session = await session_service.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 检查模型是否存在
+        for model_id in request.model_ids:
+            model = model_registry.get_model(model_id)
+            if not model:
+                raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+
+        # 添加模型ID到会话
+        if session.model_ids is None:
+            session.model_ids = []
+
+        # 避免重复添加
+        for model_id in request.model_ids:
+            if model_id not in session.model_ids:
+                session.model_ids.append(model_id)
+
+        await session_service.save_session(session)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("添加模型到会话失败")
+        raise HTTPException(status_code=500, detail=f"Failed to add models to session: {e}") from e
+
+
+class RemoveModelsFromSessionRequest(BaseModel):
+    model_ids: list[str]
+
+
+@router.delete("/{session_id}/models")
+async def remove_models_from_session(session_id: SessionID, request: RemoveModelsFromSessionRequest) -> None:
+    """从会话中移除模型引用"""
+    try:
+        session = await session_service.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 移除模型ID
+        if session.model_ids:
+            session.model_ids = [mid for mid in session.model_ids if mid not in request.model_ids]
+
+        await session_service.save_session(session)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("从会话移除模型失败")
+        raise HTTPException(status_code=500, detail=f"Failed to remove models from session: {e}") from e
+
+
+@router.get("/{session_id}/models", response_model=list[MLModelInfoOut])
+async def get_session_models(session_id: SessionID) -> list[MLModelInfoOut]:
+    """获取会话关联的所有模型信息"""
+    try:
+        session = await session_service.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if not session.model_ids:
+            return []
+
+        return [model for model_id in session.model_ids if (model := model_registry.get_model(model_id))]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("获取会话模型失败")
+        raise HTTPException(status_code=500, detail=f"Failed to get session models: {e}") from e

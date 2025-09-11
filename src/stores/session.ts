@@ -1,4 +1,4 @@
-import type { ChatEntry, Session, SessionListItem, ToolCallArtifact } from '@/types';
+import type { ChatEntry, Model, Session, SessionListItem, ToolCallArtifact } from '@/types';
 import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
@@ -213,6 +213,69 @@ export const useSessionStore = defineStore('session', () => {
     return response.data.summary;
   };
 
+  // 获取会话关联的模型
+  const getSessionModels = async (sessionId: string) => {
+    try {
+      const response = await api.get<Model[]>(`/sessions/${sessionId}/models`);
+      return response.data;
+    } catch (error) {
+      console.error(`获取会话 ${sessionId} 的模型失败:`, error);
+      throw error;
+    }
+  };
+
+  // 添加模型到会话
+  const addModelsToSession = async (sessionId: string, modelIds: string[]) => {
+    try {
+      await api.post(`/sessions/${sessionId}/models`, {
+        model_ids: modelIds,
+      });
+    } catch (error) {
+      console.error(`向会话 ${sessionId} 添加模型失败:`, error);
+      ElMessage.error('添加模型失败');
+      throw error;
+    }
+  };
+
+  // 从会话中移除模型
+  const removeModelsFromSession = async (sessionId: string, modelIds: string[]) => {
+    try {
+      await api.delete(`/sessions/${sessionId}/models`, {
+        data: { model_ids: modelIds },
+      });
+    } catch (error) {
+      console.error(`从会话 ${sessionId} 移除模型失败:`, error);
+      ElMessage.error('移除模型失败');
+      throw error;
+    }
+  };
+
+  // 更新会话关联的模型
+  const updateSessionModels = async (sessionId: string, modelIds: string[]) => {
+    try {
+      // 先获取当前会话的模型
+      const currentModels = await getSessionModels(sessionId);
+      const currentModelIds = currentModels.map((model: any) => model.id);
+
+      // 计算要添加和删除的模型ID
+      const modelsToAdd = modelIds.filter((id) => !currentModelIds.includes(id));
+      const modelsToRemove = currentModelIds.filter((id) => !modelIds.includes(id));
+
+      // 执行添加和移除操作
+      if (modelsToAdd.length > 0) {
+        await addModelsToSession(sessionId, modelsToAdd);
+      }
+
+      if (modelsToRemove.length > 0) {
+        await removeModelsFromSession(sessionId, modelsToRemove);
+      }
+    } catch (error) {
+      console.error(`更新会话 ${sessionId} 模型失败:`, error);
+      ElMessage.error('更新会话模型失败');
+      throw error;
+    }
+  };
+
   return {
     currentSession: computed(() => currentSession.value),
     currentSessionId: computed(() => currentSession.value?.id),
@@ -228,5 +291,10 @@ export const useSessionStore = defineStore('session', () => {
     sendStreamChatMessage,
     summaryChat,
     isDeleting: computed(() => isDeleting.value),
+    // 模型相关
+    getSessionModels,
+    addModelsToSession,
+    removeModelsFromSession,
+    updateSessionModels,
   };
 });

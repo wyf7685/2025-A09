@@ -4,21 +4,27 @@
 export interface Model {
   id: string;
   name: string;
-  type: string;
+  model_type: string;
   description?: string;
   created_at: string;
   last_used?: string;
   target_column: string;
-  accuracy: number;
-  score: number;
   features: string[];
-  feature_count: number;
-  dataset_id: string;
-  session_id: string;
-  status: string;
-  version: string;
-  metrics: Record<string, any>;
+  feature_count?: number;
+  dataset_id?: string;
+  session_id?: string;
+  session_name?: string;
+  status?: string;
+  version?: string;
+  metrics?: Record<string, number>;
+  hyperparams?: Record<string, any>;
+  is_registered?: boolean;
 }
+
+/**
+ * MLModel是Model的别名，用于更好的语义
+ */
+export type MLModel = Model;
 
 /**
  * LLM模型信息
