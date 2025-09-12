@@ -62,59 +62,80 @@ onMounted(async () => {
     <div class="layout-main">
       <!-- 侧边栏 -->
       <el-aside :class="['layout-sidebar', { collapsed: sidebarCollapsed }]"
-        :width="sidebarCollapsed ? '64px' : '250px'">
-        <el-menu :default-active="$route.path" router :collapse="sidebarCollapsed" background-color="#ffffff"
-          text-color="#333" active-text-color="#409EFF">
-          <el-menu-item index="/dashboard">
-            <el-icon>
-              <House />
-            </el-icon>
-            <span>工作台</span>
-          </el-menu-item>
+        :width="sidebarCollapsed ? '60px' : '250px'">
+        <div class="sidebar-menu">
+          <!-- 未折叠状态下的菜单 -->
+          <div v-if="!sidebarCollapsed" class="expanded-menu">
+            <el-menu :default-active="$route.path" router background-color="#ffffff"
+              text-color="#333" active-text-color="#409EFF">
+              <el-menu-item index="/dashboard">
+                <el-icon>
+                  <House />
+                </el-icon>
+                <span>工作台</span>
+              </el-menu-item>
 
-          <el-menu-item index="/data-management">
-            <el-icon>
-              <Collection />
-            </el-icon>
-            <span>数据管理</span>
-          </el-menu-item>
+              <el-menu-item index="/data-management">
+                <el-icon>
+                  <Collection />
+                </el-icon>
+                <span>数据管理</span>
+              </el-menu-item>
 
-          <el-menu-item index="/data-upload">
-            <el-icon>
-              <Connection />
-            </el-icon>
-            <span>数据上传</span>
-          </el-menu-item>
+              <el-menu-item index="/data-upload">
+                <el-icon>
+                  <Connection />
+                </el-icon>
+                <span>数据上传</span>
+              </el-menu-item>
 
-          <el-menu-item index="/chat-analysis">
-            <el-icon>
-              <ChatDotRound />
-            </el-icon>
-            <span>对话分析</span>
-          </el-menu-item>
+              <el-menu-item index="/chat-analysis">
+                <el-icon>
+                  <ChatDotRound />
+                </el-icon>
+                <span>对话分析</span>
+              </el-menu-item>
 
-          <el-menu-item index="/mcp-connections">
-            <el-icon>
-              <Link />
-            </el-icon>
-            <span>MCP连接</span>
-          </el-menu-item>
+              <el-menu-item index="/mcp-connections">
+                <el-icon>
+                  <Link />
+                </el-icon>
+                <span>MCP连接</span>
+              </el-menu-item>
 
-          <el-menu-item index="/llm-models">
-            <el-icon>
-              <Connection />
-            </el-icon>
-            <span>大语言模型</span>
-          </el-menu-item>
+              <el-menu-item index="/llm-models">
+                <el-icon>
+                  <Connection />
+                </el-icon>
+                <span>大语言模型</span>
+              </el-menu-item>
 
-          <el-menu-item index="/trained-models">
-            <el-icon>
-              <DataAnalysis />
-            </el-icon>
-            <span>机器学习模型</span>
-          </el-menu-item>
+              <el-menu-item index="/trained-models">
+                <el-icon>
+                  <DataAnalysis />
+                </el-icon>
+                <span>机器学习模型</span>
+              </el-menu-item>
+            </el-menu>
+          </div>
 
-        </el-menu>
+          <!-- 折叠状态下的菜单 -->
+          <div v-else class="collapsed-menu">
+            <router-link v-for="(item, index) in [
+              { path: '/dashboard', icon: House },
+              { path: '/data-management', icon: Collection },
+              { path: '/data-upload', icon: Connection },
+              { path: '/chat-analysis', icon: ChatDotRound },
+              { path: '/mcp-connections', icon: Link },
+              { path: '/llm-models', icon: Connection },
+              { path: '/trained-models', icon: DataAnalysis }
+            ]" :key="index" :to="item.path" class="collapsed-menu-item" :class="{ active: $route.path === item.path }">
+              <el-icon>
+                <component :is="item.icon" />
+              </el-icon>
+            </router-link>
+          </div>
+        </div>
       </el-aside>
 
       <!-- 内容区域 -->
@@ -171,8 +192,14 @@ onMounted(async () => {
   backdrop-filter: blur(10px);
 }
 
+.sidebar-menu {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .layout-sidebar.collapsed {
-  width: 64px !important;
+  width: 60px !important;
 }
 
 .layout-content {
@@ -182,34 +209,73 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-.el-menu {
+/* 展开菜单样式 */
+.expanded-menu .el-menu {
   border-right: none;
   background: transparent !important;
+  width: 100%;
 }
 
-.el-menu-item {
+.expanded-menu .el-menu-item {
   border-radius: 12px;
   margin: 6px 12px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
   color: #64748b;
+  display: flex;
+  align-items: center;
 }
 
-.el-menu-item:hover {
+.expanded-menu .el-menu-item:hover {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
   color: #3b82f6;
 }
 
-.el-menu-item.is-active {
+.expanded-menu .el-menu-item.is-active {
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   color: white !important;
   box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
-.el-menu-item.is-active:hover {
+.expanded-menu .el-menu-item.is-active:hover {
   transform: translateX(4px);
+}
+
+/* 折叠菜单样式 */
+.collapsed-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.collapsed-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 8px 0;
+  border-radius: 50%;
+  color: #64748b;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapsed-menu-item:hover {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.collapsed-menu-item.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: white;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
 }
 
 .el-select {
