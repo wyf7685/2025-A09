@@ -344,7 +344,7 @@ onMounted(async () => {
       <!-- Chat Panel Header -->
       <div class="chat-panel-header">
         <div class="header-left">
-          <el-button v-if="!isSidebarOpen" @click="isSidebarOpen = true" :icon="DArrowRight" text class="toggle-btn" />
+          <!-- 侧边栏收缩时不显示展开按钮，因为收缩的侧边栏本身就有展开按钮 -->
           <span class="session-title" v-if="currentSessionId">
             {{sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...`}}
           </span>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSessionStore } from '@/stores/session';
-import { ChatDotRound, DArrowLeft, Delete, Edit, Plus } from '@element-plus/icons-vue';
-import { ElButton, ElIcon } from 'element-plus';
+import { ChatDotRound, DArrowLeft, DArrowRight, Delete, Edit, Plus } from '@element-plus/icons-vue';
+import { ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { computed, ref } from 'vue';
 import MCPManager from './MCPManager.vue';
 import type { MCPConnection } from '@/types/mcp';
@@ -61,51 +61,239 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
 
 <template>
   <div :class="['session-sidebar', { 'is-closed': !isSidebarOpen }]">
-    <div class="sidebar-header">
-      <el-button class="new-chat-btn" @click="handleCreateSession" :icon="Plus">
-        新对话
-      </el-button>
-      <el-button @click="closeSidebar" :icon="DArrowLeft" text class="toggle-btn" />
-    </div>
-    <div class="session-list">
-      <div v-for="session in sessions" :key="session.id"
-        :class="['session-item', { active: session.id === currentSessionId }]" @click="handleSwitchSession(session.id)">
-        <el-icon class="session-icon">
-          <ChatDotRound />
-        </el-icon>
-        <span class="session-name">{{ session.name || `会话 ${session.id.slice(0, 8)}` }}</span>
-        <div class="session-actions">
-          <el-button type="text" :icon="Edit" size="small" class="action-btn"
-            @click.stop="handleEditSession(session.id, session.name || `会话 ${session.id.slice(0, 8)}`, $event)" />
-          <el-button type="text" :icon="Delete" size="small" class="action-btn"
-            @click.stop="handleDeleteSession(session.id, $event)" :loading="sessionStore.isDeleting[session.id]"
-            :disabled="sessionStore.isDeleting[session.id]" />
+    <!-- 收缩状态下的简化侧边栏 -->
+    <div v-if="!isSidebarOpen" class="collapsed-sidebar">
+      <el-tooltip content="展开侧边栏" placement="right">
+        <el-button @click="isSidebarOpen = true" :icon="DArrowRight" text class="expand-btn" />
+      </el-tooltip>
+      <div class="collapsed-sessions">
+        <el-tooltip 
+          v-for="(session, index) in sessions.slice(0, 5)" 
+          :key="session.id"
+          :content="session.name || `会话 ${session.id.slice(0, 8)}`"
+          placement="right"
+        >
+          <div 
+            :class="['collapsed-session-item', { active: session.id === currentSessionId }]"
+            @click="handleSwitchSession(session.id)"
+          >
+            <el-icon class="session-icon">
+              <ChatDotRound />
+            </el-icon>
+          </div>
+        </el-tooltip>
+        <!-- 显示更多会话的提示 -->
+        <div v-if="sessions.length > 5" class="more-sessions-indicator">
+          <span>+{{ sessions.length - 5 }}</span>
         </div>
+      </div>
+      <div class="collapsed-actions">
+        <el-tooltip content="新建对话" placement="right">
+          <el-button @click="handleCreateSession" :icon="Plus" text class="action-btn" />
+        </el-tooltip>
       </div>
     </div>
 
-    <!-- MCP 管理器 -->
-    <div class="mcp-section" v-if="currentSessionId">
-      <MCPManager v-model:sessionMCPConnections="sessionMCPConnections" />
+    <!-- 完整的侧边栏 -->
+    <div v-else class="full-sidebar">
+      <div class="sidebar-header">
+        <el-button class="new-chat-btn" @click="handleCreateSession" :icon="Plus">
+          新对话
+        </el-button>
+        <el-button @click="closeSidebar" :icon="DArrowLeft" text class="toggle-btn" />
+      </div>
+      <div class="session-list">
+        <div v-for="session in sessions" :key="session.id"
+          :class="['session-item', { active: session.id === currentSessionId }]" @click="handleSwitchSession(session.id)">
+          <el-icon class="session-icon">
+            <ChatDotRound />
+          </el-icon>
+          <span class="session-name">{{ session.name || `会话 ${session.id.slice(0, 8)}` }}</span>
+          <div class="session-actions">
+            <el-button type="text" :icon="Edit" size="small" class="action-btn"
+              @click.stop="handleEditSession(session.id, session.name || `会话 ${session.id.slice(0, 8)}`, $event)" />
+            <el-button type="text" :icon="Delete" size="small" class="action-btn"
+              @click.stop="handleDeleteSession(session.id, $event)" :loading="sessionStore.isDeleting[session.id]"
+              :disabled="sessionStore.isDeleting[session.id]" />
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP 管理器 -->
+      <div class="mcp-section" v-if="currentSessionId">
+        <MCPManager v-model:sessionMCPConnections="sessionMCPConnections" />
+      </div>
     </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
 .session-sidebar {
-  width: 260px;
   flex-shrink: 0;
   background-color: #ffffff;
   color: #374151;
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease;
+  transition: all 0.3s ease;
   overflow: hidden;
   border-right: 1px solid #e5e7eb;
+  height: 100%;
 
   &.is-closed {
-    width: 0;
+    width: 60px;
   }
+
+  &:not(.is-closed) {
+    width: 260px;
+  }
+}
+
+/* 收缩状态下的侧边栏 */
+.collapsed-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 60px;
+  height: 100%;
+  padding: 12px 8px;
+  align-items: center;
+
+  .expand-btn {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 16px;
+    color: #6b7280;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      color: #374151;
+      background-color: #f3f4f6;
+    }
+  }
+
+  .collapsed-sessions {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    overflow-y: auto;
+    margin-bottom: 16px;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 2px;
+
+      &:hover {
+        background: #9ca3af;
+      }
+    }
+  }
+
+  .collapsed-session-item {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: transparent;
+    position: relative;
+
+    .session-icon {
+      font-size: 18px;
+      color: #6b7280;
+      transition: color 0.2s ease;
+    }
+
+    &:hover {
+      background-color: #f3f4f6;
+
+      .session-icon {
+        color: #374151;
+      }
+    }
+
+    &.active {
+      background-color: #e6fffa;
+      
+      .session-icon {
+        color: #10b981;
+      }
+
+      &::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 20px;
+        background-color: #10b981;
+        border-radius: 2px 0 0 2px;
+      }
+    }
+  }
+
+  .more-sessions-indicator {
+    width: 44px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background-color: #f3f4f6;
+    margin-top: 8px;
+
+    span {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+  }
+
+  .collapsed-actions {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+
+    .action-btn {
+      width: 44px;
+      height: 44px;
+      color: #6b7280;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        color: #374151;
+        background-color: #f3f4f6;
+      }
+    }
+  }
+}
+
+/* 完整状态的侧边栏 */
+.full-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
 }
 
 .sidebar-header {
@@ -260,15 +448,20 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .session-sidebar {
-    width: 100%;
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #e5e7eb;
-
     &.is-closed {
-      max-height: 0;
-      overflow: hidden;
+      width: 0;
     }
+
+    &:not(.is-closed) {
+      width: 100%;
+      max-height: 200px;
+      border-right: none;
+      border-bottom: 1px solid #e5e7eb;
+    }
+  }
+
+  .collapsed-sidebar {
+    display: none;
   }
 }
 </style>
