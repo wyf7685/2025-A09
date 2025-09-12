@@ -42,7 +42,6 @@ def get_runnable_config() -> RunnableConfig:
 class AgentContext:
     session_id: SessionID
     sources: Sources
-    model_config: AgentModelConfig
     mcp_connections: list[Connection] | None
     pre_model_hook: Runnable | None
     lifespan: Lifespan | None = None
@@ -67,6 +66,19 @@ class AgentContext:
         if self._saved_models is None:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._saved_models
+
+    async def get_model_config(self) -> AgentModelConfig:
+        from app.services.session import session_service
+
+        if (session := await session_service.get(self.session_id)) is None:
+            return AgentModelConfig.default_config()
+
+        config = session.agent_model_config.model_copy()
+        for attr in ("chat", "create_title", "summary", "code_generation"):
+            if getattr(config, attr) is None:
+                setattr(config, attr, config.default)
+
+        return config
 
     async def _load_external_models(self) -> list[MLModelInfo]:
         from app.services.model_registry import model_registry
@@ -106,7 +118,8 @@ class AgentContext:
         return [system_message, *state.get("messages", [])]
 
     async def _get_chat_model(self, _state: object, _runtime: object) -> Runnable[LanguageModelInput, BaseMessage]:
-        model = await get_chat_model_async(self.model_config.chat)
+        cfg = await self.get_model_config()
+        model = await get_chat_model_async(cfg.chat)
         if self._tool_node:
             model = model.bind_tools(list(self._tool_node.tools_by_name.values()))
         return model
@@ -121,7 +134,8 @@ class AgentContext:
         await self.lifespan.startup()
 
         # Builtin Tools
-        analyzer = analyzer_tool(self.sources, await get_llm_async(self.model_config.code_generation))
+        model_config = await self.get_model_config()
+        analyzer = analyzer_tool(self.sources, await get_llm_async(model_config.code_generation))
         df_tools = dataframe_tools(self.sources)
         sk_tools, self._saved_models = scikit_tools(self.sources, self.session_id)
         await self._load_saved_models()
@@ -136,8 +150,7 @@ class AgentContext:
                 mcp_tools.extend(await load_mcp_tools(None, connection=conn))
 
         # All Tools
-        all_tools = builtin_tools + mcp_tools
-        self._tool_node = ToolNode(all_tools)
+        self._tool_node = ToolNode(builtin_tools + mcp_tools)
 
         # Prompt
         prompt = RunnableLambda(

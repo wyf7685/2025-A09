@@ -1,15 +1,17 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import anyio
 
 from app.core.agent import DataAnalyzerAgent
 from app.core.agent.events import BufferedStreamEventReader, StreamEvent
-from app.core.agent.schemas import SourcesDict
 from app.core.chain import rate_limiter
 from app.core.datasource import create_file_source
 from app.log import configure_logging, logger
-from app.schemas.session import AgentModelConfig
 from app.utils import configure_matplotlib_fonts, escape_tag
+
+if TYPE_CHECKING:
+    from app.core.agent.schemas import SourcesDict
 
 configure_matplotlib_fonts()
 configure_logging()
@@ -29,12 +31,6 @@ def log_event(event: StreamEvent) -> None:
             logger.opt(colors=True).error(f"工具调用错误: <c>{event.id}</>\n{escape_tag(event.error)}")
 
 
-async def prefetch_data(sources: SourcesDict) -> None:
-    async with anyio.create_task_group() as tg:
-        for source in sources.values():
-            tg.start_soon(source.get_full_async)
-
-
 async def prepare_agent() -> DataAnalyzerAgent:
     # See 飞桨/碳中和—工业废气排放检测
     test_data_dir = Path("data/test")
@@ -42,13 +38,14 @@ async def prepare_agent() -> DataAnalyzerAgent:
         "train": create_file_source(test_data_dir / "train.csv", sep="\t"),
         "test": create_file_source(test_data_dir / "test.csv", sep="\t"),
     }
-    await prefetch_data(sources)
+    async with anyio.create_task_group() as tg:
+        for source in sources.values():
+            tg.start_soon(source.get_full_async)
 
     limiter = rate_limiter(14)
     return await DataAnalyzerAgent.create(
         session_id="TEST",
         sources_dict=sources,
-        model_config=AgentModelConfig.default_config(),
         pre_model_hook=limiter,
     )
 

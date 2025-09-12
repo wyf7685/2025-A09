@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
+import { useSessionStore } from '@/stores/session';
 import type { FlowPanel, FlowRoute, FlowStep, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import {
@@ -9,6 +10,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 
 const modelStore = useModelStore();
+const sessionStore = useSessionStore();
 
 // 控制流程图面板的显示/隐藏
 const isFlowPanelOpen = defineModel<boolean>("isFlowPanelOpen", { required: true });
@@ -151,11 +153,8 @@ const clearFlowSteps = () => {
   flowSteps.value = [];
 };
 
-// 发布事件来触发重新处理当前消息
-const emit = defineEmits(['reprocessWithModel']);
-
 // 模型配置方法
-const changeModel = (modelId: string) => {
+const changeModel = async (modelId: string) => {
   if (modelId === 'custom-api') {
     // 显示自定义API对话框
     showCustomApiDialog.value = true;
@@ -163,6 +162,7 @@ const changeModel = (modelId: string) => {
   }
 
   selectedModel.value = modelId;
+  await sessionStore.updateSessionAgentModelConfig({ default: modelId });
   const model = storeAvailableModels.value.find(m => m.id === modelId);
 
   // 更新所有未激活的步骤为新选择的模型
@@ -196,10 +196,7 @@ const changeModel = (modelId: string) => {
     status: 'completed'
   });
 
-  // 发出事件，通知父组件使用新模型重新处理消息
-  emit('reprocessWithModel', modelId);
-
-  ElMessage.success(`已切换到模型: ${model?.name || modelId}，系统将使用新模型重新处理`);
+  ElMessage.success(`已切换到模型: ${model?.name || modelId}，系统将使用新模型继续处理`);
 };
 
 // 处理自定义API配置
@@ -763,9 +760,8 @@ onMounted(async () => {
                     <el-select v-if="step.status !== 'active'" v-model="step.selectedModel" size="small"
                       class="step-model-select"
                       placeholder="选择模型" filterable @change="(value: string) => {
-                        // 选择新模型后触发重新处理
-                        emit('reprocessWithModel', value);
-                        ElMessage.success(`已为${step.title}步骤选择模型: ${storeAvailableModels.find(m => m.id === value)?.name || value}，系统将重新处理`);
+                        // 选择新模型
+                        ElMessage.success(`已为${step.title}步骤选择模型: ${storeAvailableModels.find(m => m.id === value)?.name || value}`);
                       }">
                       <el-option-group v-for="provider in getProviderGroups()" :key="provider.name"
                         :label="provider.name">
@@ -822,9 +818,8 @@ onMounted(async () => {
                             status: 'completed'
                           });
 
-                          // 选择新模型后触发重新处理
-                          emit('reprocessWithModel', value);
-                          ElMessage.success(`已为${step.title}步骤选择模型: ${modelName}，系统将重新处理`);
+                          // 选择新模型
+                          ElMessage.success(`已为${step.title}步骤选择模型: ${modelName}`);
                         }">
                         <el-option-group v-for="provider in getProviderGroups()" :key="provider.name"
                           :label="provider.name">

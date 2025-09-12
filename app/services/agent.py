@@ -20,7 +20,6 @@ from app.utils import escape_tag
 @dataclasses.dataclass
 class AgentState:
     agent: DataAnalyzerAgent | None = None
-    model_hash: int | None = None
     locked: bool = False
     scope: anyio.CancelScope | None = None
 
@@ -55,40 +54,35 @@ class DataAnalyzerAgentService:
 
     async def _create(self, session: Session) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
-        if self._get(session, check_model_hash=False):
+        if self._get(session):
             await self._destroy(session.id, save_state=True, pop=False)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
         sources = await dataset_id_to_sources(session.dataset_ids)
-        model_config = session.agent_model_config
         agent = await DataAnalyzerAgent.create(
             session_id=session.id,
             sources_dict=sources,
-            model_config=model_config,
             mcp_connections=[mcp.connection for mcp in mcps],
         )
         await agent.load_state(STATE_DIR / f"{session.id}.json")
 
         self.agents[session.id].agent = agent
-        self.agents[session.id].model_hash = model_config.hash
         logger.opt(colors=True).info(
             f"为会话 <c>{escape_tag(session.id)}</> 创建新 Agent, "
-            f"使用模型配置: <y>{escape_tag(model_config.model_dump(exclude_none=True))}</>"
+            f"当前模型配置: <y>{escape_tag(session.agent_model_config.model_dump(exclude_none=True))}</>"
         )
         return agent
 
-    def _get(self, session: Session, *, check_model_hash: bool) -> DataAnalyzerAgent | None:
+    def _get(self, session: Session) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
         state = self.agents.get(session.id)
-        if state is None or state.agent is None or state.model_hash is None:
-            return None
-        if check_model_hash and state.model_hash != session.agent_model_config.hash:
+        if state is None or state.agent is None:
             return None
         return state.agent
 
     async def _get_or_create(self, session: Session) -> DataAnalyzerAgent:
         """获取或创建会话的 Agent"""
-        if agent := self._get(session, check_model_hash=True):
+        if agent := self._get(session):
             return agent
         return await self._create(session)
 
@@ -100,7 +94,7 @@ class DataAnalyzerAgentService:
         await self._cancel(session_id)
 
         agent = state.agent
-        state.agent = state.model_hash = None
+        state.agent = None
 
         if save_state:
             try:

@@ -14,7 +14,7 @@ from app.core.agent.sources import Sources
 from app.core.chain.llm import get_llm_async
 from app.log import logger
 from app.schemas.mcp import Connection
-from app.schemas.session import AgentModelConfig, SessionID
+from app.schemas.session import SessionID
 from app.utils import escape_tag
 
 from .context import AgentContext
@@ -33,7 +33,6 @@ class DataAnalyzerAgent:
         cls,
         session_id: SessionID,
         sources_dict: SourcesDict,
-        model_config: AgentModelConfig,
         mcp_connections: list[Connection] | None = None,
         pre_model_hook: Runnable | None = None,
     ) -> Self:
@@ -41,7 +40,6 @@ class DataAnalyzerAgent:
         self.ctx = AgentContext(
             session_id=session_id,
             sources=Sources(sources_dict),
-            model_config=model_config.model_copy(),
             mcp_connections=mcp_connections,
             pre_model_hook=pre_model_hook,
         )
@@ -57,11 +55,13 @@ class DataAnalyzerAgent:
         return len(self.get_messages()) > 0
 
     async def create_title(self) -> str:
-        llm = await get_llm_async(self.ctx.model_config.create_title)
+        cfg = await self.ctx.get_model_config()
+        llm = await get_llm_async(cfg.create_title)
         return await create_title_chain(llm, self.get_messages()).ainvoke(...)
 
     async def summary(self, report_template: str | None = None) -> tuple[str, list[str]]:
-        llm = await get_llm_async(self.ctx.model_config.summary)
+        cfg = await self.ctx.get_model_config()
+        llm = await get_llm_async(cfg.summary)
         input = report_template or PROMPTS.default_report_template
         return await summary_chain(llm, self.get_messages()).ainvoke(input)
 

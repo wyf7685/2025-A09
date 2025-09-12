@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.exception import MCPServerNotFound
 from app.log import logger
+from app.schemas.custom_model import LLModelID
 from app.schemas.mcp import MCPConnection
 from app.schemas.ml_model import MLModelInfoOut
 from app.schemas.session import Session, SessionID, SessionListItem
@@ -79,6 +80,36 @@ async def update_session(session_id: SessionID, request: UpdateSessionRequest) -
     except Exception as e:
         logger.exception("更新会话失败")
         raise HTTPException(status_code=500, detail=f"Failed to update session: {e}") from e
+
+
+class AgentModelConfigUpdate(BaseModel):
+    default: LLModelID | None = None
+    chat: LLModelID | None = None
+    create_title: LLModelID | None = None
+    summary: LLModelID | None = None
+    code_generation: LLModelID | None = None
+
+
+@router.put("/{session_id}/model_config")
+async def update_session_model_config(session_id: SessionID, request: AgentModelConfigUpdate) -> None:
+    try:
+        if not await session_service.exists(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        session = await session_service.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        for attr, value in request.model_dump().items():
+            if value is not None:
+                setattr(session.agent_model_config, attr, value)
+        await session_service.save_session(session)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("更新会话模型配置失败")
+        raise HTTPException(status_code=500, detail=f"Failed to update session model config: {e}") from e
 
 
 @router.get("/{session_id}")

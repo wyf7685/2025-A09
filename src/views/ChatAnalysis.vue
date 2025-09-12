@@ -255,89 +255,6 @@ const sendMessage = async (): Promise<void> => {
   );
 };
 
-// 处理模型选择后重新处理消息
-const reprocessWithModel = async (modelId: string): Promise<void> => {
-  // 确保有消息要重新处理
-  if (messages.value.length === 0) {
-    ElMessage.warning('没有消息可重新处理');
-    return;
-  }
-
-  // 获取最后一个用户消息
-  const lastUserMessage = [...messages.value].reverse().find(msg => msg.type === 'user');
-  if (!lastUserMessage) {
-    ElMessage.warning('没有找到用户消息可重新处理');
-    return;
-  }
-
-  // 保存消息索引位置，以便后续清除消息
-  const userMsgIndex = messages.value.findIndex(msg => msg === lastUserMessage);
-
-  // 将移除该用户消息后的所有消息（通常是助手回复和后续对话）
-  // 对于热力图等复杂输出，我们需要完全清除之前的处理结果并重新生成
-  if (userMsgIndex >= 0 && userMsgIndex < messages.value.length - 1) {
-    // 移除用户消息后的所有消息
-    messages.value = messages.value.slice(0, userMsgIndex + 1);
-  }
-
-  // 重新发送最后一条用户消息
-  const userMessage = (lastUserMessage.content as string) || '';
-
-  // 对热力图等特定请求进行检查，确保它们被正确重新处理
-  const isVisualizationRequest = userMessage.includes('热力图') ||
-    userMessage.includes('相关性') ||
-    userMessage.includes('可视化') ||
-    userMessage.includes('绘制');
-
-  console.log(`使用模型 ${modelId} 重新处理${isVisualizationRequest ? '可视化' : ''}消息: "${userMessage.substring(0, 30)}..."`);
-
-  // 重置流程图状态以便重新运行
-  flowPanelRef.value?.flowPanel?.clearFlowSteps();
-
-  // 确保模型选择被正确应用 - 如果是步骤模型更新，确保它在重新处理时被使用
-  if (flowPanelRef.value?.flowPanel) {
-    // 记录当前选择的模型，用于调试
-    console.log(`当前选择的模型: ${modelId}`);
-  }
-
-  // 清空浏览器控制台，便于调试
-  console.clear();
-  console.log('使用新模型重新处理:', modelId);
-
-  // 等待一小段时间以确保UI状态更新
-  await sleep(100);
-
-  // 显示处理中的提示
-  if (isVisualizationRequest) {
-    ElMessage.info(`正在使用模型 ${modelId} 重新生成可视化图表，请稍候...`);
-  } else {
-    ElMessage.info(`正在使用模型 ${modelId} 重新处理请求...`);
-  }
-
-  // 在更新模型后，等待一小段时间确保模型选择已经被正确应用
-  await sleep(200);
-
-  // 在热力图等复杂图表的情况下，可能需要额外处理
-  // 使用前面已经定义的 isVisualizationRequest 变量
-
-  // 对热力图等复杂图表请求，特别处理以确保重新生成
-  if (isVisualizationRequest) {
-    // 在发送消息前确保流程图完全重置
-    flowPanelRef.value?.flowPanel?.clearFlowSteps();
-
-    // 延迟稍微长一点，确保之前的处理完全清除
-    await sleep(300);
-  }
-
-  // 发送消息进行处理
-  await chat.sendMessage(
-    userMessage,
-    currentSessionId.value || null,
-    currentDatasets.value,
-    scrollToBottom,
-  );
-};
-
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await loadSessions();
@@ -405,8 +322,7 @@ onMounted(async () => {
     </div>
 
     <!-- Flow Panel -->
-    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef"
-      @reprocessWithModel="reprocessWithModel" />
+    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" />
 
     <!-- Select Dataset Dialog -->
     <DatasetSelector v-model:visible="selectDatasetDialogVisible"

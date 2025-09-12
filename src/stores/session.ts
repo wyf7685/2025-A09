@@ -276,6 +276,29 @@ export const useSessionStore = defineStore('session', () => {
     }
   };
 
+  const updateSessionAgentModelConfig = async (config: {
+    default?: string;
+    chat?: string;
+    create_title?: string;
+    summary?: string;
+    code_generation?: string;
+  }) => {
+    if (!currentSession.value) {
+      throw new Error('No current session selected');
+    }
+
+    try {
+      await api.put<void>(
+        `/sessions/${currentSession.value.id}/model_config`,
+        config,
+      );
+    } catch (error) {
+      console.error('更新会话模型配置失败:', error);
+      ElMessage.error('更新会话模型配置失败');
+      throw error;
+    }
+  };
+
   return {
     currentSession: computed(() => currentSession.value),
     currentSessionId: computed(() => currentSession.value?.id),
@@ -296,5 +319,7 @@ export const useSessionStore = defineStore('session', () => {
     addModelsToSession,
     removeModelsFromSession,
     updateSessionModels,
+    // Agent 模型配置
+    updateSessionAgentModelConfig,
   };
 });
