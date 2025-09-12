@@ -19,7 +19,7 @@
 
 ```ini
 # Dremio
-DREMIO_BASE_URL=http://localhost
+DREMIO_BASE_URL=http://localhost:9047
 DREMIO_REST_PORT=9047
 DREMIO_FLIGHT_PORT=32010
 DREMIO_USERNAME=username
@@ -34,6 +34,13 @@ GOOGLE_API_KEY=xxx
 OPENAI_API_KEY=xxx
 OPENAI_API_BASE=xxx
 OLLAMA_API_URL=xxx
+
+# 后端服务配置
+HOST=0.0.0.0
+PORT=8081
+
+# 前端接口配置
+VITE_API_BASE_URL=http://127.0.0.1:8081/api
 ```
 
 ## 启动调试
