@@ -5,6 +5,7 @@ import AssistantMessage from './message/AssistantMessage.vue';
 import UserMessage from './message/UserMessage.vue';
 import { ElIcon, ElButton } from 'element-plus';
 import { Loading } from '@element-plus/icons-vue';
+import { Icon } from '@iconify/vue';
 
 type ChatMessageWithSuggestions = ChatMessage & { loading?: boolean, suggestions?: string[]; };
 
@@ -68,8 +69,12 @@ onMounted(() => {
 
     <!-- 空状态：无会话或无数据集 -->
     <div v-if="!currentSessionId || !currentDatasetExists" class="empty-state">
-      <div class="empty-message">
-        <p>选择一个数据集，开始您的数据分析对话</p>
+      <div class="empty-content">
+        <div class="empty-icon">
+          <Icon icon="material-symbols:smart-toy-outline" />
+        </div>
+        <h3 class="empty-title">开始智能数据分析</h3>
+        <p class="empty-description">选择一个数据集，开始您的数据分析对话</p>
       </div>
     </div>
 
@@ -141,20 +146,45 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #6b7280;
+  min-height: 400px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  margin: 20px;
+}
 
-  .empty-message {
-    text-align: center;
-    max-width: 400px;
-    padding: 40px 20px;
+.empty-content {
+  text-align: center;
+  max-width: 400px;
+}
 
-    p {
-      font-size: 16px;
-      color: #6b7280;
-      margin: 0;
-      line-height: 1.6;
-    }
-  }
+.empty-icon {
+  font-size: 80px;
+  color: #f59e0b;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 4px 12px rgba(245, 158, 11, 0.2));
+}
+
+.empty-title {
+  margin: 0 0 16px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.empty-description {
+  margin: 0 0 8px 0;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.empty-tip {
+  color: #64748b;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .message-loading {

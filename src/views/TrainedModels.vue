@@ -4,6 +4,7 @@ import { useSessionStore } from '@/stores/session';
 import type { Model } from '@/types';
 import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
 import { ElButton, ElCard, ElDialog, ElEmpty, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
+import { Icon } from '@iconify/vue';
 import { onMounted, ref } from 'vue';
 
 const sessionStore = useSessionStore();
@@ -97,15 +98,20 @@ onMounted(async () => {
 
       <!-- 空状态 -->
       <div v-else-if="models.length === 0" class="empty-state">
-        <el-empty description="暂无训练模型" :image-size="120">
-          <template #description>
-            <p>还没有训练任何机器学习模型</p>
-            <p class="empty-tip">在对话分析中使用模型训练功能来创建模型</p>
-          </template>
-          <el-button type="primary" @click="$router.push('/chat-analysis')">
-            开始对话分析
-          </el-button>
-        </el-empty>
+        <div class="empty-content">
+          <div class="empty-icon">
+            <Icon icon="material-symbols:model-training" />
+          </div>
+          <h3 class="empty-title">暂无训练模型</h3>
+          <p class="empty-description">还没有训练任何机器学习模型</p>
+          <p class="empty-tip">在对话分析中使用模型训练功能来创建模型</p>
+          <div class="empty-action-wrapper">
+            <el-button type="primary" @click="$router.push('/chat-analysis')" class="empty-action">
+              <Icon icon="material-symbols:rocket-launch" class="button-icon" />
+              开始对话分析
+            </el-button>
+          </div>
+        </div>
       </div>
 
       <!-- 模型列表 -->
@@ -302,9 +308,63 @@ onMounted(async () => {
   border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
+.empty-content {
+  text-align: center;
+  max-width: 400px;
+}
+
+.empty-icon {
+  font-size: 80px;
+  color: #ec4899;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 4px 12px rgba(236, 72, 153, 0.2));
+}
+
+.empty-title {
+  margin: 0 0 16px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.empty-description {
+  margin: 0 0 8px 0;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
 .empty-tip {
   color: #64748b;
-  margin-top: 8px;
+  margin: 0 0 32px 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.empty-action-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.empty-action {
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.empty-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+}
+
+.button-icon {
+  font-size: 18px;
 }
 
 .models-list {

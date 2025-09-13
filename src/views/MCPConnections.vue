@@ -7,6 +7,7 @@ import {
   ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu,
   ElEmpty, ElIcon, ElInput, ElMessageBox, ElOption, ElSelect, ElTag
 } from 'element-plus';
+import { Icon } from '@iconify/vue';
 import { computed, onMounted, ref } from 'vue';
 
 // Store
@@ -257,11 +258,21 @@ onMounted(async () => {
 
       <!-- 空状态 -->
       <div v-if="filteredConnections.length === 0 && !loading" class="empty-state">
-        <el-empty :description="searchQuery || selectedTransport ? '没有找到匹配的连接' : '暂无 MCP 连接'" :image-size="120">
-          <el-button v-if="!searchQuery && !selectedTransport" type="primary" @click="showCreateDialog = true">
-            添加第一个连接
-          </el-button>
-        </el-empty>
+        <div v-if="!searchQuery && !selectedTransport" class="empty-content">
+          <div class="empty-icon">
+            <Icon icon="material-symbols:hub-outline" />
+          </div>
+          <h3 class="empty-title">暂无 MCP 连接</h3>
+          <p class="empty-description">还没有配置任何模型上下文协议连接</p>
+          <p class="empty-tip">添加 MCP 连接来扩展您的分析能力</p>
+          <div class="empty-action-wrapper">
+            <el-button type="primary" @click="showCreateDialog = true" class="empty-action">
+              <Icon icon="material-symbols:add" class="button-icon" />
+              添加第一个连接
+            </el-button>
+          </div>
+        </div>
+        <el-empty v-else :description="'没有找到匹配的连接'" :image-size="120" />
       </div>
     </div>
 
@@ -417,7 +428,70 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 300px;
+  min-height: 400px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.empty-content {
+  text-align: center;
+  max-width: 400px;
+}
+
+.empty-icon {
+  font-size: 80px;
+  color: #06b6d4;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 4px 12px rgba(6, 182, 212, 0.2));
+}
+
+.empty-title {
+  margin: 0 0 16px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.empty-description {
+  margin: 0 0 8px 0;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.empty-tip {
+  color: #64748b;
+  margin: 0 0 32px 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.empty-action-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.empty-action {
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.empty-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+}
+
+.button-icon {
+  font-size: 18px;
 }
 
 /* 响应式设计 */
