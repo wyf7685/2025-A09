@@ -135,7 +135,25 @@ const onWorkflowSaved = () => {
 
 // 工作流执行成功回调
 const onWorkflowExecuted = async (result: any) => {
-  ElMessage.success('工作流执行成功');
+  // 构建详细的成功消息
+  const successMessage = result.message
+    ? result.message
+    : `工作流执行成功，共执行了${result.executed_tools || '多个'}工具调用`;
+
+  // 使用更突出的消息框而不是普通消息
+  ElMessageBox.alert(
+    `<div style="text-align:center;margin-bottom:10px;"><i class="el-icon-success" style="font-size:30px;color:#67C23A;"></i></div>
+     <div>${successMessage}</div>
+     <div style="margin-top:10px;font-size:14px;color:#909399;">刷新会话中，请稍候...</div>`,
+    '工作流执行成功',
+    {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '确定',
+      customClass: 'workflow-success-dialog',
+      callback: () => {}
+    }
+  );
+
   workflowManagerDialogVisible.value = false;
 
   // 刷新聊天历史，显示工作流执行结果
@@ -147,6 +165,15 @@ const onWorkflowExecuted = async (result: any) => {
       flowPanelRef.value?.flowPanel?.clearFlowSteps?.();
     });
   }
+
+  // 显示提示：用户可以保存此会话为新的工作流
+  setTimeout(() => {
+    ElMessage({
+      type: 'info',
+      message: '提示: 您可以将当前对话保存为新的工作流，以便再次使用',
+      duration: 5000
+    });
+  }, 1000);
 };
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {

@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch, type PropType } from 'vue';
 import { useWorkflowStore } from '@/stores/workflow';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus, Refresh, VideoPlay, InfoFilled } from '@element-plus/icons-vue';
 import type { WorkflowDefinition, WorkflowExecutionOptions } from '@/types/workflow';
 
 // 组件属性
@@ -42,6 +42,7 @@ const dialogVisible = computed({
 const workflowStore = useWorkflowStore();
 const workflows = ref<WorkflowDefinition[]>([]);
 const loading = ref(false);
+const executing = ref(false);
 const createDialogVisible = ref(false);
 
 // 选中的工作流
@@ -102,6 +103,17 @@ const executeSelectedWorkflow = async () => {
     return;
   }
 
+  // 验证数据源映射是否完整
+  const requiredSourceIds = Object.keys(selectedWorkflow.value.datasource_mappings || {});
+  const mappedSourceIds = Object.keys(dataSourceMappings.value);
+
+  const missingMappings = requiredSourceIds.filter(id => !dataSourceMappings.value[id]);
+  if (missingMappings.length > 0) {
+    ElMessage.warning(`请为所有数据源提供映射: ${missingMappings.join(', ')}`);
+    return;
+  }
+
+  executing.value = true;
   try {
     const result = await workflowStore.executeWorkflow({
       workflow_id: selectedWorkflow.value.id,
@@ -110,13 +122,19 @@ const executeSelectedWorkflow = async () => {
     });
 
     if (result) {
-      ElMessage.success('工作流执行成功');
+      const message = result.message
+        ? result.message
+        : `工作流执行成功，共执行了${result.executed_tools || selectedWorkflow.value.tool_calls?.length || 0}个工具调用`;
+
+      ElMessage.success(message);
       emit('workflowExecuted', result);
       dialogVisible.value = false;
     }
   } catch (error) {
     console.error('执行工作流失败:', error);
     ElMessage.error('执行工作流失败');
+  } finally {
+    executing.value = false;
   }
 };
 
@@ -281,39 +299,87 @@ watch(() => props.visible, (newVal) => {
         <p class="description">{{ selectedWorkflow.description || '无描述' }}</p>
 
         <div class="datasource-mappings" v-if="Object.keys(selectedWorkflow.datasource_mappings || {}).length > 0">
-          <h3>数据源映射</h3>
+          <h3>数据源映射 <el-tooltip content="工作流使用的数据源需要映射到当前会话的数据源才能执行"><el-icon><InfoFilled /></el-icon></el-tooltip></h3>
+          <el-alert
+            type="info"
+            show-icon
+            :closable="false"
+            title="提示：将工作流中使用的原始数据源映射到当前会话的数据源"
+            style="margin-bottom: 15px;"
+          />
           <div class="mapping-list">
             <div v-for="(sourceDesc, sourceId) in selectedWorkflow.datasource_mappings" :key="sourceId" class="mapping-item">
-              <span class="source-name">{{ sourceDesc }}</span>
-              <el-select v-model="dataSourceMappings[sourceId]" placeholder="选择数据源">
-                <el-option
-                  v-for="ds in props.dataSources"
-                  :key="ds.id"
-                  :label="ds.name"
-                  :value="ds.id"
-                />
-              </el-select>
+              <div class="mapping-source">
+                <span class="source-label">工作流数据源:</span>
+                <span class="source-name">{{ sourceDesc }}</span>
+              </div>
+              <el-divider direction="vertical" />
+              <div class="mapping-target">
+                <span class="source-label">映射到:</span>
+                <el-select
+                  v-model="dataSourceMappings[sourceId]"
+                  placeholder="选择数据源"
+                  style="width: 220px;"
+                  :class="{ 'required-mapping': !dataSourceMappings[sourceId] }"
+                >
+                  <el-option
+                    v-for="ds in props.dataSources"
+                    :key="ds.id"
+                    :label="ds.name"
+                    :value="ds.id"
+                  />
+                </el-select>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="tool-calls-list">
-          <h3>工具调用 ({{ selectedWorkflow.tool_calls?.length || 0 }})</h3>
-          <el-table :data="selectedWorkflow.tool_calls || []" style="width: 100%">
-            <el-table-column prop="name" label="工具名称" width="180" />
-            <el-table-column prop="args" label="参数">
-              <template #default="scope">
-                <pre>{{ JSON.stringify(scope.row.args, null, 2) }}</pre>
-              </template>
-            </el-table-column>
-          </el-table>
+          <h3>工具调用流程 ({{ selectedWorkflow.tool_calls?.length || 0 }})</h3>
+          <el-alert
+            type="success"
+            show-icon
+            :closable="false"
+            title="这些工具调用将按照原始顺序执行，但使用新的数据源映射"
+            style="margin-bottom: 15px;"
+          />
+          <el-collapse>
+            <el-collapse-item
+              v-for="(toolCall, index) in selectedWorkflow.tool_calls || []"
+              :key="index"
+              :title="(index + 1) + '. ' + toolCall.name"
+            >
+              <div class="tool-call-detail">
+                <div class="tool-call-header">
+                  <div class="tool-call-type">工具类型: <span class="tool-type">{{ toolCall.name }}</span></div>
+                </div>
+                <div class="tool-call-args">
+                  <div class="args-header">参数:</div>
+                  <el-card shadow="never" class="args-card">
+                    <pre>{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                  </el-card>
+                </div>
+                <div class="tool-call-desc">
+                  <el-tag size="small" effect="plain" type="info">
+                    执行时会使用当前会话的数据源
+                  </el-tag>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </div>
       </div>
 
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="closeDialog">取消</el-button>
-          <el-button type="primary" @click="executeSelectedWorkflow">
+          <el-button
+            type="primary"
+            @click="executeSelectedWorkflow"
+            :disabled="Object.keys(selectedWorkflow?.datasource_mappings || {}).some(id => !dataSourceMappings[id])"
+            :loading="executing"
+          >
+            <el-icon><VideoPlay /></el-icon>
             执行工作流
           </el-button>
         </span>
@@ -438,16 +504,96 @@ watch(() => props.visible, (newVal) => {
 
 .mapping-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background-color: #f9fafc;
+}
+
+.mapping-source, .mapping-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mapping-source {
+  flex: 1;
+  margin-right: 10px;
+}
+
+.mapping-target {
+  flex: 2;
+}
+
+.source-label {
+  color: #606266;
+  font-size: 14px;
 }
 
 .source-name {
   font-weight: 500;
+  color: #409eff;
+  padding: 2px 8px;
+  background: rgba(64, 158, 255, 0.1);
+  border-radius: 4px;
+}
+
+.required-mapping {
+  border-color: #f56c6c;
 }
 
 .tool-calls-list {
   margin-top: 20px;
+}
+
+.tool-call-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 5px;
+}
+
+.tool-call-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.tool-call-type {
+  font-weight: 500;
+}
+
+.tool-type {
+  color: #409eff;
+  font-weight: 600;
+}
+
+.tool-call-args {
+  margin-top: 10px;
+}
+
+.args-header {
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.args-card {
+  background-color: #f9fafc;
+}
+
+.args-card pre {
+  margin: 0;
+  font-family: monospace;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.tool-call-desc {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 pre {
