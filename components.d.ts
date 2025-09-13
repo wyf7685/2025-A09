@@ -33,7 +33,7 @@ declare module 'vue' {
     MCPManager: typeof import('./src/components/chat/MCPManager.vue')['default']
     Model: typeof import('./src/components/icons/Model.vue')['default']
     ModelList: typeof import('./src/components/chat/ModelList.vue')['default']
-    ModelSelector: typeof import('./src/components/chat/ModelSelector.vue')['default']
+    ModelSelectDialog: typeof import('./src/components/chat/ModelSelectDialog.vue')['default']
     PreviewDataDialog: typeof import('./src/components/data/PreviewDataDialog.vue')['default']
     QualitySummaryCards: typeof import('./src/components/data/upload/cleaning/QualitySummaryCards.vue')['default']
     ReportGenerationDialog: typeof import('./src/components/chat/report/ReportGenerationDialog.vue')['default']

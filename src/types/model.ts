@@ -1,30 +1,27 @@
 /**
  * 机器学习模型信息
  */
-export interface Model {
+export interface MLModel {
   id: string;
   name: string;
-  model_type: string;
-  description?: string;
+  type: string;
+  description: string;
   created_at: string;
-  last_used?: string;
+  last_used: string;
   target_column: string;
   features: string[];
-  feature_count?: number;
-  dataset_id?: string;
-  session_id?: string;
+  feature_count: number;
+  dataset_id: string;
+  session_id: string;
   session_name?: string;
-  status?: string;
-  version?: string;
-  metrics?: Record<string, number>;
+  status: string;
+  version: string;
+  accuracy: number;
+  score: number;
+  metrics: Record<string, number>;
   hyperparams?: Record<string, any>;
   is_registered?: boolean;
 }
-
-/**
- * MLModel是Model的别名，用于更好的语义
- */
-export type MLModel = Model;
 
 /**
  * LLM模型信息
@@ -43,5 +40,5 @@ export interface LLMModel {
  * 模型列表响应
  */
 export interface ModelsResponse {
-  models: Model[];
+  models: MLModel[];
 }

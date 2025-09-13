@@ -1,24 +1,10 @@
 <script setup lang="ts">
 import { ElButton, ElCheckbox, ElDescriptions, ElDescriptionsItem, ElDialog, ElTable, ElTableColumn, ElTag } from 'element-plus';
 import { ref, watch } from 'vue';
-
-interface ModelType {
-  id: string;
-  name?: string;
-  model_type: string;
-  created_at: string;
-  session_id?: string;
-  session_name?: string;
-  description?: string;
-  target_column?: string;
-  features?: string[];
-  metrics?: Record<string, number>;
-  hyperparams?: Record<string, any>;
-  is_registered?: boolean;
-}
+import type { MLModel } from '@/types/model';
 
 const props = defineProps<{
-  models: ModelType[];
+  models: MLModel[];
   selectedModels: string[];
 }>();
 
@@ -43,12 +29,12 @@ watch(
 );
 
 // 获取行的类名
-const getRowClass = ({ row }: { row: ModelType; }) => {
+const getRowClass = ({ row }: { row: MLModel; }) => {
   return selection.value[row.id] ? 'selected-row' : '';
 };
 
 // 行点击处理
-const handleRowClick = (row: ModelType) => {
+const handleRowClick = (row: MLModel) => {
   selection.value[row.id] = !selection.value[row.id];
   emit('select', row.id);
 };
@@ -84,10 +70,10 @@ const hyperparamsToTable = (hyperparams: Record<string, any> | undefined) => {
 
 // 模型详情
 const detailsVisible = ref(false);
-const currentModel = ref<ModelType | null>(null);
+const currentModel = ref<MLModel | null>(null);
 
 // 显示模型详情
-const showModelDetails = (model: ModelType) => {
+const showModelDetails = (model: MLModel) => {
   currentModel.value = model;
   detailsVisible.value = true;
 };
@@ -142,7 +128,7 @@ const showModelDetails = (model: ModelType) => {
         <h3>基本信息</h3>
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模型名称">{{ currentModel.name || '未命名模型' }}</el-descriptions-item>
-          <el-descriptions-item label="模型类型">{{ currentModel.model_type }}</el-descriptions-item>
+          <el-descriptions-item label="模型类型">{{ currentModel.type }}</el-descriptions-item>
           <el-descriptions-item label="目标变量">{{ currentModel.target_column }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDateTime(currentModel.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="源会话" :span="2">

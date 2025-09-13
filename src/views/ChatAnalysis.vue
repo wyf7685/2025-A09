@@ -3,7 +3,7 @@ import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import FlowPanel from '@/components/chat/FlowPanel.vue';
-import ModelSelector from '@/components/chat/ModelSelector.vue';
+import ModelSelectDialog from '@/components/chat/ModelSelectDialog.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
@@ -11,12 +11,12 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
-import type { MCPConnection, Model } from '@/types';
-import { sleep } from '@/utils/tools';
+import type { MCPConnection, MLModel } from '@/types';
 import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import Model from '@/components/icons/Model.vue';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
@@ -32,7 +32,7 @@ const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
 
 // 当前会话的模型
-const sessionModels = ref<Model[]>([]);
+const sessionModels = ref<MLModel[]>([]);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -86,6 +86,8 @@ const editingSessionName = ref('');
 // 报告生成相关状态
 const reportDialogVisible = ref(false);
 
+const modelSelectDialogVisible = ref(false);
+
 const {
   messages,
   isProcessingChat,
@@ -126,6 +128,10 @@ const openReportDialog = async () => {
   }
 
   reportDialogVisible.value = true;
+};
+
+const openModelSelectDialog = () => {
+  modelSelectDialogVisible.value = true;
 };
 
 // --- Methods for new UI ---
@@ -291,10 +297,10 @@ onMounted(async () => {
           </span>
         </div>
         <div class="header-right">
-          <ModelSelector
-            v-if="currentSessionId"
-            v-model:sessionModels="sessionModels"
-            :currentSessionId="currentSessionId" />
+          <el-button v-if="currentSessionId" @click="openModelSelectDialog" :icon="Model"
+            :type="sessionModels.length ? 'primary' : 'default'">
+            {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
+          </el-button>
           <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
             生成报告
           </el-button>
@@ -337,6 +343,10 @@ onMounted(async () => {
 
     <!-- Report Generation Dialog -->
     <ReportGenerationDialog v-model:visible="reportDialogVisible" />
+
+    <!-- Model Selection Dialog -->
+    <ModelSelectDialog v-if="currentSessionId" v-model:visible="modelSelectDialogVisible"
+      v-model:session-models="sessionModels" :current-session-id="currentSessionId" />
   </div>
 </template>
 

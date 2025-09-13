@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
-import type { Model } from '@/types';
+import type { MLModel } from '@/types';
 import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
 import { ElButton, ElCard, ElDialog, ElEmpty, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
@@ -11,9 +11,9 @@ const modelStore = useModelStore();
 
 // 响应式数据
 const loading = ref<boolean>(false);
-const models = ref<Model[]>([]);
+const models = ref<MLModel[]>([]);
 const showModelDialog = ref<boolean>(false);
-const selectedModel = ref<Model | null>(null);
+const selectedModel = ref<MLModel | null>(null);
 
 // 方法
 const refreshModels = async (): Promise<void> => {
@@ -38,7 +38,7 @@ const formatDate = (timestamp: string | undefined): string => {
   return date.toLocaleString();
 };
 
-const viewModel = (model: Model): void => {
+const viewModel = (model: MLModel): void => {
   selectedModel.value = model;
   showModelDialog.value = true;
 };

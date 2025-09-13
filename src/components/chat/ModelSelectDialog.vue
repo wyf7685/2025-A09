@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import Model from '@/components/icons/Model.vue';
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { MLModel } from '@/types';
@@ -13,18 +12,12 @@ const props = defineProps<{
 
 // 使用v-model绑定已选模型列表
 const selectedModels = defineModel<MLModel[]>('sessionModels', { required: true });
+const visible = defineModel<boolean>('visible', { required: true });
 
 // 本地状态
-const dialogVisible = ref(false);
 const loading = ref(false);
 const models = ref<MLModel[]>([]);
 const selectedModelIds = ref<string[]>([]);
-
-// 计算属性
-const buttonLabel = computed(() => {
-  const count = selectedModels.value?.length || 0;
-  return count > 0 ? `已选择 ${count} 个模型` : '选择模型';
-});
 
 // 按会话分组的模型
 const modelsBySession = computed(() => {
@@ -52,7 +45,7 @@ const modelsByType = computed(() => {
   const types: Record<string, MLModel[]> = {};
 
   for (const model of models.value) {
-    const type = model.model_type || '未知类型';
+    const type = model.type || '未知类型';
     if (!types[type]) {
       types[type] = [];
     }
@@ -65,24 +58,6 @@ const modelsByType = computed(() => {
 // 会话store
 const sessionStore = useSessionStore();
 const modelStore = useModelStore();
-
-// 打开对话框
-const openDialog = async () => {
-  dialogVisible.value = true;
-  loading.value = true;
-
-  try {
-    // 加载所有可用模型，排除当前会话的模型
-    await loadModels();
-
-    // 初始化已选模型ID列表
-    selectedModelIds.value = selectedModels.value?.map(m => m.id) || [];
-  } catch (error) {
-    console.error('加载模型失败:', error);
-  } finally {
-    loading.value = false;
-  }
-};
 
 // 加载所有可用模型
 const loadModels = async () => {
@@ -128,91 +103,97 @@ const confirmSelection = async () => {
   }
 
   // 关闭对话框
-  dialogVisible.value = false;
+  visible.value = false;
 };
 
 // 初始加载已选模型
-onMounted(() => {
+onMounted(async () => {
   if (selectedModels.value?.length) {
     selectedModelIds.value = selectedModels.value.map(m => m.id);
+  }
+
+  loading.value = true;
+
+  try {
+    // 加载所有可用模型，排除当前会话的模型
+    await loadModels();
+
+    // 初始化已选模型ID列表
+    selectedModelIds.value = selectedModels.value?.map(m => m.id) || [];
+  } catch (error) {
+    console.error('加载模型失败:', error);
+  } finally {
+    loading.value = false;
   }
 });
 </script>
 
 <template>
-  <div class="model-selector">
-    <el-dialog
-      v-model="dialogVisible"
-      title="选择模型"
-      width="60%"
-      top="5vh"
-      :destroy-on-close="true">
-      <div class="model-selector-content">
-        <div v-if="loading" class="loading-container">
-          <el-skeleton :rows="6" animated />
-        </div>
-
-        <div v-else-if="!models.length" class="no-models">
-          <el-empty description="暂无可用模型" />
-          <p class="hint">
-            在其他数据分析会话中训练并保存的模型将显示在这里
-          </p>
-        </div>
-
-        <el-tabs v-else type="border-card">
-          <el-tab-pane label="所有模型">
-            <model-list
-              :models="models"
-              :selected-models="selectedModelIds"
-              @select="toggleModel" />
-          </el-tab-pane>
-
-          <el-tab-pane label="按会话分组">
-            <el-collapse accordion>
-              <el-collapse-item
-                v-for="session in modelsBySession"
-                :key="session.id"
-                :title="`${session.name || '无名会话'} (${session.models.length}个模型)`">
-                <model-list
-                  :models="session.models"
-                  :selected-models="selectedModelIds"
-                  @select="toggleModel" />
-              </el-collapse-item>
-            </el-collapse>
-          </el-tab-pane>
-
-          <el-tab-pane label="按类型分组">
-            <el-collapse accordion>
-              <el-collapse-item
-                v-for="(models, type) in modelsByType"
-                :key="type"
-                :title="`${type} (${models.length}个模型)`">
-                <model-list
-                  :models="models"
-                  :selected-models="selectedModelIds"
-                  @select="toggleModel" />
-              </el-collapse-item>
-            </el-collapse>
-          </el-tab-pane>
-        </el-tabs>
+  <el-dialog
+    v-model="visible"
+    title="选择模型"
+    width="60%"
+    top="5vh"
+    :destroy-on-close="true">
+    <div class="model-selector-content">
+      <div v-if="loading" class="loading-container">
+        <el-skeleton :rows="6" animated />
       </div>
 
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="confirmSelection">
-            确认选择 ({{ selectedModelIds.length }})
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
+      <div v-else-if="!models.length" class="no-models">
+        <el-empty description="暂无可用模型" />
+        <p class="hint">
+          在其他数据分析会话中训练并保存的模型将显示在这里
+        </p>
+      </div>
 
-    <!-- 触发按钮 -->
-    <el-button class="model-selector-button" @click="openDialog" :icon="Model"
-      :type="selectedModels.length ? 'primary' : 'default'">
-      {{ buttonLabel }}
-    </el-button>
-  </div>
+      <el-tabs v-else type="border-card">
+        <el-tab-pane label="所有模型">
+          <model-list
+            :models="models"
+            :selected-models="selectedModelIds"
+            @select="toggleModel" />
+        </el-tab-pane>
+
+        <el-tab-pane label="按会话分组">
+          <el-collapse accordion>
+            <el-collapse-item
+              v-for="session in modelsBySession"
+              :key="session.id"
+              :title="`${session.name || '无名会话'} (${session.models.length}个模型)`">
+              <model-list
+                :models="session.models"
+                :selected-models="selectedModelIds"
+                @select="toggleModel" />
+            </el-collapse-item>
+          </el-collapse>
+        </el-tab-pane>
+
+        <el-tab-pane label="按类型分组">
+          <el-collapse accordion>
+            <el-collapse-item
+              v-for="(models, type) in modelsByType"
+              :key="type"
+              :title="`${type} (${models.length}个模型)`">
+              <model-list
+                :models="models"
+                :selected-models="selectedModelIds"
+                @select="toggleModel" />
+            </el-collapse-item>
+          </el-collapse>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
+
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSelection">
+          确认选择 ({{ selectedModelIds.length }})
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -235,9 +216,5 @@ onMounted(() => {
   color: #909399;
   font-size: 14px;
   margin-top: 10px;
-}
-
-.model-selector-button {
-  margin-right: 10px;
 }
 </style>

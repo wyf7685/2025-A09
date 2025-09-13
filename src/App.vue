@@ -3,7 +3,7 @@ import { checkHealth as checkHealthApi } from '@/utils/api';
 import { ChatDotRound, Collection, Connection, DataAnalysis, House, Link, Menu, Monitor } from '@element-plus/icons-vue';
 import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElMenu, ElMenuItem } from 'element-plus';
 import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
-import { RouterView } from 'vue-router';
+import { RouterLink, RouterView } from 'vue-router';
 
 // 响应式数据
 const sidebarCollapsed = ref(false);
@@ -121,7 +121,7 @@ onMounted(async () => {
 
           <!-- 折叠状态下的菜单 -->
           <div v-else class="collapsed-menu">
-            <router-link v-for="(item, index) in [
+            <RouterLink v-for="(item, index) in [
               { path: '/dashboard', icon: House },
               { path: '/data-management', icon: Collection },
               { path: '/data-upload', icon: Connection },
@@ -133,7 +133,7 @@ onMounted(async () => {
               <el-icon>
                 <component :is="item.icon" />
               </el-icon>
-            </router-link>
+            </RouterLink>
           </div>
         </div>
       </el-aside>

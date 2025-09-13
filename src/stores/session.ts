@@ -1,4 +1,4 @@
-import type { ChatEntry, Model, Session, SessionListItem, ToolCallArtifact } from '@/types';
+import type { ChatEntry, MLModel, Session, SessionListItem, ToolCallArtifact } from '@/types';
 import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
@@ -216,7 +216,7 @@ export const useSessionStore = defineStore('session', () => {
   // 获取会话关联的模型
   const getSessionModels = async (sessionId: string) => {
     try {
-      const response = await api.get<Model[]>(`/sessions/${sessionId}/models`);
+      const response = await api.get<MLModel[]>(`/sessions/${sessionId}/models`);
       return response.data;
     } catch (error) {
       console.error(`获取会话 ${sessionId} 的模型失败:`, error);

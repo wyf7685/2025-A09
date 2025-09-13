@@ -16,6 +16,7 @@ class MLModelInfoOut(BaseModel):
     created_at: str
     last_used: str = ""
     session_id: SessionID = ""
+    session_name: str = ""
     dataset_id: str = ""
 
     # 模型性能指标
