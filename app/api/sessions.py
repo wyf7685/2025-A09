@@ -2,9 +2,9 @@
 会话管理接口
 """
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.exception import MCPServerNotFound
@@ -51,32 +51,31 @@ async def create_session(request: CreateSessionRequest) -> Session:
         raise HTTPException(status_code=500, detail=f"Failed to create session: {e}") from e
 
 
+async def _get_current_session(session_id: SessionID) -> Session:
+    if session := await session_service.get(session_id):
+        return session
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+CurrentSession = Annotated[Session, Depends(_get_current_session)]
+
+
 class UpdateSessionRequest(BaseModel):
     name: str
 
 
 @router.put("/{session_id}", response_model=Session)
-async def update_session(session_id: SessionID, request: UpdateSessionRequest) -> Session:
+async def update_session(session: CurrentSession, request: UpdateSessionRequest) -> Session:
     """
     更新会话信息
 
     目前支持更新会话名称
     """
     try:
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # 更新会话名称
         session.name = request.name
         await session_service.save_session(session)
-
         return session_service.tool_name_repr(session)
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception("更新会话失败")
         raise HTTPException(status_code=500, detail=f"Failed to update session: {e}") from e
@@ -91,34 +90,21 @@ class AgentModelConfigUpdate(BaseModel):
 
 
 @router.put("/{session_id}/model_config")
-async def update_session_model_config(session_id: SessionID, request: AgentModelConfigUpdate) -> None:
+async def update_session_model_config(session: CurrentSession, request: AgentModelConfigUpdate) -> None:
     try:
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         for attr, value in request.model_dump().items():
             if value is not None:
                 setattr(session.agent_model_config, attr, value)
         await session_service.save_session(session)
-
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception("更新会话模型配置失败")
         raise HTTPException(status_code=500, detail=f"Failed to update session model config: {e}") from e
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: SessionID) -> Session:
+async def get_session(session: CurrentSession) -> Session:
     """获取会话信息"""
-    if session := await session_service.get(session_id):
-        return session_service.tool_name_repr(session)
-
-    raise HTTPException(status_code=404, detail="Session not found")
+    return session_service.tool_name_repr(session)
 
 
 @router.get("")
@@ -131,17 +117,11 @@ async def get_sessions() -> list[SessionListItem]:
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: SessionID) -> dict[str, Any]:
+async def delete_session(session: CurrentSession) -> dict[str, Any]:
     """删除会话"""
     try:
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        await session_service.delete(session_id)
-        return {"success": True, "message": f"Session {session_id} deleted"}
-    except KeyError as e:
-        logger.warning(f"删除会话时出现错误: {e}")
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found") from e
+        await session_service.delete(session.id)
+        return {"success": True, "message": f"Session {session.id} deleted"}
     except Exception as e:
         logger.exception(f"删除会话失败: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {e}") from e
@@ -154,19 +134,11 @@ class AddMCPToSessionRequest(BaseModel):
 
 
 @router.post("/{session_id}/mcp")
-async def add_mcp_to_session(session_id: SessionID, request: AddMCPToSessionRequest) -> Session:
+async def add_mcp_to_session(session: CurrentSession, request: AddMCPToSessionRequest) -> Session:
     """
     向会话添加MCP连接
     """
     try:
-        # 检查会话是否存在
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # 检查MCP连接是否存在
         for mcp_id in request.mcp_ids:
             try:
@@ -205,19 +177,11 @@ class RemoveMCPFromSessionRequest(BaseModel):
 
 
 @router.delete("/{session_id}/mcp")
-async def remove_mcp_from_session(session_id: SessionID, request: RemoveMCPFromSessionRequest) -> Session:
+async def remove_mcp_from_session(session: CurrentSession, request: RemoveMCPFromSessionRequest) -> Session:
     """
     从会话移除MCP连接
     """
     try:
-        # 检查会话是否存在
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # 移除MCP连接ID
         if session.mcp_ids:
             for mcp_id in request.mcp_ids:
@@ -240,17 +204,12 @@ async def remove_mcp_from_session(session_id: SessionID, request: RemoveMCPFromS
 
 
 @router.get("/{session_id}/mcp")
-async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnection]:
+async def get_session_mcp_connections(session: CurrentSession) -> list[MCPConnection]:
     """
     获取会话关联的MCP连接
     """
     try:
-        # 检查会话是否存在
-        if not await session_service.exists(session_id):
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        session = await session_service.get(session_id)
-        if not session or not session.mcp_ids:
+        if not session.mcp_ids:
             return []
 
         connections: list[MCPConnection] = []
@@ -259,7 +218,7 @@ async def get_session_mcp_connections(session_id: SessionID) -> list[MCPConnecti
                 connections.append(mcp_service.get(mcp_id))
             except MCPServerNotFound:
                 # MCP连接不存在，跳过
-                logger.warning(f"MCP connection {mcp_id} not found in session {session_id}")
+                logger.warning(f"MCP connection {mcp_id} not found in session {session.id}")
                 continue
 
         return connections
@@ -276,13 +235,9 @@ class AddModelsToSessionRequest(BaseModel):
 
 
 @router.post("/{session_id}/models")
-async def add_models_to_session(session_id: SessionID, request: AddModelsToSessionRequest) -> None:
+async def add_models_to_session(session: CurrentSession, request: AddModelsToSessionRequest) -> None:
     """向会话添加外部模型引用"""
     try:
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # 检查模型是否存在
         for model_id in request.model_ids:
             model = model_registry.get_model(model_id)
@@ -311,37 +266,23 @@ class RemoveModelsFromSessionRequest(BaseModel):
 
 
 @router.delete("/{session_id}/models")
-async def remove_models_from_session(session_id: SessionID, request: RemoveModelsFromSessionRequest) -> None:
+async def remove_models_from_session(session: CurrentSession, request: RemoveModelsFromSessionRequest) -> None:
     """从会话中移除模型引用"""
     try:
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
         # 移除模型ID
         if session.model_ids:
             session.model_ids = [mid for mid in session.model_ids if mid not in request.model_ids]
-
         await session_service.save_session(session)
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception("从会话移除模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to remove models from session: {e}") from e
 
 
 @router.get("/{session_id}/models", response_model=list[MLModelInfoOut])
-async def get_session_models(session_id: SessionID) -> list[MLModelInfoOut]:
+async def get_session_models(session: CurrentSession) -> list[MLModelInfoOut]:
     """获取会话关联的所有模型信息"""
     try:
-        session = await session_service.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        if not session.model_ids:
-            return []
-
-        return [model for model_id in session.model_ids if (model := model_registry.get_model(model_id))]
+        return [model for model_id in (session.model_ids or []) if (model := model_registry.get_model(model_id))]
     except HTTPException:
         raise
     except Exception as e:
