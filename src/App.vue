@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
 import { ChatDotRound, Collection, Connection, DataAnalysis, House, Link, Menu, Monitor } from '@element-plus/icons-vue';
-import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElMenu, ElMenuItem } from 'element-plus';
+import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElTooltip } from 'element-plus';
 import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
 
 // 响应式数据
 const sidebarCollapsed = ref(false);
 const healthStatus = ref(false);
+const sidebarTransitioning = ref(false);
 
 // 方法
 const toggleSidebar = () => {
+  sidebarTransitioning.value = true;
   sidebarCollapsed.value = !sidebarCollapsed.value;
+  sidebarTransitioning.value = false;
 };
 
 const checkHealth = async () => {
@@ -61,78 +64,38 @@ onMounted(async () => {
     <!-- 主体内容 -->
     <div class="layout-main">
       <!-- 侧边栏 -->
-      <el-aside :class="['layout-sidebar', { collapsed: sidebarCollapsed }]"
-        :width="sidebarCollapsed ? '60px' : '250px'">
+      <el-aside :class="['layout-sidebar', { collapsed: sidebarCollapsed }]">
         <div class="sidebar-menu">
-          <!-- 未折叠状态下的菜单 -->
-          <div v-if="!sidebarCollapsed" class="expanded-menu">
-            <el-menu :default-active="$route.path" router background-color="#ffffff"
-              text-color="#333" active-text-color="#409EFF">
-              <el-menu-item index="/dashboard">
-                <el-icon>
-                  <House />
-                </el-icon>
-                <span>工作台</span>
-              </el-menu-item>
-
-              <el-menu-item index="/data-management">
-                <el-icon>
-                  <Collection />
-                </el-icon>
-                <span>数据管理</span>
-              </el-menu-item>
-
-              <el-menu-item index="/data-upload">
-                <el-icon>
-                  <Connection />
-                </el-icon>
-                <span>数据上传</span>
-              </el-menu-item>
-
-              <el-menu-item index="/chat-analysis">
-                <el-icon>
-                  <ChatDotRound />
-                </el-icon>
-                <span>对话分析</span>
-              </el-menu-item>
-
-              <el-menu-item index="/mcp-connections">
-                <el-icon>
-                  <Link />
-                </el-icon>
-                <span>MCP连接</span>
-              </el-menu-item>
-
-              <el-menu-item index="/llm-models">
-                <el-icon>
-                  <Connection />
-                </el-icon>
-                <span>大语言模型</span>
-              </el-menu-item>
-
-              <el-menu-item index="/trained-models">
-                <el-icon>
-                  <DataAnalysis />
-                </el-icon>
-                <span>机器学习模型</span>
-              </el-menu-item>
-            </el-menu>
-          </div>
-
-          <!-- 折叠状态下的菜单 -->
-          <div v-else class="collapsed-menu">
+          <div :class="['custom-menu', { collapsed: sidebarCollapsed }]">
             <RouterLink v-for="(item, index) in [
-              { path: '/dashboard', icon: House },
-              { path: '/data-management', icon: Collection },
-              { path: '/data-upload', icon: Connection },
-              { path: '/chat-analysis', icon: ChatDotRound },
-              { path: '/mcp-connections', icon: Link },
-              { path: '/llm-models', icon: Connection },
-              { path: '/trained-models', icon: DataAnalysis }
-            ]" :key="index" :to="item.path" class="collapsed-menu-item" :class="{ active: $route.path === item.path }">
-              <el-icon>
+              { path: '/dashboard', icon: House, label: '工作台' },
+              { path: '/data-management', icon: Collection, label: '数据管理' },
+              { path: '/data-upload', icon: Connection, label: '数据上传' },
+              { path: '/chat-analysis', icon: ChatDotRound, label: '对话分析' },
+              { path: '/mcp-connections', icon: Link, label: 'MCP连接' },
+              { path: '/llm-models', icon: Connection, label: '大语言模型' },
+              { path: '/trained-models', icon: DataAnalysis, label: '机器学习模型' }
+            ]"
+              :key="index"
+              :to="item.path"
+              class="menu-item"
+              :class="{ active: $route.path === item.path }">
+              <el-tooltip
+                v-if="sidebarCollapsed"
+                :content="item.label"
+                placement="right"
+                :offset="12"
+                :show-after="300">
+                <el-icon class="menu-icon">
+                  <component :is="item.icon" />
+                </el-icon>
+              </el-tooltip>
+              <el-icon v-else class="menu-icon">
                 <component :is="item.icon" />
               </el-icon>
+              <Transition name="label-fade">
+                <span v-if="!sidebarCollapsed && !sidebarTransitioning" class="menu-label">{{ item.label }}</span>
+              </Transition>
             </RouterLink>
           </div>
         </div>
@@ -185,11 +148,13 @@ onMounted(async () => {
 }
 
 .layout-sidebar {
+  width: 180px;
   background: rgba(255, 255, 255, 0.95);
   border-right: 1px solid rgba(226, 232, 240, 0.8);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   backdrop-filter: blur(10px);
+  will-change: width;
 }
 
 .sidebar-menu {
@@ -199,7 +164,15 @@ onMounted(async () => {
 }
 
 .layout-sidebar.collapsed {
-  width: 60px !important;
+  width: 64px;
+}
+
+/* 图标样式 */
+.menu-icon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .layout-content {
@@ -209,73 +182,95 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-/* 展开菜单样式 */
-.expanded-menu .el-menu {
-  border-right: none;
-  background: transparent !important;
-  width: 100%;
-}
-
-.expanded-menu .el-menu-item {
-  border-radius: 12px;
-  margin: 6px 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-weight: 500;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-}
-
-.expanded-menu .el-menu-item:hover {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
-}
-
-.expanded-menu .el-menu-item.is-active {
-  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-  color: white !important;
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
-}
-
-.expanded-menu .el-menu-item.is-active:hover {
-  transform: translateX(4px);
-}
-
-/* 折叠菜单样式 */
-.collapsed-menu {
+/* 自定义菜单样式 */
+.custom-menu {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  width: 100%;
+  height: 100%;
   padding: 10px 0;
   overflow-y: auto;
-  height: 100%;
+  transition: all 0.3s ease;
 }
 
-.collapsed-menu-item {
+/* 菜单项基础样式 */
+.menu-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin: 8px 0;
-  border-radius: 50%;
+  padding: 12px 16px;
+  margin: 6px 10px;
+  border-radius: 12px;
   color: #64748b;
+  text-decoration: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
 }
 
-.collapsed-menu-item:hover {
+.menu-item:hover {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  transform: scale(1.05);
+  transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
   color: #3b82f6;
 }
 
-.collapsed-menu-item.active {
+.menu-item.active {
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   color: white;
   box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
+}
+
+.menu-item.active:hover {
+  transform: translateX(4px);
+}
+
+.menu-label {
+  font-size: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+/* 标签淡入淡出动画 */
+.label-fade-enter-active {
+  transition: opacity 0.3s ease 0.2s;
+}
+
+.label-fade-leave-active {
+  transition: opacity 0.1s ease;
+}
+
+.label-fade-enter-from,
+.label-fade-leave-to {
+  opacity: 0;
+}
+
+/* 折叠菜单样式 */
+.custom-menu.collapsed {
+  align-items: center;
+}
+
+.custom-menu.collapsed .menu-item {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 8px auto;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.custom-menu.collapsed .menu-item:hover {
+  transform: scale(1.05);
+}
+
+.custom-menu.collapsed .menu-item.active:hover {
+  transform: scale(1.05);
+}
+
+.custom-menu.collapsed .menu-icon {
+  margin: 0;
 }
 
 .el-select {
@@ -290,5 +285,12 @@ onMounted(async () => {
 .el-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+/* Tooltip 样式 */
+:deep(.el-tooltip__popper) {
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 </style>
