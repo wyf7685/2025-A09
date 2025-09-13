@@ -9,3 +9,5 @@ class PROMPTS:
     system: str
     tool_intro: str
     external_ml_model: str
+    mcp_server: str
+    mcp_tools_instruction: str

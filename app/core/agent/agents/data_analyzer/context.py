@@ -11,7 +11,9 @@ import anyio.to_thread
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda, ensure_config
-from langchain_mcp_adapters.tools import load_mcp_tools
+from langchain_core.tools import BaseTool
+from langchain_mcp_adapters.sessions import create_session
+from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_langchain_tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, create_react_agent
@@ -29,7 +31,6 @@ from app.schemas.session import AgentModelConfig, SessionID
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
-    from langchain_core.tools import BaseTool
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
 
 
@@ -50,6 +51,7 @@ class AgentContext:
     _tool_node: ToolNode | None = None
     _graph: CompiledStateGraph | None = None
     _saved_models: dict[str, Path] | None = None
+    _mcp_instructions: str | None = None
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
@@ -111,6 +113,7 @@ class AgentContext:
             overview=format_sources_overview(self.sources.sources),
             tool_intro=PROMPTS.tool_intro,
             ml_model_instructions=ml_model_instructions,
+            mcp_tools_instructions=self._mcp_instructions or "",
         )
 
     async def _generate_model_prompt(self, state: dict[str, Any]) -> list[BaseMessage]:
@@ -123,6 +126,31 @@ class AgentContext:
         if self._tool_node:
             model = model.bind_tools(list(self._tool_node.tools_by_name.values()))
         return model
+
+    async def _load_mcp_tools(self) -> list[BaseTool]:
+        if self.mcp_connections is None:
+            self._mcp_instructions = ""
+            return []
+
+        instructions: list[str] = []
+        mcp_tools: list[BaseTool] = []
+        for idx, connection in enumerate(self.mcp_connections, 1):
+            conn = cast("LangChainMCPConnection", deepcopy(connection))
+            async with create_session(conn) as tool_session:
+                init = await tool_session.initialize()
+                tools = await _list_all_tools(tool_session)
+            instruction = PROMPTS.mcp_server.format(
+                idx=idx,
+                server_instructions=init.instructions or "无",
+                tool_instructions="\n".join(
+                    f"- {t.name}" + (f": {t.description}" if t.description else "") for t in tools
+                ),
+            )
+            instructions.append(instruction)
+            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(None, tool, connection=conn) for tool in tools)
+
+        self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n".join(instructions))
+        return mcp_tools
 
     async def build_graph(self) -> None:
         if self.lifespan is not None:
@@ -143,11 +171,7 @@ class AgentContext:
         builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
 
         # MCP Tools
-        mcp_tools: list[BaseTool] = []
-        if self.mcp_connections is not None:
-            for connection in self.mcp_connections:
-                conn = cast("LangChainMCPConnection", deepcopy(connection))
-                mcp_tools.extend(await load_mcp_tools(None, connection=conn))
+        mcp_tools = await self._load_mcp_tools()
 
         # All Tools
         self._tool_node = ToolNode(builtin_tools + mcp_tools)

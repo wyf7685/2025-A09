@@ -1,7 +1,10 @@
 import anyio
 from mcp.server import FastMCP
 
-mcp = FastMCP(name="greet mcp server")
+mcp = FastMCP(
+    name="greet mcp server",
+    instructions="提供一个简单的问候工具",
+)
 
 
 @mcp.tool(
