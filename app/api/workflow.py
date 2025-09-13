@@ -3,7 +3,6 @@
 """
 
 import json
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path, status
 
@@ -181,28 +180,160 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
         # 创建数据源集合
         sources_dict = {}
 
-        # 加载数据源并创建双向映射
-        # 既支持通过 mapped_id 访问，也支持通过 source_id 访问同一个数据源
+        # 查找会话中的所有Dremio数据源
+        dremio_sources = []
+        for dataset_id in session.dataset_ids:
+            if dataset_id.startswith("dremio_"):
+                dremio_sources.append(dataset_id)
+
+        # 首先尝试同步Dremio数据源 - 解决可能的数据源不存在问题
+        try:
+            await datasource_service.sync_from_dremio()
+            logger.info("已同步Dremio数据源")
+        except Exception as e:
+            logger.warning(f"同步Dremio数据源失败: {e}")
+
+        # 尝试手动重新加载外部数据源文件夹
+        try:
+            # 这里我们避免直接调用内部方法，而是通过公共API来刷新数据源
+            # 先获取当前所有数据源信息作为参考
+            all_sources = list(datasource_service.sources.keys())
+            logger.info(f"当前系统中有 {len(all_sources)} 个数据源")
+
+            # 主动尝试加载每个会话数据源
+            for dataset_id in session.dataset_ids:
+                if dataset_id not in datasource_service.sources:
+                    try:
+                        # 尝试直接加载 - 这会访问文件系统
+                        await datasource_service.source_exists(dataset_id)
+                        logger.info(f"已检查数据源: {dataset_id}")
+                    except Exception as load_err:
+                        logger.warning(f"检查数据源失败: {dataset_id}, 错误: {load_err}")
+        except Exception as e:
+            logger.warning(f"加载数据源失败: {e}")
+
+        # 确保会话中的所有数据源都被加载
+        for dataset_id in session.dataset_ids:
+            try:
+                if await datasource_service.source_exists(dataset_id):
+                    source = await datasource_service.get_source(dataset_id)
+
+                    # 添加主ID映射
+                    sources_dict[dataset_id] = source
+
+                    # 添加各种可能的ID格式映射
+                    if dataset_id.startswith("dremio_"):
+                        # 标准格式: dremio_<uuid>
+                        base_id = dataset_id[7:]  # 移除 "dremio_" 前缀
+
+                        # 格式1: dremio_external_<uuid>
+                        external_id = f"dremio_external_{base_id}"
+                        sources_dict[external_id] = source
+
+                        # 格式2: dremio_external_<uuid>_csv
+                        csv_id = f"{external_id}_csv"
+                        sources_dict[csv_id] = source
+
+                        logger.info(f"已添加Dremio数据源额外映射: {dataset_id} -> {external_id}, {csv_id}")
+
+                    logger.info(f"已从会话加载数据源: {dataset_id}")
+                else:
+                    logger.warning(f"会话中的数据源不存在: {dataset_id}")
+            except Exception as e:
+                logger.warning(f"从会话加载数据源 {dataset_id} 失败: {e}")
+
+        # 添加特殊映射以处理可能的格式变体
+        for source_id in list(sources_dict.keys()):  # 使用list避免在迭代中修改字典
+            source = sources_dict[source_id]
+
+            # 处理可能的格式变体
+            if source_id.endswith("_csv"):
+                base_id = source_id[:-4]  # 移除 "_csv" 后缀
+                if base_id not in sources_dict:
+                    sources_dict[base_id] = source
+                    logger.info(f"已添加无CSV后缀映射: {source_id} -> {base_id}")
+
+            # 从dremio_external_格式转换回dremio_格式
+            if source_id.startswith("dremio_external_"):
+                base_id = source_id[15:]  # 移除 "dremio_external_" 前缀
+                dremio_id = f"dremio_{base_id}"
+                if dremio_id not in sources_dict and dremio_id in dremio_sources:
+                    sources_dict[dremio_id] = source
+                    logger.info(f"已添加Dremio反向映射: {source_id} -> {dremio_id}")
+
+        # 然后，处理工作流请求中指定的数据源映射
         for source_id, mapped_id in request.datasource_mappings.items():
             try:
                 if await datasource_service.source_exists(mapped_id):
                     source = await datasource_service.get_source(mapped_id)
+
                     # 同时保存原始ID和映射后的ID，两个ID都可以访问相同的数据源
                     sources_dict[mapped_id] = source
                     sources_dict[source_id] = source
+
+                    # 处理常见的ID格式变体
+                    format_variants = []
+
+                    # 如果是Dremio数据源，添加各种变体
+                    if mapped_id.startswith("dremio_"):
+                        base_id = mapped_id[7:]  # 移除 "dremio_" 前缀
+                        format_variants.extend([f"dremio_external_{base_id}", f"dremio_external_{base_id}_csv"])
+
+                    # 添加所有变体到源字典
+                    for variant in format_variants:
+                        sources_dict[variant] = source
+                        logger.info(f"已添加格式变体映射: {mapped_id} -> {variant}")
+
                     logger.info(f"已加载数据源: {mapped_id} (映射自 {source_id})")
                 else:
                     logger.warning(f"数据源不存在: {mapped_id}")
             except Exception as e:
                 logger.warning(f"加载数据源 {mapped_id} 失败: {e}")
 
-        # 输出已加载的所有数据源
+                # 输出已加载的所有数据源
         logger.info(f"已加载 {len(sources_dict)} 个数据源: {list(sources_dict.keys())}")
 
-        # 创建Sources对象
-        sources = Sources(sources_dict)
+        # 如果没有加载到任何数据源，尝试从外部文件夹手动加载CSV文件
+        if len(sources_dict) == 0:
+            # 尝试从external文件夹直接加载CSV文件作为临时解决方案
+            try:
+                import pathlib
 
-        # 从工作流获取工具调用并执行
+                import pandas as pd
+
+                from app.core.datasource import create_df_source
+
+                # 使用项目根目录下的external文件夹
+                external_dir = pathlib.Path("external")
+                if external_dir.exists():
+                    # 查找文件夹中的CSV文件
+                    for file_path in external_dir.glob("*.csv"):
+                        try:
+                            # 读取CSV文件
+                            df = pd.read_csv(file_path)
+                            # 创建数据源
+                            file_uuid = file_path.stem
+                            source = create_df_source(df, file_uuid)
+
+                            # 添加数据源和它的变种
+                            dremio_id = f"dremio_{file_uuid}"
+                            dremio_external_id = f"dremio_external_{file_uuid}"
+                            dremio_external_csv_id = f"{dremio_external_id}_csv"
+
+                            # 添加所有可能的ID格式
+                            sources_dict[file_uuid] = source
+                            sources_dict[dremio_id] = source
+                            sources_dict[dremio_external_id] = source
+                            sources_dict[dremio_external_csv_id] = source
+
+                            logger.info(f"从external文件夹手动加载数据源: {file_path.name} -> {dremio_external_csv_id}")
+                        except Exception as e:
+                            logger.warning(f"手动加载CSV文件失败: {file_path}, 错误: {e}")
+            except Exception as e:
+                logger.warning(f"尝试手动加载external文件夹失败: {e}")
+
+        # 创建Sources对象
+        sources = Sources(sources_dict)  # 从工作流获取工具调用并执行
         try:
             # 检查工作流中的工具调用
             logger.info(f"工作流 {request.workflow_id} 中有 {len(workflow.tool_calls)} 个工具调用")
@@ -234,17 +365,83 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
                 # 修改工具调用中的数据源ID映射
                 args = tool_call.get("args", {})
                 if isinstance(args, dict):
-                    # 处理source_id字段
-                    if "source_id" in args and args["source_id"] in request.datasource_mappings:
-                        old_id = args["source_id"]
-                        args["source_id"] = request.datasource_mappings[old_id]
-                        logger.info(f"已映射数据源ID (source_id): {old_id} -> {args['source_id']}")
+                    # 获取当前会话中的所有数据源
+                    available_session_ids = session.dataset_ids
 
-                    # 处理dataset_id字段
-                    if "dataset_id" in args and args["dataset_id"] in request.datasource_mappings:
-                        old_id = args["dataset_id"]
-                        args["dataset_id"] = request.datasource_mappings[old_id]
-                        logger.info(f"已映射数据源ID (dataset_id): {old_id} -> {args['dataset_id']}")
+                    # 如果会话中有数据源，确保使用会话中的数据源
+                    if available_session_ids and len(available_session_ids) > 0:
+                        # 选择主数据源
+                        primary_session_source = available_session_ids[0]
+                        logger.info(
+                            f"当前会话有 {len(available_session_ids)} 个数据源，主数据源为: {primary_session_source}"
+                        )
+
+                        # 提取原始数据源ID的格式信息
+                        def extract_id_format(id_str: str) -> tuple[str, str]:
+                            # 提取前缀和后缀
+                            prefix = ""
+                            suffix = ""
+
+                            # 检测前缀
+                            if id_str.startswith("dremio_external_"):
+                                prefix = "dremio_external_"
+                            elif id_str.startswith("dremio_"):
+                                prefix = "dremio_"
+
+                            # 检测后缀
+                            if id_str.endswith("_csv"):
+                                suffix = "_csv"
+
+                            return prefix, suffix
+
+                        # 处理source_id字段 - 保持原格式但使用会话数据源
+                        if "source_id" in args:
+                            old_id = args["source_id"]
+
+                            # 获取原ID的格式信息
+                            prefix, suffix = extract_id_format(old_id)
+
+                            # 提取会话数据源的UUID部分
+                            session_uuid = primary_session_source
+                            if primary_session_source.startswith("dremio_"):
+                                session_uuid = primary_session_source[7:]  # 去除dremio_前缀
+
+                            # 构造新的ID，保持原格式但使用会话数据源的UUID
+                            new_id = f"{prefix}{session_uuid}{suffix}"
+                            args["source_id"] = new_id
+                            logger.info(f"已调整数据源ID (source_id): {old_id} -> {new_id}")
+
+                        # 处理dataset_id字段 - 保持原格式但使用会话数据源
+                        if "dataset_id" in args:
+                            old_id = args["dataset_id"]
+
+                            # 获取原ID的格式信息
+                            prefix, suffix = extract_id_format(old_id)
+
+                            # 提取会话数据源的UUID部分
+                            session_uuid = primary_session_source
+                            if primary_session_source.startswith("dremio_"):
+                                session_uuid = primary_session_source[7:]  # 去除dremio_前缀
+
+                            # 构造新的ID，保持原格式但使用会话数据源的UUID
+                            new_id = f"{prefix}{session_uuid}{suffix}"
+                            args["dataset_id"] = new_id
+                            logger.info(f"已调整数据源ID (dataset_id): {old_id} -> {new_id}")
+                    else:
+                        # 如果会话中没有数据源，尝试使用映射表
+                        logger.warning("当前会话没有数据源，尝试使用映射表")
+
+                        # 处理source_id字段
+                        if "source_id" in args and args["source_id"] in request.datasource_mappings:
+                            old_id = args["source_id"]
+                            args["source_id"] = request.datasource_mappings[old_id]
+                            logger.info(f"已映射数据源ID (source_id): {old_id} -> {args['source_id']}")
+
+                        # 处理dataset_id字段
+                        if "dataset_id" in args and args["dataset_id"] in request.datasource_mappings:
+                            old_id = args["dataset_id"]
+                            args["dataset_id"] = request.datasource_mappings[old_id]
+                            logger.info(f"已映射数据源ID (dataset_id): {old_id} -> {args['dataset_id']}")
 
                 # 创建工具调用字典
                 tool_call_id = tool_call.get("id", f"tool_{id(tool_call)}")
@@ -263,53 +460,231 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
                 logger.info(f"执行工具调用: {tool_name} (参数: {args})")
 
                 try:
-                    # 检查数据集ID是否存在于sources中
+                    # 自动修正数据源ID - 如果dataset_id存在但在sources中不存在
                     if "dataset_id" in args and not sources.exists(args["dataset_id"]):
+                        original_id = args["dataset_id"]
                         available_ids = list(sources.sources.keys())
-                        error_msg = (
-                            f"数据源 {args['dataset_id']} 不存在，请检查数据源映射。可用的数据源ID: {available_ids}"
-                        )
-                        logger.error(error_msg)
-                        # 记录错误
+
+                        # 尝试自动修正数据源ID
+                        corrected_id = None
+
+                        # 尝试1：直接检查可用ID中是否存在
+                        if original_id in available_ids:
+                            corrected_id = original_id
+
+                        # 尝试2：如果是dremio_external类型，尝试转换为dremio_类型
+                        elif original_id.startswith("dremio_external_"):
+                            base_id = original_id[15:]  # 移除 "dremio_external_" 前缀
+                            if base_id.endswith("_csv"):
+                                base_id = base_id.removesuffix("_csv")
+                            alternative = f"dremio_{base_id}"
+                            if alternative in available_ids:
+                                corrected_id = alternative
+
+                        # 尝试3：如果是dremio_类型，尝试转换为dremio_external_类型
+                        elif original_id.startswith("dremio_"):
+                            base_id = original_id[7:]  # 移除 "dremio_" 前缀
+                            alternatives = [f"dremio_external_{base_id}", f"dremio_external_{base_id}_csv"]
+                            for alt in alternatives:
+                                if alt in available_ids:
+                                    corrected_id = alt
+                                    break
+
+                        # 尝试4：如果有_csv后缀，尝试去掉后缀
+                        elif original_id.endswith("_csv"):
+                            base_id = original_id.removesuffix("_csv")
+                            if base_id in available_ids:
+                                corrected_id = base_id
+
+                        # 尝试5：如果没有_csv后缀，尝试添加后缀
+                        else:
+                            csv_id = f"{original_id}_csv"
+                            if csv_id in available_ids:
+                                corrected_id = csv_id
+
+                        # 尝试6：不论什么格式，直接尝试原始ID的UUID部分
+                        if not corrected_id and "-" in original_id:
+                            # 尝试提取UUID部分
+                            import re
+
+                            uuid_match = re.search(
+                                r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", original_id
+                            )
+                            if uuid_match:
+                                uuid_part = uuid_match.group(1)
+                                # 尝试所有可能的格式组合
+                                for prefix in ["", "dremio_", "dremio_external_"]:
+                                    for suffix in ["", "_csv"]:
+                                        potential_id = f"{prefix}{uuid_part}{suffix}"
+                                        if potential_id in available_ids:
+                                            corrected_id = potential_id
+                                            logger.info(f"通过UUID匹配找到数据源: {original_id} -> {corrected_id}")
+                                            break
+                                    if corrected_id:
+                                        break
+
+                        # 自动修正已在上面完成
+
+                        if corrected_id:
+                            # 使用修正后的ID
+                            args["dataset_id"] = corrected_id
+                            logger.info(f"已自动修正数据源ID: {original_id} -> {corrected_id}")
+
+                            # 更新工具调用参数
+                            lc_tool_call["args"] = args
+                            assistant_response.tool_calls[tool_call_id].args = json.dumps(args)
+                        else:
+                            # 无法修正ID，报告错误
+                            available_ids = list(sources.sources.keys())
+                            error_msg = (
+                                f"数据源 {original_id} 不存在，且无法自动修正。可用的数据源ID: {available_ids[:10]}"
+                                f"{'...(更多)' if len(available_ids) > 10 else ''}"
+                            )
+                            logger.error(error_msg)
+                            # 记录错误
+                            assistant_response.tool_calls[tool_call_id].status = "error"
+                            assistant_response.tool_calls[tool_call_id].error = error_msg
+                            continue
+
+                    # 同样检查source_id参数
+                    if "source_id" in args and not sources.exists(args["source_id"]):
+                        original_id = args["source_id"]
+                        available_ids = list(sources.sources.keys())
+
+                        # 尝试自动修正数据源ID
+                        corrected_id = None
+
+                        # 尝试1：直接检查可用ID中是否存在
+                        if original_id in available_ids:
+                            corrected_id = original_id
+
+                        # 尝试2：如果是dremio_external类型，尝试转换为dremio_类型
+                        elif original_id.startswith("dremio_external_"):
+                            base_id = original_id[15:]  # 移除 "dremio_external_" 前缀
+                            if base_id.endswith("_csv"):
+                                base_id = base_id.removesuffix("_csv")
+                            alternative = f"dremio_{base_id}"
+                            if alternative in available_ids:
+                                corrected_id = alternative
+
+                        # 尝试3：如果是dremio_类型，尝试转换为dremio_external_类型
+                        elif original_id.startswith("dremio_"):
+                            base_id = original_id[7:]  # 移除 "dremio_" 前缀
+                            alternatives = [f"dremio_external_{base_id}", f"dremio_external_{base_id}_csv"]
+                            for alt in alternatives:
+                                if alt in available_ids:
+                                    corrected_id = alt
+                                    break
+
+                        # 尝试4：如果有_csv后缀，尝试去掉后缀
+                        elif original_id.endswith("_csv"):
+                            base_id = original_id.removesuffix("_csv")
+                            if base_id in available_ids:
+                                corrected_id = base_id
+
+                        # 尝试5：如果没有_csv后缀，尝试添加后缀
+                        else:
+                            csv_id = f"{original_id}_csv"
+                            if csv_id in available_ids:
+                                corrected_id = csv_id
+
+                        # 尝试6：不论什么格式，直接尝试原始ID的UUID部分
+                        if not corrected_id and "-" in original_id:
+                            # 尝试提取UUID部分
+                            import re
+
+                            uuid_match = re.search(
+                                r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", original_id
+                            )
+                            if uuid_match:
+                                uuid_part = uuid_match.group(1)
+                                # 尝试所有可能的格式组合
+                                for prefix in ["", "dremio_", "dremio_external_"]:
+                                    for suffix in ["", "_csv"]:
+                                        potential_id = f"{prefix}{uuid_part}{suffix}"
+                                        if potential_id in available_ids:
+                                            corrected_id = potential_id
+                                            logger.info(f"通过UUID匹配找到数据源: {original_id} -> {corrected_id}")
+                                            break
+                                    if corrected_id:
+                                        break
+
+                        if corrected_id:
+                            # 使用修正后的ID
+                            args["source_id"] = corrected_id
+                            logger.info(f"已自动修正数据源ID: {original_id} -> {corrected_id}")
+
+                            # 更新工具调用参数
+                            lc_tool_call["args"] = args
+                            assistant_response.tool_calls[tool_call_id].args = json.dumps(args)
+                        else:
+                            # 无法修正ID，报告错误
+                            available_ids = list(sources.sources.keys())
+                            error_msg = (
+                                f"数据源 {original_id} 不存在，且无法自动修正。可用的数据源ID: {available_ids[:10]}"
+                                f"{'...(更多)' if len(available_ids) > 10 else ''}"
+                            )
+                            logger.error(error_msg)
+                            # 记录错误
+                            assistant_response.tool_calls[tool_call_id].status = "error"
+                            assistant_response.tool_calls[tool_call_id].error = error_msg
+                            continue
+
+                    # 直接传入字典作为工具调用并捕获结果
+                    from langchain_core.messages import ToolMessage
+
+                    # 执行工具调用
+                    try:
+                        result = resume_tool_call(lc_tool_call, {"sources": sources})
+
+                        # 更新工具调用状态为成功
+                        assistant_response.tool_calls[tool_call_id].status = "success"
+
+                        # 处理工具调用结果，支持图像等特殊内容
+                        if (
+                            isinstance(result, tuple)
+                            and len(result) == 2
+                            and isinstance(result[1], dict)
+                            and result[1].get("type") == "image"
+                        ):
+                            # 这是一个带图像的结果
+                            text_result, artifact_dict = result
+                            result_content = text_result
+
+                            # 创建图像artifact对象
+                            from app.schemas.chat import AssistantToolCallArtifact
+
+                            artifact = AssistantToolCallArtifact(
+                                type="image",
+                                base64_data=artifact_dict.get("base64_data", ""),
+                                caption=artifact_dict.get("caption", "分析结果图像"),
+                            )
+
+                            # 保存图像数据和结果
+                            assistant_response.tool_calls[tool_call_id].result = result_content
+                            assistant_response.tool_calls[tool_call_id].artifact = artifact
+
+                            # 记录日志
+                            image_data = artifact_dict.get("base64_data", "")
+                            data_length = len(image_data) if image_data else 0
+                            logger.info(f"工具调用返回了图像数据，长度: {data_length}")
+                        else:
+                            # 普通结果处理
+                            result_content = result.content if isinstance(result, ToolMessage) else str(result)
+                            assistant_response.tool_calls[tool_call_id].result = result_content
+                        # 截取结果的前100个字符显示在日志中
+                        if isinstance(result_content, str):
+                            is_long_result = len(result_content) > 100
+                            truncated_result = result_content[:100] + "..." if is_long_result else result_content
+                            logger.info(f"工具调用执行成功: {tool_name}, 结果: {truncated_result}")
+                        else:
+                            logger.info(f"工具调用执行成功: {tool_name}, 结果类型: {type(result_content).__name__}")
+                    except Exception as tool_execution_error:
+                        # 更新工具调用状态为错误
+                        error_msg = str(tool_execution_error)
                         assistant_response.tool_calls[tool_call_id].status = "error"
                         assistant_response.tool_calls[tool_call_id].error = error_msg
-                    else:
-                        # 直接传入字典作为工具调用并捕获结果
-                        from langchain_core.messages import ToolMessage
-
-                        # 创建一个监听函数来捕获工具调用结果
-                        original_resume_tool_call = resume_tool_call
-                        tool_result = None
-
-                        def wrapped_resume_tool_call(tool_call, sources_dict):
-                            nonlocal tool_result
-                            result = original_resume_tool_call(tool_call, sources_dict)
-                            tool_result = result
-                            return result
-
-                        # 临时替换函数以捕获结果
-                        import app.core.agent.resume as resume_module
-
-                        resume_module.resume_tool_call = wrapped_resume_tool_call
-
-                        # 执行工具调用
-                        try:
-                            result = resume_tool_call(lc_tool_call, {"sources": sources})
-
-                            # 更新工具调用状态为成功
-                            assistant_response.tool_calls[tool_call_id].status = "success"
-
-                            # 提取结果内容
-                            if isinstance(result, ToolMessage):
-                                result_content = result.content
-                            else:
-                                result_content = str(result)
-
-                            assistant_response.tool_calls[tool_call_id].result = result_content
-                            logger.info(f"工具调用执行成功: {tool_name}, 结果: {result_content[:100]}...")
-                        finally:
-                            # 恢复原始函数
-                            resume_module.resume_tool_call = original_resume_tool_call
+                        logger.exception(f"工具 {tool_name} 执行过程中发生错误: {error_msg}")
                 except Exception as e:
                     # 更新工具调用状态为错误
                     assistant_response.tool_calls[tool_call_id].status = "error"

@@ -16,14 +16,28 @@ import { useWorkflowStore } from '@/stores/workflow';
 import type { MCPConnection } from '@/types';
 import { DArrowRight, Document, Monitor, Share } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox, ElTooltip, ElPopover } from 'element-plus';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, onErrorCaptured } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
-const workflowStore = useWorkflowStore();
+let workflowStore;
+
+try {
+  workflowStore = useWorkflowStore();
+} catch (error) {
+  console.error('Error loading workflow store:', error);
+  ElMessage.error('工作流功能加载失败，部分功能可能不可用');
+}
+
+// 添加全局错误处理
+onErrorCaptured((err) => {
+  console.error('Captured error in ChatAnalysis:', err);
+  ElMessage.error('对话分析组件发生错误，请刷新页面或联系管理员');
+  return false; // 阻止错误继续传播
+});
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true);
