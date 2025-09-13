@@ -8,6 +8,7 @@ from app.api.mcp import router as mcp_router
 from app.api.model_config import router as model_config_router
 from app.api.models import router as models_router
 from app.api.sessions import router as sessions_router
+from app.api.workflow import router as workflow_router
 
 router = APIRouter(prefix="/api")
 router.include_router(health_router)
@@ -18,3 +19,4 @@ router.include_router(model_config_router)
 router.include_router(datasources_router)
 router.include_router(clean_router)
 router.include_router(mcp_router)
+router.include_router(workflow_router)

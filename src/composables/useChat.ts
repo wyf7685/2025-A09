@@ -6,7 +6,15 @@ import type {
   ChatMessage,
   DataSourceMetadata,
 } from '@/types';
+
+// 声明全局类型扩展
+declare global {
+  interface Window {
+    _flowTimeoutIds?: number[];
+  }
+}
 import type { FlowPanel } from '@/types/flow';
+import { useModelStore } from '@/stores/model';
 import { ElMessage } from 'element-plus';
 import { nextTick, reactive, ref } from 'vue';
 
@@ -74,11 +82,11 @@ const fakeFlowPanel = {
   updateRouteStep: (_: number, __: 'active' | 'completed') => {},
   autoSelectRoute: (_: string): 'route1' | 'route2' => 'route1',
   logRouteStatus: (_: string) => {},
-  getActiveStepModel: () => 'gemini-2.0-flash', // 默认模型ID
 } as FlowPanel;
 
 export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
   const sessionStore = useSessionStore();
+  const modelStore = useModelStore();
   const messages = ref<ChatMessageWithSuggestions[]>([]);
   const isProcessingChat = ref<boolean>(false);
 
@@ -148,8 +156,15 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
     // 获取流程图引用
     const flowPanel = flowPanelRef?.() || fakeFlowPanel;
 
-    // 在每次对话开始前重置流程图
+    // 在每次对话开始前彻底重置流程图
+    console.log('[ChatAgent] 开始新对话，重置流程图...');
     flowPanel.clearFlowSteps();
+
+    // 清除所有可能的超时计时器
+    if (window._flowTimeoutIds) {
+      window._flowTimeoutIds.forEach((id: number) => clearTimeout(id));
+    }
+    window._flowTimeoutIds = [];
 
     // 智能路线选择
     const selectedRouteForThisMessage = flowPanel.autoSelectRoute(userMessage);
@@ -159,25 +174,58 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
     flowPanel.logRouteStatus('开始处理用户输入');
     flowPanel.updateRouteStep(0, 'completed');
 
-    // 第二步：AI分析处理
+    // 第二步：API请求处理
     flowPanel.updateRouteStep(1, 'active');
-    flowPanel.logRouteStatus('AI正在分析用户输入');
+    flowPanel.logRouteStatus('后端API开始处理请求');
 
-    // 设置超时保护，防止流程图永远卡在AI分析阶段
+    // 第三步延迟激活：模拟后端处理时间
+    const modelSelectionTimeoutId = setTimeout(() => {
+      flowPanel.updateRouteStep(1, 'completed');
+      // 第三步：LLM模型选择
+      flowPanel.updateRouteStep(2, 'active');
+
+      // 获取当前模型信息
+      const modelId = modelStore?.selectedModel?.id || 'gemini-2.0-flash';
+      const modelName = modelStore?.selectedModel?.name || 'Gemini 2.0 Flash';
+
+      // 设置模型名称到流程图
+      if (selectedRouteForThisMessage === 'route1' && flowPanel.route1Steps.value[2]) {
+        flowPanel.route1Steps.value[2].toolName = modelName;
+      } else if (selectedRouteForThisMessage === 'route2' && flowPanel.route2Steps.value[2]) {
+        flowPanel.route2Steps.value[2].toolName = modelName;
+      }
+
+      flowPanel.logRouteStatus(`选择并初始化LLM模型: ${modelName}`);
+    }, 500);
+
+    // 记录超时ID
+    if (!window._flowTimeoutIds) {
+      window._flowTimeoutIds = [];
+    }
+    window._flowTimeoutIds.push(modelSelectionTimeoutId);
+
+    // 设置超时保护，防止流程图永远卡在处理阶段
     const timeoutId = setTimeout(() => {
-      console.warn('AI分析处理超时，强制完成流程图步骤');
+      console.warn('处理超时，强制完成流程图步骤');
       if (selectedRouteForThisMessage === 'route1') {
         // 路线1超时处理
-        flowPanel.updateRouteStep(1, 'completed');
-        flowPanel.updateRouteStep(2, 'completed');
+        for (let i = 1; i <= 4; i++) {
+          flowPanel.updateRouteStep(i, 'completed');
+        }
       } else {
-        // 路线2超时处理 - 跳过工具调用环节
-        flowPanel.updateRouteStep(1, 'completed'); // 完成AI分析
-        flowPanel.updateRouteStep(2, 'completed'); // 完成判断是否执行工具
-        flowPanel.updateRouteStep(4, 'completed'); // 完成是否循环（跳过工具调用步骤）
+        // 路线2超时处理
+        for (let i = 1; i <= 5; i++) {
+          flowPanel.updateRouteStep(i, 'completed');
+        }
       }
       flowPanel.logRouteStatus('超时保护：强制完成流程');
     }, 30000); // 30秒超时
+
+    // 记录超时ID，以便在需要时清除
+    if (!window._flowTimeoutIds) {
+      window._flowTimeoutIds = [];
+    }
+    window._flowTimeoutIds.push(timeoutId);
 
     messages.value.push({
       type: 'user',
@@ -227,32 +275,57 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
             assistantMessage.suggestions = suggestions;
           }
 
-          // 如果AI开始输出内容，说明分析阶段基本完成
+          // 如果AI开始输出内容，说明处理阶段进行中
           if (content.length > 20) {
             if (selectedRouteForThisMessage === 'route1') {
               // 路线1：渐进式推进流程
-              if (content.length > 50 && flowPanel.route1Steps.value[1]?.status === 'active') {
-                console.log('路线1：AI分析达到50字符，标记为完成');
-                flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
-                flowPanel.logRouteStatus('AI分析完成，开始生成报告');
-                flowPanel.updateRouteStep(2, 'active'); // 开始生成报告
+              if (content.length > 30 && flowPanel.route1Steps.value[2]?.status === 'active') {
+                // LLM模型选择完成
+                flowPanel.updateRouteStep(2, 'completed');
+                // Agent初始化
+                flowPanel.updateRouteStep(3, 'active');
+                flowPanel.logRouteStatus('LLM模型选择完成，初始化Agent');
               }
-              if (content.length > 200 && flowPanel.route1Steps.value[2]?.status === 'active') {
-                console.log('路线1：内容达到200字符，报告生成完成');
-                flowPanel.updateRouteStep(2, 'completed'); // 生成报告完成
-                flowPanel.logRouteStatus('报告生成完成');
+              if (content.length > 100 && flowPanel.route1Steps.value[3]?.status === 'active') {
+                // Agent初始化完成
+                flowPanel.updateRouteStep(3, 'completed');
+                // 开始生成分析报告
+                flowPanel.updateRouteStep(4, 'active');
+                flowPanel.logRouteStatus('Agent初始化完成，开始生成分析报告');
+              }
+              if (content.length > 300 && flowPanel.route1Steps.value[4]?.status === 'active') {
+                // 分析报告生成完成
+                flowPanel.updateRouteStep(4, 'completed');
+                flowPanel.logRouteStatus('分析报告生成完成');
               }
             } else if (selectedRouteForThisMessage === 'route2') {
-              // 路线2：如果还没有工具调用，可能是纯文本回复
-              if (
-                content.length > 50 &&
-                (!assistantMessage.tool_calls ||
-                  Object.keys(assistantMessage.tool_calls).length === 0)
-              ) {
-                console.log('路线2：纯文本回复，完成相应步骤');
-                flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
-                flowPanel.logRouteStatus('AI分析完成，无需工具调用');
-                flowPanel.updateRouteStep(2, 'completed'); // 判断执行工具完成（决定不需要工具）
+              // 路线2：根据内容进度更新步骤
+              if (content.length > 30 && flowPanel.route2Steps.value[2]?.status === 'active') {
+                // LLM模型选择完成
+                flowPanel.updateRouteStep(2, 'completed');
+                // 数据源加载
+                flowPanel.updateRouteStep(3, 'active');
+                flowPanel.logRouteStatus('LLM模型选择完成，开始加载数据源');
+
+                // 如果没有工具调用，可能是直接文本回复
+                if (
+                  !assistantMessage.tool_calls ||
+                  Object.keys(assistantMessage.tool_calls).length === 0
+                ) {
+                  const noToolTimeoutId = setTimeout(() => {
+                    if (content.length > 100) {
+                      flowPanel.updateRouteStep(3, 'completed');
+                      flowPanel.logRouteStatus('数据源加载完成，无需工具调用');
+                      flowPanel.updateRouteStep(5, 'completed'); // 跳过工具调用，直接完成
+                    }
+                  }, 1000);
+
+                  // 记录超时ID
+                  if (!window._flowTimeoutIds) {
+                    window._flowTimeoutIds = [];
+                  }
+                  window._flowTimeoutIds.push(noToolTimeoutId);
+                }
               }
             }
           }
@@ -271,43 +344,59 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           // 更新路线步骤：工具调用开始
           if (selectedRouteForThisMessage === 'route2') {
-            // 确保AI分析阶段完成
-            if (flowPanel.route2Steps.value[1]?.status === 'active') {
-              flowPanel.updateRouteStep(1, 'completed'); // AI分析处理完成
-              flowPanel.logRouteStatus('AI分析完成，判断需要执行工具');
+            // 确保模型选择阶段完成
+            if (flowPanel.route2Steps.value[2]?.status === 'active') {
+              flowPanel.updateRouteStep(2, 'completed'); // LLM模型选择完成
             }
 
-            // 判断执行工具完成
-            if (flowPanel.route2Steps.value[2]?.status !== 'completed') {
-              flowPanel.updateRouteStep(2, 'completed');
+            // 确保数据源加载完成
+            if (flowPanel.route2Steps.value[3]?.status !== 'completed') {
+              flowPanel.updateRouteStep(3, 'completed');
+              flowPanel.logRouteStatus('数据源加载完成，开始执行工具');
             }
 
             // 检查流程图是否处于循环状态
             const isInLoop =
-              flowPanel.route2Steps.value[4]?.nextLoop &&
-              flowPanel.route2Steps.value[4].nextLoop.length > 0;
+              flowPanel.route2Steps.value[5]?.nextLoop &&
+              flowPanel.route2Steps.value[5].nextLoop.length > 0;
 
-            // 设置工具名称 - 每次只调用一个工具
-            if (flowPanel.route2Steps.value[3]) {
+            // 设置工具名称 - 正确处理循环情况
+            if (flowPanel.route2Steps.value[4]) {
               if (isInLoop) {
-                // 如果处于循环中，在循环节点设置当前工具
-                // 后端每次调用都是独立的一个工具，所以直接设置当前工具名称
-                if (flowPanel.route2Steps.value[4]?.nextLoop?.[0]) {
-                  // 在循环节点单独设置当前工具
-                  flowPanel.route2Steps.value[4].nextLoop[0].toolName = name;
-                  flowPanel.route2Steps.value[4].nextLoop[0].description = `执行单个数据处理工具（循环）：${name}`;
+                // 如果处于循环中，下一个工具调用应该设置在循环节点中
+                // 保留现有工具列表以记录历史
+                const existingTools = flowPanel.route2Steps.value[4].toolName || '';
+                const toolsList = existingTools ? existingTools.split(', ') : [];
+
+                if (!toolsList.includes(name)) {
+                  toolsList.push(name);
+                  flowPanel.route2Steps.value[4].toolName = toolsList.join(', ');
+                }
+
+                // 同时在循环节点单独设置当前工具
+                if (flowPanel.route2Steps.value[5]?.nextLoop?.[0]) {
+                  flowPanel.route2Steps.value[5].nextLoop[0].toolName = name;
+                  flowPanel.route2Steps.value[5].nextLoop[0].description = `执行相应的数据处理工具（循环）：${name}`;
                 }
               } else {
-                // 如果不在循环中，直接设置当前工具名称
-                // 后端每次流程只调用一个工具，所以不需要拼接多个工具名称
-                flowPanel.route2Steps.value[3].toolName = name;
-                flowPanel.route2Steps.value[3].description = `执行单个数据处理工具：${name}`;
+                // 如果不在循环中，正常添加工具名称
+                const existingTools = flowPanel.route2Steps.value[4].toolName || '';
+                const toolsList = existingTools ? existingTools.split(', ') : [];
+
+                // 如果当前工具不在列表中，则添加
+                if (!toolsList.includes(name)) {
+                  toolsList.push(name);
+                  flowPanel.route2Steps.value[4].toolName = toolsList.join(', ');
+                } else if (!existingTools) {
+                  // 如果没有现有工具，直接设置
+                  flowPanel.route2Steps.value[4].toolName = name;
+                }
               }
             }
 
-            // 调用执行工具开始
+            // 工具调用开始
             flowPanel.logRouteStatus(`正在执行工具：${name}`);
-            flowPanel.updateRouteStep(3, 'active');
+            flowPanel.updateRouteStep(4, 'active');
           }
 
           nextTick(() => scrollToBottom?.());
@@ -330,28 +419,82 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           // 工具调用完成，更新路线步骤
           if (selectedRouteForThisMessage === 'route2') {
             // 只有当工具步骤处于活动状态时才更新
-            if (flowPanel.route2Steps.value[3]?.status === 'active') {
-              // 后端每次只调用一个工具，保持工具名称与当前执行的工具一致
-              if (flowPanel.route2Steps.value[3]) {
+            if (flowPanel.route2Steps.value[4]?.status === 'active') {
+              // 确保工具名称包含所有已执行的工具
+              if (flowPanel.route2Steps.value[4]) {
+                // 确保当前工具已被包含在工具名称列表中
                 const currentName = toolCall?.name || '未知工具';
-                if (currentName) {
-                  flowPanel.route2Steps.value[3].toolName = currentName;
+                const existingTools = flowPanel.route2Steps.value[4].toolName || '';
+                const toolsList = existingTools ? existingTools.split(', ') : [];
+
+                // 如果当前工具不在列表中，添加它
+                if (currentName && !toolsList.includes(currentName)) {
+                  toolsList.push(currentName);
+                  flowPanel.route2Steps.value[4].toolName = toolsList.join(', ');
                 }
               }
 
-              flowPanel.updateRouteStep(3, 'completed'); // 调用执行工具完成
+              flowPanel.updateRouteStep(4, 'completed'); // 工具调用完成
               flowPanel.logRouteStatus(`工具 ${toolCall?.name || '未知工具'} 执行完成`);
 
-              // 准备进入循环判断阶段
-              // 后端每次只调用一个工具，工具执行完后直接判断是否需要继续
-              flowPanel.updateRouteStep(4, 'active'); // 激活循环判断
-              flowPanel.logRouteStatus('工具执行完成，判断是否需要继续处理');
-              setTimeout(() => {
-                if (flowPanel.route2Steps.value[4]?.status === 'active') {
-                  flowPanel.updateRouteStep(4, 'completed');
-                  flowPanel.logRouteStatus('全部工具执行完成，不需要继续循环');
+              // 准备处理下一个工具调用或完成
+              if (Object.keys(assistantMessage.tool_calls || {}).length > 1) {
+                // 有多个工具调用，需要循环处理
+                const toolCallIds = Object.keys(assistantMessage.tool_calls || {});
+                const completedTools = Object.values(assistantMessage.tool_calls || {}).filter(
+                  (tool) => (tool as any).status === 'success',
+                ).length;
+
+                // 还有工具未执行完
+                if (completedTools < toolCallIds.length) {
+                  flowPanel.updateRouteStep(5, 'active'); // 激活循环判断
+                  flowPanel.logRouteStatus('循环：是，需要执行更多工具');
+
+                  // 标记循环完成后，会在下一轮开始执行下一个工具
+                  const loopTimeoutId = setTimeout(() => {
+                    if (flowPanel.route2Steps.value[5]?.status === 'active') {
+                      flowPanel.updateRouteStep(5, 'completed');
+                      flowPanel.logRouteStatus('循环：是，继续执行下一个工具');
+                    }
+                  }, 1000);
+
+                  // 记录超时ID
+                  if (!window._flowTimeoutIds) {
+                    window._flowTimeoutIds = [];
+                  }
+                  window._flowTimeoutIds.push(loopTimeoutId);
+                } else {
+                  // 所有工具都执行完了
+                  flowPanel.updateRouteStep(5, 'active');
+                  const completeAllTimeoutId = setTimeout(() => {
+                    if (flowPanel.route2Steps.value[5]?.status === 'active') {
+                      flowPanel.updateRouteStep(5, 'completed');
+                      flowPanel.logRouteStatus('全部工具执行完成，不需要继续循环');
+                    }
+                  }, 1000);
+
+                  // 记录超时ID
+                  if (!window._flowTimeoutIds) {
+                    window._flowTimeoutIds = [];
+                  }
+                  window._flowTimeoutIds.push(completeAllTimeoutId);
                 }
-              }, 1000);
+              } else {
+                // 只有一个工具调用，直接激活判断步骤
+                flowPanel.updateRouteStep(5, 'active');
+                const singleToolTimeoutId = setTimeout(() => {
+                  if (flowPanel.route2Steps.value[5]?.status === 'active') {
+                    flowPanel.updateRouteStep(5, 'completed');
+                    flowPanel.logRouteStatus('工具执行完成，不需要循环');
+                  }
+                }, 1000);
+
+                // 记录超时ID
+                if (!window._flowTimeoutIds) {
+                  window._flowTimeoutIds = [];
+                }
+                window._flowTimeoutIds.push(singleToolTimeoutId);
+              }
             }
           }
 
@@ -377,12 +520,18 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
             // 移动到下一步
             flowPanel.updateRouteStep(4, 'active');
-            setTimeout(() => {
+            const errorTimeoutId = setTimeout(() => {
               if (flowPanel.route2Steps.value[4]?.status === 'active') {
                 flowPanel.updateRouteStep(4, 'completed');
                 flowPanel.logRouteStatus('判断完成：不需要循环');
               }
             }, 1000);
+
+            // 记录超时ID
+            if (!window._flowTimeoutIds) {
+              window._flowTimeoutIds = [];
+            }
+            window._flowTimeoutIds.push(errorTimeoutId);
           }
 
           nextTick(() => scrollToBottom?.());
@@ -421,10 +570,16 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
                 flowPanel.logRouteStatus('报告生成中...');
 
                 // 短暂延迟后完成
-                setTimeout(() => {
+                const reportTimeoutId = setTimeout(() => {
                   flowPanel.updateRouteStep(2, 'completed');
                   flowPanel.logRouteStatus('报告生成已完成');
                 }, 500);
+
+                // 记录超时ID
+                if (!window._flowTimeoutIds) {
+                  window._flowTimeoutIds = [];
+                }
+                window._flowTimeoutIds.push(reportTimeoutId);
               }
             }
           } else if (selectedRouteForThisMessage === 'route2') {
@@ -485,10 +640,16 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
                   flowPanel.logRouteStatus('全部工具处理完成，不需要循环');
                 } else {
                   flowPanel.updateRouteStep(4, 'active');
-                  setTimeout(() => {
+                  const finalToolTimeoutId = setTimeout(() => {
                     flowPanel.updateRouteStep(4, 'completed');
                     flowPanel.logRouteStatus('全部工具处理完成，不需要循环');
                   }, 500);
+
+                  // 记录超时ID
+                  if (!window._flowTimeoutIds) {
+                    window._flowTimeoutIds = [];
+                  }
+                  window._flowTimeoutIds.push(finalToolTimeoutId);
                 }
               }
             } else {
@@ -579,7 +740,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
           nextTick(() => scrollToBottom?.());
         },
-        flowPanel.getActiveStepModel(), // 传递当前活动步骤的模型ID，每次调用时都会获取最新选择的模型
+        flowPanel.selectedModel.value, // 传递选择的模型ID
       );
 
       assistantMessage.loading = false;

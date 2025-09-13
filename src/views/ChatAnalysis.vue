@@ -6,13 +6,16 @@ import FlowPanel from '@/components/chat/FlowPanel.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
+import SaveWorkflowDialog from '@/components/workflow/SaveWorkflowDialog.vue';
+import WorkflowManager from '@/components/workflow/WorkflowManager.vue';
 import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
+import { useWorkflowStore } from '@/stores/workflow';
 import type { MCPConnection } from '@/types';
-import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
-import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
+import { DArrowRight, Document, Monitor, Share } from '@element-plus/icons-vue';
+import { ElButton, ElMessage, ElMessageBox, ElTooltip, ElPopover } from 'element-plus';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -20,6 +23,7 @@ const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
+const workflowStore = useWorkflowStore();
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true);
@@ -28,6 +32,10 @@ const selectDatasetDialogVisible = ref<boolean>(false);
 const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
 const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
+
+// --- 工作流相关 ---
+const saveWorkflowDialogVisible = ref(false);
+const workflowManagerDialogVisible = ref(false);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -70,6 +78,76 @@ const {
   isProcessingChat,
   ...chat
 } = useChat(() => flowPanelRef.value?.flowPanel);
+
+// 打开保存工作流对话框
+const openSaveWorkflowDialog = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先创建或选择一个会话');
+    return;
+  }
+
+  if (messages.value.length === 0) {
+    ElMessage.warning('当前会话没有任何消息，无法保存工作流');
+    return;
+  }
+
+  // 检查是否有工具调用
+  let hasToolCalls = false;
+  for (const message of messages.value) {
+    if (message.type === 'assistant' && message.tool_calls && Object.keys(message.tool_calls).length > 0) {
+      hasToolCalls = true;
+      break;
+    }
+  }
+
+  if (!hasToolCalls) {
+    ElMessageBox.confirm(
+      '当前会话中没有检测到工具调用，保存的工作流将无法执行任何操作。确定要继续吗？',
+      '无工具调用提示',
+      {
+        confirmButtonText: '继续保存',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(() => {
+      saveWorkflowDialogVisible.value = true;
+    }).catch(() => {});
+  } else {
+    saveWorkflowDialogVisible.value = true;
+  }
+};
+
+// 打开工作流管理对话框
+const openWorkflowManager = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先创建或选择一个会话');
+    return;
+  }
+
+  workflowManagerDialogVisible.value = true;
+};
+
+// 工作流保存成功回调
+const onWorkflowSaved = () => {
+  ElMessage.success('工作流保存成功');
+  saveWorkflowDialogVisible.value = false;
+};
+
+// 工作流执行成功回调
+const onWorkflowExecuted = async (result: any) => {
+  ElMessage.success('工作流执行成功');
+  workflowManagerDialogVisible.value = false;
+
+  // 刷新聊天历史，显示工作流执行结果
+  await refreshChatHistory();
+
+  // 如果有流程图面板，也需要刷新
+  if (flowPanelRef.value?.flowPanel) {
+    nextTick(() => {
+      flowPanelRef.value?.flowPanel?.clearFlowSteps?.();
+    });
+  }
+};
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {
   editingSessionId.value = sessionId;
@@ -232,89 +310,6 @@ const sendMessage = async (): Promise<void> => {
   );
 };
 
-// 处理模型选择后重新处理消息
-const reprocessWithModel = async (modelId: string): Promise<void> => {
-  // 确保有消息要重新处理
-  if (messages.value.length === 0) {
-    ElMessage.warning('没有消息可重新处理');
-    return;
-  }
-
-  // 获取最后一个用户消息
-  const lastUserMessage = [...messages.value].reverse().find(msg => msg.type === 'user');
-  if (!lastUserMessage) {
-    ElMessage.warning('没有找到用户消息可重新处理');
-    return;
-  }
-
-  // 保存消息索引位置，以便后续清除消息
-  const userMsgIndex = messages.value.findIndex(msg => msg === lastUserMessage);
-
-  // 将移除该用户消息后的所有消息（通常是助手回复和后续对话）
-  // 对于热力图等复杂输出，我们需要完全清除之前的处理结果并重新生成
-  if (userMsgIndex >= 0 && userMsgIndex < messages.value.length - 1) {
-    // 移除用户消息后的所有消息
-    messages.value = messages.value.slice(0, userMsgIndex + 1);
-  }
-
-  // 重新发送最后一条用户消息
-  const userMessage = (lastUserMessage.content as string) || '';
-
-  // 对热力图等特定请求进行检查，确保它们被正确重新处理
-  const isVisualizationRequest = userMessage.includes('热力图') ||
-                               userMessage.includes('相关性') ||
-                               userMessage.includes('可视化') ||
-                               userMessage.includes('绘制');
-
-  console.log(`使用模型 ${modelId} 重新处理${isVisualizationRequest ? '可视化' : ''}消息: "${userMessage.substring(0, 30)}..."`);
-
-  // 重置流程图状态以便重新运行
-  flowPanelRef.value?.flowPanel?.clearFlowSteps();
-
-  // 确保模型选择被正确应用 - 如果是步骤模型更新，确保它在重新处理时被使用
-  if (flowPanelRef.value?.flowPanel) {
-    // 记录当前选择的模型，用于调试
-    console.log(`当前选择的模型: ${modelId}`);
-  }
-
-  // 清空浏览器控制台，便于调试
-  console.clear();
-  console.log('使用新模型重新处理:', modelId);
-
-  // 等待一小段时间以确保UI状态更新
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  // 显示处理中的提示
-  if (isVisualizationRequest) {
-    ElMessage.info(`正在使用模型 ${modelId} 重新生成可视化图表，请稍候...`);
-  } else {
-    ElMessage.info(`正在使用模型 ${modelId} 重新处理请求...`);
-  }
-
-  // 在更新模型后，等待一小段时间确保模型选择已经被正确应用
-  await new Promise(resolve => setTimeout(resolve, 200));
-
-  // 在热力图等复杂图表的情况下，可能需要额外处理
-  // 使用前面已经定义的 isVisualizationRequest 变量
-
-  // 对热力图等复杂图表请求，特别处理以确保重新生成
-  if (isVisualizationRequest) {
-    // 在发送消息前确保流程图完全重置
-    flowPanelRef.value?.flowPanel?.clearFlowSteps();
-
-    // 延迟稍微长一点，确保之前的处理完全清除
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-
-  // 发送消息进行处理
-  await chat.sendMessage(
-    userMessage,
-    currentSessionId.value || null,
-    currentDatasets.value,
-    scrollToBottom,
-  );
-};
-
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await loadSessions();
@@ -350,6 +345,13 @@ onMounted(async () => {
           </span>
         </div>
         <div class="header-right">
+          <el-button @click="openSaveWorkflowDialog" class="workflow-btn">
+            <el-icon class="icon-margin"><Document /></el-icon>保存流程
+          </el-button>
+          <el-button @click="openWorkflowManager" class="workflow-btn">
+            <el-icon class="icon-margin"><Share /></el-icon>调用流程
+          </el-button>
+          <div class="action-divider"></div>
           <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
             生成报告
           </el-button>
@@ -376,7 +378,7 @@ onMounted(async () => {
     </div>
 
     <!-- Flow Panel -->
-    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" @reprocessWithModel="reprocessWithModel" />
+    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" />
 
     <!-- Select Dataset Dialog -->
     <DatasetSelector v-model:visible="selectDatasetDialogVisible"
@@ -391,6 +393,21 @@ onMounted(async () => {
 
     <!-- Report Generation Dialog -->
     <ReportGenerationDialog v-model:visible="reportDialogVisible" />
+
+    <!-- 保存工作流对话框 -->
+    <SaveWorkflowDialog
+      v-model:visible="saveWorkflowDialogVisible"
+      :messages="messages"
+      :sessionId="currentSessionId || ''"
+      @saved="onWorkflowSaved" />
+
+    <!-- 工作流管理对话框 -->
+    <WorkflowManager
+      v-model:visible="workflowManagerDialogVisible"
+      :selectionMode="true"
+      :sessionId="currentSessionId || ''"
+      :dataSources="currentDatasets || []"
+      @workflowExecuted="onWorkflowExecuted" />
   </div>
 </template>
 
@@ -567,6 +584,31 @@ onMounted(async () => {
   .management-actions {
     margin-bottom: 16px;
   }
+}
+
+.workflow-btn {
+  margin-right: 8px;
+  font-size: 13px;
+  border: 1px solid #dcdfe6;
+
+  &:hover {
+    color: var(--el-color-primary);
+    border-color: var(--el-color-primary-light-7);
+    background-color: var(--el-color-primary-light-9);
+  }
+
+  .icon-margin {
+    margin-right: 4px;
+  }
+}
+
+.action-divider {
+  display: inline-block;
+  height: 20px;
+  width: 1px;
+  background-color: #dcdfe6;
+  margin: 0 8px;
+  vertical-align: middle;
 }
 
 .report-preview-section {
