@@ -64,24 +64,12 @@ def analyzer_tool(sources: Sources, llm: LLM) -> BaseTool:
         # 处理图片结果
         artifact = {}
         if (fig := result["figure"]) is not None:
-            # 确保图片数据是base64编码的字符串
-            if isinstance(fig, bytes):
-                base64_data = base64.b64encode(fig).decode()
-            elif isinstance(fig, str) and fig.startswith("data:image/"):
-                # 如果已经是data URL格式，提取base64部分
-                base64_data = fig.split(",", 1)[1] if "," in fig else fig
-            else:
-                # 如果是其他格式，尝试直接转换
-                base64_data = str(fig)
-
             # 创建包含图片的工具输出
             artifact = {
                 "type": "image",
-                "base64_data": base64_data,
+                "base64_data": base64.b64encode(fig).decode(),
                 "caption": "分析图表输出",
             }
-
-            logger.info(f"生成了图像数据，长度: {len(base64_data)}")
 
         return format_result(result), artifact
 

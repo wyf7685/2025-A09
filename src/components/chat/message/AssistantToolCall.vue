@@ -4,6 +4,7 @@ import { base64ToBlob, parsePossibleJsonString } from '@/utils/tools';
 import { ArrowDown, ArrowRight, Check, Loading, WarningFilled } from '@element-plus/icons-vue';
 import { ElIcon } from 'element-plus';
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import AssistantText from './AssistantText.vue';
 
 const props = defineProps<{
   data: ToolCall;
@@ -96,7 +97,8 @@ onUnmounted(() => removeCurrentUrl());
           </el-icon>
         </div>
         <div v-if="sectionExpanded.result" class="tool-result">
-          <pre>{{ parsePossibleJsonString(result) }}</pre>
+          <AssistantText v-if="result && result.includes('![') && result.includes('data:image/')" :md="result" />
+          <pre v-else>{{ parsePossibleJsonString(result) }}</pre>
         </div>
       </div>
 

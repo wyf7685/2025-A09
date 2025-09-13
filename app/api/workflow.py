@@ -636,49 +636,43 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
                     # 执行工具调用
                     try:
                         result = resume_tool_call(lc_tool_call, {"sources": sources})
+                        result_content = ""  # 初始化result_content变量
 
                         # 更新工具调用状态为成功
                         assistant_response.tool_calls[tool_call_id].status = "success"
 
-                        # 处理工具调用结果，支持图像等特殊内容
-                        if (
-                            isinstance(result, tuple)
-                            and len(result) == 2
-                            and isinstance(result[1], dict)
-                            and result[1].get("type") == "image"
-                        ):
-                            # 这是一个带图像的结果
-                            text_result, artifact_dict = result
-                            result_content = text_result
-
-                            # 创建图像artifact对象
-                            from app.schemas.chat import AssistantToolCallArtifact
-
-                            artifact = AssistantToolCallArtifact(
-                                type="image",
-                                base64_data=artifact_dict.get("base64_data", ""),
-                                caption=artifact_dict.get("caption", "分析结果图像"),
+                        # 处理工具返回的结果
+                        if isinstance(result, tuple) and len(result) == 2:
+                            # 处理可能的图像结果（如analyze_data工具）
+                            text_result, artifact = result
+                            # 提取文本内容
+                            text_content = (
+                                text_result.content if isinstance(text_result, ToolMessage) else str(text_result)
                             )
 
-                            # 保存图像数据和结果
-                            assistant_response.tool_calls[tool_call_id].result = result_content
-                            assistant_response.tool_calls[tool_call_id].artifact = artifact
+                            # 如果有图像附件，添加到结果中
+                            if artifact and isinstance(artifact, dict) and artifact.get("type") == "image":
+                                # 构建包含图像的Markdown格式结果
+                                image_base64 = artifact.get("base64_data", "")
+                                caption = artifact.get("caption", "分析结果图表")
 
-                            # 记录日志
-                            image_data = artifact_dict.get("base64_data", "")
-                            data_length = len(image_data) if image_data else 0
-                            logger.info(f"工具调用返回了图像数据，长度: {data_length}")
+                                # 构建带图像的结果
+                                result_content = f"{text_content}\n\n![{caption}](data:image/png;base64,{image_base64})"
+                                assistant_response.tool_calls[tool_call_id].result = result_content
+                                logger.info("工具调用返回了图像结果")
+                            else:
+                                # 只返回文本结果
+                                result_content = text_content
+                                assistant_response.tool_calls[tool_call_id].result = text_content
                         else:
-                            # 普通结果处理
+                            # 标准的文本结果处理
                             result_content = result.content if isinstance(result, ToolMessage) else str(result)
                             assistant_response.tool_calls[tool_call_id].result = result_content
                         # 截取结果的前100个字符显示在日志中
-                        if isinstance(result_content, str):
-                            is_long_result = len(result_content) > 100
-                            truncated_result = result_content[:100] + "..." if is_long_result else result_content
-                            logger.info(f"工具调用执行成功: {tool_name}, 结果: {truncated_result}")
-                        else:
-                            logger.info(f"工具调用执行成功: {tool_name}, 结果类型: {type(result_content).__name__}")
+                        result_str = str(result_content)
+                        is_long_result = len(result_str) > 100
+                        truncated_result = result_str[:100] + "..." if is_long_result else result_str
+                        logger.info(f"工具调用执行成功: {tool_name}, 结果: {truncated_result}")
                     except Exception as tool_execution_error:
                         # 更新工具调用状态为错误
                         error_msg = str(tool_execution_error)
