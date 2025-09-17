@@ -39,12 +39,14 @@ declare module 'vue' {
     ReportGenerationDialog: typeof import('./src/components/chat/report/ReportGenerationDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SaveWorkflowDialog: typeof import('./src/components/workflow/SaveWorkflowDialog.vue')['default']
     SessionEditDialog: typeof import('./src/components/chat/SessionEditDialog.vue')['default']
     SessionSidebar: typeof import('./src/components/chat/SessionSidebar.vue')['default']
     TemplateUploadDialog: typeof import('./src/components/chat/report/TemplateUploadDialog.vue')['default']
     UploadMethodSelector: typeof import('./src/components/data/upload/UploadMethodSelector.vue')['default']
     UploadStepComponent: typeof import('./src/components/data/upload/cleaning/UploadStepComponent.vue')['default']
     UserMessage: typeof import('./src/components/chat/message/UserMessage.vue')['default']
+    WorkflowManager: typeof import('./src/components/workflow/WorkflowManager.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

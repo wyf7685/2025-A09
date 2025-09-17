@@ -17,7 +17,6 @@ export interface FlowRoute {
   status: 'pending' | 'active' | 'completed' | 'error';
   nextLoop?: FlowRoute[];
   toolName?: string;
-  selectedModel?: string; // 每个流程节点可以选择自己的LLM模型
 }
 
 export interface FlowPanel {
@@ -28,5 +27,4 @@ export interface FlowPanel {
   updateRouteStep: (stepIndex: number, status: 'pending' | 'active' | 'completed') => void;
   autoSelectRoute: (userMessage: string) => 'route1' | 'route2';
   logRouteStatus: (message: string) => void;
-  getActiveStepModel: () => string; // 获取当前活动步骤的模型ID
 }

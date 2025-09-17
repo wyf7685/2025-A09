@@ -4,6 +4,7 @@ import { base64ToBlob, parsePossibleJsonString } from '@/utils/tools';
 import { ArrowDown, ArrowRight, Check, Loading, WarningFilled, View, Close } from '@element-plus/icons-vue';
 import { ElIcon, ElButton, ElDialog, ElTabPane, ElTabs } from 'element-plus';
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import AssistantText from './AssistantText.vue';
 
 const props = defineProps<{
   data: ToolCall;
@@ -139,9 +140,10 @@ onUnmounted(() => removeCurrentUrl());
           class="detail-button"
           size="small"
           text
-          @click="showDetailDialog = true"
-        >
-          <el-icon><View /></el-icon>
+          @click="showDetailDialog = true">
+          <el-icon>
+            <View />
+          </el-icon>
         </el-button>
       </div>
 
@@ -157,11 +159,12 @@ onUnmounted(() => removeCurrentUrl());
             :src="artifactImageUrl"
             :alt="artifact.caption || 'Generated chart'"
             @error="onImageError"
-            @load="onImageLoad"
-          />
+            @load="onImageLoad" />
         </div>
         <div v-else-if="imageLoadError" class="image-error">
-          <el-icon><WarningFilled /></el-icon>
+          <el-icon>
+            <WarningFilled />
+          </el-icon>
           <span>图片加载失败</span>
           <div class="error-details">
             <p>可能的原因：</p>
@@ -173,7 +176,9 @@ onUnmounted(() => removeCurrentUrl());
           </div>
         </div>
         <div v-else class="image-loading">
-          <el-icon><Loading class="rotating" /></el-icon>
+          <el-icon>
+            <Loading class="rotating" />
+          </el-icon>
           <span>正在加载图片...</span>
         </div>
         <div v-if="artifact.caption" class="artifact-caption">
@@ -190,13 +195,17 @@ onUnmounted(() => removeCurrentUrl());
 
       <!-- 错误信息 -->
       <div v-if="error" class="error-preview">
-        <el-icon><WarningFilled /></el-icon>
+        <el-icon>
+          <WarningFilled />
+        </el-icon>
         <span>工具执行出错，点击查看详细信息</span>
       </div>
 
       <!-- 运行状态 -->
       <div v-if="status === 'running'" class="running-status">
-        <el-icon><Loading class="rotating" /></el-icon>
+        <el-icon>
+          <Loading class="rotating" />
+        </el-icon>
         <span>正在执行工具...</span>
       </div>
     </div>
@@ -206,8 +215,7 @@ onUnmounted(() => removeCurrentUrl());
       v-model="showDetailDialog"
       :title="name"
       width="80%"
-      :before-close="() => showDetailDialog = false"
-    >
+      :before-close="() => showDetailDialog = false">
       <el-tabs v-model="activeTab" class="detail-tabs">
         <!-- 描述标签页 -->
         <el-tab-pane label="描述" name="description">
@@ -243,11 +251,12 @@ onUnmounted(() => removeCurrentUrl());
                   :src="artifactImageUrl"
                   :alt="artifact.caption || 'Generated chart'"
                   @error="onImageError"
-                  @load="onImageLoad"
-                />
+                  @load="onImageLoad" />
               </div>
               <div v-else-if="imageLoadError" class="image-error">
-                <el-icon><WarningFilled /></el-icon>
+                <el-icon>
+                  <WarningFilled />
+                </el-icon>
                 <span>图片加载失败</span>
                 <div class="error-details">
                   <p>调试信息：</p>
@@ -260,7 +269,9 @@ onUnmounted(() => removeCurrentUrl());
                 </div>
               </div>
               <div v-else class="image-loading">
-                <el-icon><Loading class="rotating" /></el-icon>
+                <el-icon>
+                  <Loading class="rotating" />
+                </el-icon>
                 <span>正在加载图片...</span>
               </div>
               <div v-if="artifact.caption" class="artifact-caption">
@@ -745,6 +756,7 @@ onUnmounted(() => removeCurrentUrl());
   0% {
     transform: rotate(0deg);
   }
+
   100% {
     transform: rotate(360deg);
   }

@@ -228,6 +228,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
 
     @tool
     @register_tool("查看数据集状态")
+    @resumable("查看数据集状态")
     def inspect_dataframe_tool(
         dataset_id: DatasetID,
         options: InspectDataframeOptions | None = None,

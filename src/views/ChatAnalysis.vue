@@ -7,21 +7,39 @@ import ModelSelectDialog from '@/components/chat/ModelSelectDialog.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
+import Model from '@/components/icons/Model.vue';
+import SaveWorkflowDialog from '@/components/workflow/SaveWorkflowDialog.vue';
+import WorkflowManager from '@/components/workflow/WorkflowManager.vue';
 import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
+import { useWorkflowStore } from '@/stores/workflow';
 import type { MCPConnection, MLModel } from '@/types';
-import { DArrowRight, Document, Monitor } from '@element-plus/icons-vue';
-import { ElButton, ElMessage, ElMessageBox } from 'element-plus';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { Document, Monitor, Share } from '@element-plus/icons-vue';
+import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
+import { computed, nextTick, onErrorCaptured, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import Model from '@/components/icons/Model.vue';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
+let workflowStore;
+
+try {
+  workflowStore = useWorkflowStore();
+} catch (error) {
+  console.error('Error loading workflow store:', error);
+  ElMessage.error('工作流功能加载失败，部分功能可能不可用');
+}
+
+// 添加全局错误处理
+onErrorCaptured((err) => {
+  console.error('Captured error in ChatAnalysis:', err);
+  ElMessage.error('对话分析组件发生错误，请刷新页面或联系管理员');
+  return false; // 阻止错误继续传播
+});
 
 // --- State for new UI ---
 const isSidebarOpen = ref(true);
@@ -33,6 +51,10 @@ const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
 
 // 当前会话的模型
 const sessionModels = ref<MLModel[]>([]);
+
+// --- 工作流相关 ---
+const saveWorkflowDialogVisible = ref(false);
+const workflowManagerDialogVisible = ref(false);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
@@ -93,6 +115,103 @@ const {
   isProcessingChat,
   ...chat
 } = useChat(() => flowPanelRef.value?.flowPanel);
+
+// 打开保存工作流对话框
+const openSaveWorkflowDialog = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先创建或选择一个会话');
+    return;
+  }
+
+  if (messages.value.length === 0) {
+    ElMessage.warning('当前会话没有任何消息，无法保存工作流');
+    return;
+  }
+
+  // 检查是否有工具调用
+  let hasToolCalls = false;
+  for (const message of messages.value) {
+    if (message.type === 'assistant' && message.tool_calls && Object.keys(message.tool_calls).length > 0) {
+      hasToolCalls = true;
+      break;
+    }
+  }
+
+  if (!hasToolCalls) {
+    ElMessageBox.confirm(
+      '当前会话中没有检测到工具调用，保存的工作流将无法执行任何操作。确定要继续吗？',
+      '无工具调用提示',
+      {
+        confirmButtonText: '继续保存',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(() => {
+      saveWorkflowDialogVisible.value = true;
+    }).catch(() => { });
+  } else {
+    saveWorkflowDialogVisible.value = true;
+  }
+};
+
+// 打开工作流管理对话框
+const openWorkflowManager = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先创建或选择一个会话');
+    return;
+  }
+
+  workflowManagerDialogVisible.value = true;
+};
+
+// 工作流保存成功回调
+const onWorkflowSaved = () => {
+  ElMessage.success('工作流保存成功');
+  saveWorkflowDialogVisible.value = false;
+};
+
+// 工作流执行成功回调
+const onWorkflowExecuted = async (result: any) => {
+  // 构建详细的成功消息
+  const successMessage = result.message
+    ? result.message
+    : `工作流执行成功，共执行了${result.executed_tools || '多个'}工具调用`;
+
+  // 使用更突出的消息框而不是普通消息
+  ElMessageBox.alert(
+    `<div style="text-align:center;margin-bottom:10px;"><i class="el-icon-success" style="font-size:30px;color:#67C23A;"></i></div>
+     <div>${successMessage}</div>
+     <div style="margin-top:10px;font-size:14px;color:#909399;">刷新会话中，请稍候...</div>`,
+    '工作流执行成功',
+    {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '确定',
+      customClass: 'workflow-success-dialog',
+      callback: () => { }
+    }
+  );
+
+  workflowManagerDialogVisible.value = false;
+
+  // 刷新聊天历史，显示工作流执行结果
+  await refreshChatHistory();
+
+  // 如果有流程图面板，也需要刷新
+  if (flowPanelRef.value?.flowPanel) {
+    nextTick(() => {
+      flowPanelRef.value?.flowPanel?.clearFlowSteps?.();
+    });
+  }
+
+  // 显示提示：用户可以保存此会话为新的工作流
+  setTimeout(() => {
+    ElMessage({
+      type: 'info',
+      message: '提示: 您可以将当前对话保存为新的工作流，以便再次使用',
+      duration: 5000
+    });
+  }, 1000);
+};
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {
   editingSessionId.value = sessionId;
@@ -252,7 +371,6 @@ const sendMessage = async (): Promise<void> => {
   const userMessage = userInput.value.trim();
   userInput.value = '';
 
-  // 直接发送用户消息（模型提示已移至后端处理）
   await chat.sendMessage(
     userMessage,
     currentSessionId.value || null,
@@ -301,6 +419,17 @@ onMounted(async () => {
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
           </el-button>
+          <el-button @click="openSaveWorkflowDialog" class="workflow-btn">
+            <el-icon class="icon-margin">
+              <Document />
+            </el-icon>保存流程
+          </el-button>
+          <el-button @click="openWorkflowManager" class="workflow-btn">
+            <el-icon class="icon-margin">
+              <Share />
+            </el-icon>调用流程
+          </el-button>
+          <div class="action-divider"></div>
           <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
             生成报告
           </el-button>
@@ -347,6 +476,21 @@ onMounted(async () => {
     <!-- Model Selection Dialog -->
     <ModelSelectDialog v-if="currentSessionId" v-model:visible="modelSelectDialogVisible"
       v-model:session-models="sessionModels" :current-session-id="currentSessionId" />
+
+    <!-- 保存工作流对话框 -->
+    <SaveWorkflowDialog
+      v-model:visible="saveWorkflowDialogVisible"
+      :messages="messages"
+      :sessionId="currentSessionId || ''"
+      @saved="onWorkflowSaved" />
+
+    <!-- 工作流管理对话框 -->
+    <WorkflowManager
+      v-model:visible="workflowManagerDialogVisible"
+      :selectionMode="true"
+      :sessionId="currentSessionId || ''"
+      :dataSources="currentDatasets || []"
+      @workflowExecuted="onWorkflowExecuted" />
   </div>
 </template>
 
@@ -523,6 +667,31 @@ onMounted(async () => {
   .management-actions {
     margin-bottom: 16px;
   }
+}
+
+.workflow-btn {
+  margin-right: 8px;
+  font-size: 13px;
+  border: 1px solid #dcdfe6;
+
+  &:hover {
+    color: var(--el-color-primary);
+    border-color: var(--el-color-primary-light-7);
+    background-color: var(--el-color-primary-light-9);
+  }
+
+  .icon-margin {
+    margin-right: 4px;
+  }
+}
+
+.action-divider {
+  display: inline-block;
+  height: 20px;
+  width: 1px;
+  background-color: #dcdfe6;
+  margin: 0 8px;
+  vertical-align: middle;
 }
 
 .report-preview-section {

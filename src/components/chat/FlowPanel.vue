@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
-import type { FlowPanel, FlowRoute, FlowStep, LLMModel } from '@/types';
+import type { FlowPanel, FlowStep, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import {
   ElButton, ElDialog, ElForm, ElFormItem, ElIcon, ElInput, ElMessage,
-  ElOption, ElOptionGroup, ElSelect, ElText, ElTooltip
+  ElOption, ElOptionGroup, ElSelect, ElText
 } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
+
+// 扩展 FlowRoute 类型，支持 nextLoop 和 toolName 字段
+type FlowRouteEx = {
+  title: string;
+  description: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  nextLoop?: FlowRouteEx[];
+  toolName?: string;
+  _needLoop?: boolean;
+};
 
 const modelStore = useModelStore();
 const sessionStore = useSessionStore();
@@ -20,19 +30,22 @@ const selectedRoute = ref<string>('route1'); // 当前选中的路线
 const currentRouteReason = ref<string>(''); // 当前路线选择的原因
 
 // 路线1：生成总体报告的步骤
-const route1Steps = ref<FlowRoute[]>([
-  { title: '用户输入', description: '接收用户的查询请求（不使用LLM）', status: 'pending' },
-  { title: 'AI分析处理', description: '使用LLM智能分析用户需求和数据', status: 'pending' },
-  { title: '生成报告', description: '使用LLM生成完整的数据分析报告', status: 'pending' }
+const route1Steps = ref<FlowRouteEx[]>([
+  { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
+  { title: 'API请求处理', description: '后端API接收并处理请求', status: 'pending' },
+  { title: 'LLM模型选择', description: '选择适合的AI模型处理', status: 'pending' },
+  { title: 'Agent初始化', description: '初始化数据分析Agent', status: 'pending' },
+  { title: '生成分析报告', description: '生成完整的数据分析结果', status: 'pending' }
 ]);
 
 // 路线2：其他处理的步骤
-const route2Steps = ref<FlowRoute[]>([
-  { title: '用户输入', description: '接收用户的查询请求（不使用LLM）', status: 'pending', toolName: '' },
-  { title: 'AI分析处理', description: '使用LLM智能分析用户需求', status: 'pending', toolName: '' },
-  { title: '判断执行工具', description: '使用LLM分析并选择单个处理工具', status: 'pending', toolName: '' },
-  { title: '调用执行工具', description: '执行单个数据处理工具（不使用LLM）', status: 'pending', toolName: '' },
-  { title: '是否进行循环', description: '使用LLM判断是否需要继续处理', status: 'pending', nextLoop: [], toolName: '' }
+const route2Steps = ref<FlowRouteEx[]>([
+  { title: '用户输入', description: '接收用户的查询请求', status: 'pending', toolName: '' },
+  { title: 'API请求处理', description: '后端API接收并处理请求', status: 'pending', toolName: '' },
+  { title: 'LLM模型选择', description: '选择适合的AI模型处理', status: 'pending', toolName: '' },
+  { title: '数据源加载', description: '读取和解析数据源', status: 'pending', toolName: '' },
+  { title: '工具调用', description: '执行相应的数据处理工具', status: 'pending', toolName: '' },
+  { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending', nextLoop: [], toolName: '' }
 ]);
 
 // 流程图相关状态 (保留原有的flowSteps以兼容现有代码)
@@ -48,6 +61,84 @@ const customApiForm = ref({
   apiKey: '',
   modelName: '',
   customApiUrl: ''  // 自定义API URL
+});
+
+// 调试函数：监控流程图状态
+const logRouteStatus = (message: string) => {
+  console.log(`[流程图调试] ${message}`);
+  console.log('当前路线:', selectedRoute.value);
+  if (selectedRoute.value === 'route1') {
+    console.log('路线1状态:', route1Steps.value.map((step: FlowRouteEx) => `${step.title}: ${step.status}`));
+  } else {
+    console.log('路线2状态:', route2Steps.value.map((step: FlowRouteEx) => `${step.title}: ${step.status}`));
+  }
+};
+
+// 检查是否有活跃步骤
+const hasActiveSteps = computed(() => {
+  if (selectedRoute.value === 'route1') {
+    return route1Steps.value.some((step: FlowRouteEx) => step.status === 'active');
+  } else {
+    return route2Steps.value.some((step: FlowRouteEx) => step.status === 'active');
+  }
+});
+
+// 强制完成流程
+const forceCompleteFlow = () => {
+  console.log('用户强制完成流程');
+
+  if (selectedRoute.value === 'route1') {
+    route1Steps.value.forEach((step: FlowRouteEx) => {
+      if (step.status === 'active' || step.status === 'pending') {
+        step.status = 'completed';
+      }
+    });
+  } else {
+    route2Steps.value.forEach((step: FlowRouteEx) => {
+      if (step.status === 'active' || step.status === 'pending') {
+        step.status = 'completed';
+      }
+    });
+  }
+
+  logRouteStatus('用户强制完成所有流程步骤');
+  ElMessage.success('流程已强制完成');
+};
+
+// 只显示已执行的步骤（直接暴露给模板）
+// 动态流程节点，支持循环追加
+const executedSteps = computed(() => {
+  if (selectedRoute.value === 'route1') {
+    // 只显示已执行的步骤
+    return route1Steps.value.filter(step => step.status !== 'pending');
+  } else {
+    // 路线2支持循环追加
+    const steps = [];
+    for (let i = 0; i < route2Steps.value.length; i++) {
+      const step = route2Steps.value[i];
+      if (step.status !== 'pending') {
+        // 判断是否进行循环节点特殊处理
+        if (step.title === '是否进行循环') {
+          // 没有调用新工具时，nextLoop为空，显示"否"且不追加新节点
+          steps.push({
+            ...step,
+            nextLoop: [], // 保证模板判断为否
+          });
+          // 只有在 nextLoop 节点已被激活或完成时追加新工具节点
+          if (
+            step.nextLoop &&
+            step.nextLoop.length > 0 &&
+            ['active', 'completed', 'error'].includes(step.nextLoop[0].status)
+          ) {
+            steps.push(...step.nextLoop);
+          }
+        } else {
+          steps.push(step);
+        }
+      }
+    }
+    return steps;
+  }
 });
 
 // 预设的API提供商配置
@@ -102,42 +193,6 @@ const selectedModel = computed({
   }
 });
 
-// 只显示已执行的步骤
-// 动态流程节点，支持循环追加
-const executedSteps = computed(() => {
-  if (selectedRoute.value === 'route1') {
-    // 只显示已执行的步骤
-    return route1Steps.value.filter(step => step.status !== 'pending');
-  } else {
-    // 路线2支持循环追加
-    const steps = [];
-    for (let i = 0; i < route2Steps.value.length; i++) {
-      const step = route2Steps.value[i];
-      if (step.status !== 'pending') {
-        // 判断是否进行循环节点特殊处理
-        if (step.title === '是否进行循环') {
-          // 没有调用新工具时，nextLoop为空，显示“否”且不追加新节点
-          steps.push({
-            ...step,
-            nextLoop: [], // 保证模板判断为否
-          });
-          // 只有在 nextLoop 节点已被激活或完成时追加新工具节点
-          if (
-            step.nextLoop &&
-            step.nextLoop.length > 0 &&
-            ['active', 'completed', 'error'].includes(step.nextLoop[0].status)
-          ) {
-            steps.push(...step.nextLoop);
-          }
-        } else {
-          steps.push(step);
-        }
-      }
-    }
-    return steps;
-  }
-});
-
 // 流程图管理方法
 const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
   const newStep: FlowStep = {
@@ -149,8 +204,37 @@ const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
   return newStep.id;
 };
 
+const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
+  const stepIndex = flowSteps.value.findIndex(step => step.id === stepId);
+  if (stepIndex !== -1) {
+    flowSteps.value[stepIndex] = { ...flowSteps.value[stepIndex], ...updates };
+  }
+};
+
 const clearFlowSteps = () => {
+  // 清除旧的流程步骤
   flowSteps.value = [];
+
+  // 完全重置路线1步骤状态
+  route1Steps.value = [
+    { title: '用户输入', description: '接收用户的查询请求', status: 'pending' },
+    { title: 'API请求处理', description: '后端API接收并处理请求', status: 'pending' },
+    { title: 'LLM模型选择', description: '选择适合的AI模型处理', status: 'pending' },
+    { title: 'Agent初始化', description: '初始化数据分析Agent', status: 'pending' },
+    { title: '生成分析报告', description: '生成完整的数据分析结果', status: 'pending' }
+  ];
+
+  // 完全重置路线2步骤状态
+  route2Steps.value = [
+    { title: '用户输入', description: '接收用户的查询请求', status: 'pending', toolName: '' },
+    { title: 'API请求处理', description: '后端API接收并处理请求', status: 'pending', toolName: '' },
+    { title: 'LLM模型选择', description: '选择适合的AI模型处理', status: 'pending', toolName: '' },
+    { title: '数据源加载', description: '读取和解析数据源', status: 'pending', toolName: '' },
+    { title: '工具调用', description: '执行相应的数据处理工具', status: 'pending', toolName: '' },
+    { title: '是否进行循环', description: '判断是否需要继续处理', status: 'pending', nextLoop: [], toolName: '' }
+  ];
+
+  console.log('[流程图] 已完全重置所有流程步骤');
 };
 
 // 模型配置方法
@@ -165,30 +249,6 @@ const changeModel = async (modelId: string) => {
   await sessionStore.updateSessionAgentModelConfig({ default: modelId });
   const model = storeAvailableModels.value.find(m => m.id === modelId);
 
-  // 更新所有未激活的步骤为新选择的模型
-  // 更新路线1的所有未活跃步骤
-  route1Steps.value.forEach(step => {
-    if (step.status !== 'active') {
-      step.selectedModel = modelId;
-    }
-  });
-
-  // 更新路线2的所有未活跃步骤
-  route2Steps.value.forEach(step => {
-    if (step.status !== 'active') {
-      step.selectedModel = modelId;
-
-      // 处理循环节点
-      if (step.nextLoop && step.nextLoop.length > 0) {
-        step.nextLoop.forEach(loopStep => {
-          if (loopStep.status !== 'active') {
-            loopStep.selectedModel = modelId;
-          }
-        });
-      }
-    }
-  });
-
   // 添加模型切换步骤到流程图
   addFlowStep({
     title: '模型切换',
@@ -196,7 +256,7 @@ const changeModel = async (modelId: string) => {
     status: 'completed'
   });
 
-  ElMessage.success(`已切换到模型: ${model?.name || modelId}，系统将使用新模型继续处理`);
+  ElMessage.success(`已切换到模型: ${model?.name || modelId}`);
 };
 
 // 处理自定义API配置
@@ -302,10 +362,10 @@ const handleRouteChange = (route: string) => {
 
 // 重置所有路线步骤状态
 const resetAllSteps = () => {
-  route1Steps.value.forEach((step: FlowRoute) => {
+  route1Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
   });
-  route2Steps.value.forEach((step: FlowRoute) => {
+  route2Steps.value.forEach((step: FlowRouteEx) => {
     step.status = 'pending';
   });
 };
@@ -321,47 +381,53 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
     console.log(`[流程图] 路线1步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${status}`);
   } else if (selectedRoute.value === 'route2' && route2Steps.value[stepIndex]) {
     // 允许 updateRouteStep 控制 nextLoop 节点状态
-    if (stepIndex === 3 && route2Steps.value[4]?.nextLoop && route2Steps.value[4].nextLoop.length > 0) {
+    if (stepIndex === 4 && route2Steps.value[5]?.nextLoop && route2Steps.value[5].nextLoop.length > 0) {
       // 旧节点强制 completed
       route2Steps.value[stepIndex].status = 'completed';
-    } else if (stepIndex === 4 && route2Steps.value[stepIndex].nextLoop && route2Steps.value[stepIndex].nextLoop.length > 0) {
-      // 如果是“是否进行循环”节点，允许通过 status 控制 nextLoop 节点状态
+    } else if (stepIndex === 5 && route2Steps.value[stepIndex].nextLoop && route2Steps.value[stepIndex].nextLoop.length > 0) {
+      // 如果是"是否进行循环"节点，允许通过 status 控制 nextLoop 节点状态
       // 只更新 nextLoop 的第一个节点（即新追加的调用工具节点）
       route2Steps.value[stepIndex].nextLoop[0].status = status;
     } else {
       route2Steps.value[stepIndex].status = status;
     }
     console.log(`[流程图] 路线2步骤${stepIndex + 1}状态更新: ${oldStatus} -> ${route2Steps.value[stepIndex].status}`);
-    // 如果是“是否进行循环”节点且需要循环，追加新节点
+
+    // 如果是"是否进行循环"节点且完成判断
     if (route2Steps.value[stepIndex].title === '是否进行循环' && status === 'completed') {
-      // 只追加一次循环节点，且工具名与左侧对话栏一致
-      if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
-        let toolName = route2Steps.value[3]?.toolName;
+      // 检查是否需要继续循环 (根据nextLoop的标记来判断)
+      const needLoop = route2Steps.value[stepIndex].hasOwnProperty('_needLoop') ?
+        route2Steps.value[stepIndex]._needLoop : false;
 
-        // 旧的调用执行工具节点直接设为 completed
-        if (route2Steps.value[3]) {
-          route2Steps.value[3].status = 'completed';
-        }
-        // 获取上一步"调用执行工具"的模型设置
-        const previousToolModelId = route2Steps.value[3]?.selectedModel || selectedModel.value;
-        const modelName = storeAvailableModels.value.find(m => m.id === previousToolModelId)?.name || previousToolModelId;
+      // 只有当明确需要循环时，才追加循环节点
+      if (needLoop) {
+        // 只追加一次循环节点，且工具名与左侧对话栏一致
+        if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
+          let toolName = route2Steps.value[4]?.toolName;
 
-        // 追加新的循环节点，反映工具运行状况（只有新节点显示 active）
-        route2Steps.value[stepIndex].nextLoop = [
-          {
-            title: '调用执行工具',
-            description: `执行相应的数据处理工具（循环）：${toolName}`,
-            status: 'active',
-            toolName: toolName,
-            // 继承原工具执行步骤的模型选择
-            selectedModel: previousToolModelId
+          // 旧的工具调用节点直接设为 completed
+          if (route2Steps.value[4]) {
+            route2Steps.value[4].status = 'completed';
           }
-        ];
-      } else {
-        // 如果已存在循环节点，确保旧节点不是 active
-        if (route2Steps.value[3] && route2Steps.value[3].status === 'active') {
-          route2Steps.value[3].status = 'completed';
+          // 追加新的循环节点，反映工具运行状况（只有新节点显示 active）
+          route2Steps.value[stepIndex].nextLoop = [
+            {
+              title: '工具调用',
+              description: `执行新的数据处理工具（循环）`,
+              status: 'active',
+              toolName: toolName
+            }
+          ];
+        } else {
+          // 如果已存在循环节点，确保旧节点不是 active
+          if (route2Steps.value[4] && route2Steps.value[4].status === 'active') {
+            route2Steps.value[4].status = 'completed';
+          }
         }
+      } else {
+        // 如果不需要循环，确保nextLoop为空数组
+        route2Steps.value[stepIndex].nextLoop = [];
+        console.log('[流程图] 循环判断结果为"否"，不生成新工具调用流程');
       }
     }
 
@@ -370,13 +436,13 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
     if (status === 'completed') {
       if (selectedRoute.value === 'route2') {
         // 主流程节点
-        route2Steps.value.forEach((step: FlowRoute) => {
+        route2Steps.value.forEach((step: FlowRouteEx) => {
           if (step.status === 'active') step.status = 'completed';
         });
         // 循环追加的节点
-        route2Steps.value.forEach((step: FlowRoute) => {
+        route2Steps.value.forEach((step: FlowRouteEx) => {
           if (step.nextLoop && step.nextLoop.length > 0) {
-            step.nextLoop.forEach((loopStep: FlowRoute) => {
+            step.nextLoop.forEach((loopStep: FlowRouteEx) => {
               if (loopStep.status === 'active') loopStep.status = 'completed';
             });
           }
@@ -388,38 +454,50 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
   logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`);
 };
 
-// 调试函数：监控流程图状态
-const logRouteStatus = (message: string) => {
-  console.log(`[流程图调试] ${message}`);
-  console.log('当前路线:', selectedRoute.value);
-  if (selectedRoute.value === 'route1') {
-    console.log('路线1状态:', route1Steps.value.map((step: FlowRoute) => `${step.title}: ${step.status}`));
-  } else {
-    console.log('路线2状态:', route2Steps.value.map((step: FlowRoute) => `${step.title}: ${step.status}`));
-  }
+// 测试智能路线选择功能
+const testRouteSelection = () => {
+  const testCases = [
+    "生成完整报告",
+    "创建数据分析报告",
+    "给我一个综合分析",
+    "绘制相关性热力图",
+    "计算统计信息",
+    "分析数据质量"
+  ];
+
+  console.log('=== 智能路线选择测试 ===');
+  testCases.forEach(testCase => {
+    const route = selectRouteAutomatically(testCase);
+    const reason = getRouteSelectionReason(testCase, route);
+    console.log(`输入: "${testCase}" -> 路线: ${route} (${reason})`);
+  });
+  console.log('=== 测试完成 ===');
 };
 
 // 智能路线选择函数
 const selectRouteAutomatically = (userMessage: string): 'route1' | 'route2' => {
   const message = userMessage.toLowerCase();
 
-  // 路线1关键词：报告生成相关
+  // 路线1关键词：综合分析相关
   const route1Keywords = [
     '报告', '总结', '概述', '汇总', '分析报告', '数据报告',
     '整体分析', '全面分析', '综合分析', '统计报告',
     '生成报告', '创建报告', '制作报告', '输出报告',
     '完整报告', '详细报告', '综合报告', '总体报告',
     '分析结果', '数据总结', '统计总结', '整体情况',
+    '基本情况', '基本统计', '基础分析', '数据概况',
     'report', 'summary', 'overview', 'analysis report',
     'comprehensive', 'complete report', 'detailed report'
   ];
 
-  // 路线2关键词：具体操作、工具使用相关
+  // 路线2关键词：工具调用相关
   const route2Keywords = [
     '绘制', '画图', '图表', '可视化', '图像', '图片',
     '计算', '统计', '筛选', '过滤', '查询', '搜索',
     '清洗', '处理', '转换', '操作', '执行', '运行',
     '热力图', '散点图', '柱状图', '折线图', '饼图',
+    '分组', '聚合', '相关性', '异常检测', '缺失值',
+    '预测', '分类', '回归', '聚类', '预处理',
     'plot', 'chart', 'graph', 'visualization', 'draw',
     'calculate', 'filter', 'query', 'clean', 'process'
   ];
@@ -458,23 +536,27 @@ const getRouteSelectionReason = (userMessage: string, selectedRoute: 'route1' | 
 
   if (selectedRoute === 'route1') {
     if (message.includes('报告') || message.includes('report')) {
-      return '检测到报告生成需求';
+      return '检测到综合报告需求，将进行完整数据分析';
     } else if (message.includes('分析') || message.includes('总结') || message.includes('概述')) {
-      return '检测到综合分析需求';
+      return '检测到数据概览分析需求，将选择适合的模型处理';
+    } else if (message.includes('基本') || message.includes('基础') || message.includes('统计')) {
+      return '检测到基础统计分析需求';
     } else if (message.length > 100) {
-      return '复杂查询，适合生成综合报告';
+      return '复杂查询，适合完整的Agent处理链';
     } else {
-      return '默认使用报告生成模式';
+      return '默认使用完整分析流程';
     }
   } else {
     if (message.includes('绘制') || message.includes('图表') || message.includes('可视化')) {
-      return '检测到可视化需求';
+      return '检测到数据可视化需求，准备调用相关工具';
     } else if (message.includes('计算') || message.includes('统计') || message.includes('筛选')) {
-      return '检测到数据处理需求';
+      return '检测到数据处理需求，准备调用数据工具';
     } else if (message.includes('热力图') || message.includes('散点图') || message.includes('柱状图')) {
-      return '检测到特定图表需求';
+      return '检测到特定图表需求，准备加载数据源';
+    } else if (message.includes('分组') || message.includes('聚合') || message.includes('相关性')) {
+      return '检测到高级数据分析需求';
     } else {
-      return '检测到具体操作需求';
+      return '检测到特定操作需求，准备选择合适的工具';
     }
   }
 };
@@ -515,107 +597,6 @@ const toggleRouteManually = () => {
   ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '调用工具分析'}`);
 };
 
-// 检查是否有活跃步骤
-const hasActiveSteps = computed(() => {
-  if (selectedRoute.value === 'route1') {
-    return route1Steps.value.some((step: FlowRoute) => step.status === 'active');
-  } else {
-    return route2Steps.value.some((step: FlowRoute) => step.status === 'active');
-  }
-});
-
-// 强制完成流程
-const forceCompleteFlow = () => {
-  console.log('用户强制完成流程');
-
-  if (selectedRoute.value === 'route1') {
-    route1Steps.value.forEach((step: FlowRoute) => {
-      if (step.status === 'active' || step.status === 'pending') {
-        step.status = 'completed';
-      }
-    });
-  } else {
-    route2Steps.value.forEach((step: FlowRoute) => {
-      if (step.status === 'active' || step.status === 'pending') {
-        step.status = 'completed';
-      }
-    });
-  }
-
-  logRouteStatus('用户强制完成所有流程步骤');
-  ElMessage.success('流程已强制完成');
-};
-
-// 获取当前活动步骤的模型ID
-const getActiveStepModel = () => {
-  // 查找当前路线中活动状态的步骤
-  let modelId: string | undefined = undefined;
-  let stepTitle = '';
-
-  if (selectedRoute.value === 'route1') {
-    // 路线1中的步骤模型分配：
-    // - AI分析处理：需要LLM处理用户请求
-    // - 生成报告：需要LLM生成报告
-    // 用户输入步骤不使用LLM
-
-    if (route1Steps.value[1]?.status === 'active') {
-      // AI分析处理步骤
-      stepTitle = route1Steps.value[1].title;
-      modelId = route1Steps.value[1].selectedModel;
-    } else if (route1Steps.value[2]?.status === 'active') {
-      // 生成报告步骤
-      stepTitle = route1Steps.value[2].title;
-      modelId = route1Steps.value[2].selectedModel;
-    }
-  } else {
-    // 路线2中的步骤模型分配：
-    // - AI分析处理：需要LLM分析用户请求
-    // - 判断执行工具：需要LLM决定使用哪个工具
-    // - 调用执行工具：可以使用LLM解析工具结果
-    // - 是否进行循环：需要LLM判断是否需要继续循环
-
-    if (route2Steps.value[1]?.status === 'active') {
-      // AI分析处理步骤
-      stepTitle = route2Steps.value[1].title;
-      modelId = route2Steps.value[1].selectedModel;
-    } else if (route2Steps.value[2]?.status === 'active') {
-      // 判断执行工具步骤
-      stepTitle = route2Steps.value[2].title;
-      modelId = route2Steps.value[2].selectedModel;
-    } else if (route2Steps.value[4]?.status === 'active') {
-      // 是否进行循环步骤
-      stepTitle = route2Steps.value[4].title;
-      modelId = route2Steps.value[4].selectedModel;
-
-      // 特殊处理循环步骤中的循环
-      if (route2Steps.value[4].nextLoop && route2Steps.value[4].nextLoop.length > 0) {
-        const activeLoopStep = route2Steps.value[4].nextLoop.find(step => step.status === 'active');
-        if (activeLoopStep) {
-          // 如果循环中有活动步骤，优先使用它的模型
-          stepTitle = `${route2Steps.value[4].title} > ${activeLoopStep.title}`;
-          if (activeLoopStep.selectedModel) {
-            modelId = activeLoopStep.selectedModel;
-          }
-        }
-      }
-    }
-
-    // 工具执行步骤(步骤3)也可以使用LLM来解析工具结果
-    else if (route2Steps.value[3]?.status === 'active') {
-      // 工具执行步骤也允许选择LLM模型，用于解析工具结果
-      stepTitle = route2Steps.value[3].title;
-      modelId = route2Steps.value[3].selectedModel;
-    }
-  }
-
-  // 如果没有找到活动步骤或活动步骤没有指定模型，则使用默认模型
-  const finalModelId = modelId || selectedModel.value;
-  const modelName = storeAvailableModels.value.find(m => m.id === finalModelId)?.name || finalModelId;
-
-  console.log(`[流程图] 使用步骤"${stepTitle || '默认'}"的模型: ${modelName} (${finalModelId})`);
-  return finalModelId;
-};
-
 defineExpose({
   flowPanel: {
     route1Steps,
@@ -625,33 +606,15 @@ defineExpose({
     updateRouteStep,
     autoSelectRoute,
     logRouteStatus,
-    getActiveStepModel,
   } as FlowPanel,
 });
-
-// 初始化所有流程步骤的模型选择
-const initializeStepModels = () => {
-  const defaultModelId = selectedModel.value;
-
-  // 初始化路线1的模型
-  route1Steps.value.forEach((step) => {
-    step.selectedModel = defaultModelId;
-  });
-
-  // 初始化路线2的模型
-  route2Steps.value.forEach((step) => {
-    step.selectedModel = defaultModelId;
-  });
-
-  console.log('[流程图] 初始化所有节点的默认模型:', defaultModelId);
-};
 
 // --- Lifecycle Hooks ---
 onMounted(async () => {
   await modelStore.fetchAvailableModels(); // 获取可用模型
 
-  // 初始化所有步骤的模型选择
-  initializeStepModels();
+  // 运行路线选择测试
+  // testRouteSelection()
 
   // 初始化模型配置
   addFlowStep({
@@ -742,98 +705,11 @@ onMounted(async () => {
                     </span>
                   </template>
                   <span v-if="step.toolName"
-                    style="color:#3b82f6;font-size:12px;font-weight:500;display:block;margin-top:2px;">当前工具：{{
-                      step.toolName }}</span>
-
-                  <!-- 每个节点的LLM模型选择 - 在所有可以使用LLM的步骤中显示 -->
-                  <div class="step-model-selector" v-if="(step.title === 'AI分析处理' ||
-                    step.title === '生成报告' ||
-                    step.title === '判断执行工具' ||
-                    step.title === '是否进行循环')">
-                    <span style="color:#666;font-size:12px;display:block;margin-top:8px;">
-                      LLM模型:
-                      <span v-if="step.status === 'active'" style="color:#3b82f6;font-weight:500;">
-                        {{storeAvailableModels.find(m => m.id === step.selectedModel)?.name || step.selectedModel ||
-                          '默认模型'}}
-                      </span>
-                    </span>
-                    <el-select v-if="step.status !== 'active'" v-model="step.selectedModel" size="small"
-                      class="step-model-select"
-                      placeholder="选择模型" filterable @change="(value: string) => {
-                        // 选择新模型
-                        ElMessage.success(`已为${step.title}步骤选择模型: ${storeAvailableModels.find(m => m.id === value)?.name || value}`);
-                      }">
-                      <el-option-group v-for="provider in getProviderGroups()" :key="provider.name"
-                        :label="provider.name">
-                        <el-option v-for="model in provider.models" :key="model.id" :label="model.name"
-                          :value="model.id">
-                          <div class="model-option">
-                            <span class="model-name">{{ model.name }}</span>
-                            <span v-if="!model.available" class="model-status">(未配置)</span>
-                          </div>
-                        </el-option>
-                      </el-option-group>
-                    </el-select>
-                  </div>
-
-                  <!-- 显示节点角色（是否使用LLM） -->
-                  <div class="step-role" v-if="step.title === '用户输入'">
-                    <span style="color:#666;font-size:12px;display:block;margin-top:8px;">
-                      <span style="color:#888;">
-                        用户操作
-                        <el-tooltip content="此步骤不使用LLM模型" placement="top">
-                          <el-icon style="vertical-align:middle;margin-left:4px;cursor:help"><i
-                              class="el-icon-info" /></el-icon>
-                        </el-tooltip>
-                      </span>
-                    </span>
-                  </div>
-
-                  <!-- 工具调用步骤也可以选择LLM -->
-                  <div class="tool-execution-model" v-if="step.title === '调用执行工具'">
-                    <span style="color:#666;font-size:12px;display:block;margin-top:8px;">
-                      <span style="color:#888;">
-                        单次工具调用
-                      </span>
-                    </span>
-                    <div class="step-model-selector" style="margin-top:4px;">
-                      <span style="color:#666;font-size:12px;display:block;">
-                        解析工具结果的LLM模型:
-                        <span v-if="step.status === 'active'" style="color:#3b82f6;font-weight:500;">
-                          {{storeAvailableModels.find(m => m.id === step.selectedModel)?.name || step.selectedModel ||
-                            '默认模型'}}
-                        </span>
-                      </span>
-                      <el-select v-if="step.status !== 'active'" v-model="step.selectedModel" size="small"
-                        class="step-model-select"
-                        placeholder="选择模型" filterable @change="(value: string) => {
-                          // 立即更新选定模型
-                          step.selectedModel = value;
-                          const modelName = storeAvailableModels.find(m => m.id === value)?.name || value;
-
-                          // 添加步骤变更到流程图
-                          addFlowStep({
-                            title: '模型切换',
-                            description: `为${step.title}步骤切换模型: ${modelName}`,
-                            status: 'completed'
-                          });
-
-                          // 选择新模型
-                          ElMessage.success(`已为${step.title}步骤选择模型: ${modelName}`);
-                        }">
-                        <el-option-group v-for="provider in getProviderGroups()" :key="provider.name"
-                          :label="provider.name">
-                          <el-option v-for="model in provider.models" :key="model.id" :label="model.name"
-                            :value="model.id">
-                            <div class="model-option">
-                              <span class="model-name">{{ model.name }}</span>
-                              <span v-if="!model.available" class="model-status">(未配置)</span>
-                            </div>
-                          </el-option>
-                        </el-option-group>
-                      </el-select>
-                    </div>
-                  </div>
+                    style="color:#3b82f6;font-size:12px;font-weight:500;display:block;margin-top:2px;">
+                    {{ (selectedRoute === 'route2' && step.title === '工具调用') ? '工具：' + step.toolName :
+                      (step.title === 'LLM模型选择') ? '模型：' + step.toolName :
+                        step.toolName }}
+                  </span>
                 </div>
                 <div class="dify-step-status">
                   <el-icon v-if="step.status === 'active'" class="loading">
@@ -955,34 +831,6 @@ onMounted(async () => {
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 10px;
-
-  /* 流程节点模型选择样式 */
-  .step-model-selector {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px dashed #e5e7eb;
-  }
-
-  .step-role {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px dashed #e5e7eb;
-  }
-
-  .step-model-select {
-    width: 100%;
-    margin-top: 4px;
-    font-size: 12px;
-  }
-
-  .step-model-select :deep(.el-input__wrapper) {
-    padding: 0 8px;
-  }
-
-  .step-model-select :deep(.el-input__inner) {
-    font-size: 12px;
-    height: 24px;
-  }
 }
 
 .dify-step-status {
@@ -1192,216 +1040,39 @@ onMounted(async () => {
   }
 }
 
-// --- Fixed Flow Routes Styles ---
-.fixed-flow-routes {
-  padding: 0;
-
-  .route-selector {
-    padding: 12px;
-    border-bottom: 1px solid #e5e7eb;
-    background: #f8fafc;
-
-    .route-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 8px;
-      font-size: 11px;
-      color: #6b7280;
-
-      .route-label {
-        flex: 1;
-        font-weight: 500;
-      }
-
-      .manual-toggle {
-        padding: 2px 4px;
-        font-size: 10px;
-        color: #6b7280;
-
-        &:hover {
-          color: #3b82f6;
-          background-color: #eff6ff;
-        }
-      }
-    }
-
-    .el-radio-group {
-      width: 100%;
-      margin-bottom: 6px;
-
-      .el-radio-button {
-        flex: 1;
-
-        :deep(.el-radio-button__inner) {
-          width: 100%;
-          font-size: 11px;
-          padding: 6px 8px;
-          border-radius: 6px;
-
-          &:disabled {
-            background-color: #f3f4f6;
-            border-color: #d1d5db;
-            color: #6b7280;
-          }
-        }
-
-        &.is-active :deep(.el-radio-button__inner) {
-          background-color: #3b82f6;
-          border-color: #3b82f6;
-          color: white;
-        }
-      }
-    }
-
-    .route-description {
-      .route-reason {
-        font-size: 10px;
-        color: #3b82f6;
-        font-weight: 500;
-        display: block;
-        margin-bottom: 2px;
-      }
-
-      .route-desc {
-        font-size: 10px;
-        color: #9ca3af;
-        font-style: italic;
-      }
-    }
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
   }
 
-  .flow-route {
-    padding: 12px;
-
-    .route-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #374151;
-      margin: 0 0 12px 0;
-      padding: 6px 8px;
-      background: #f3f4f6;
-      border-radius: 6px;
-      border-left: 3px solid #3b82f6;
-    }
-
-    .flow-steps {
-      .flow-step {
-        display: flex;
-        align-items: center;
-        padding: 8px 0;
-        border-bottom: 1px solid #f1f5f9;
-        transition: all 0.3s ease;
-
-        &:last-child {
-          border-bottom: none;
-        }
-
-        &.pending {
-          opacity: 0.6;
-
-          .step-number {
-            background: #e5e7eb;
-            color: #6b7280;
-          }
-        }
-
-        &.active {
-          background: #eff6ff;
-          border-radius: 6px;
-          padding: 8px;
-          margin: 2px 0;
-
-          .step-number {
-            background: #3b82f6;
-            color: white;
-            animation: pulse 1.5s infinite;
-          }
-
-          .step-title {
-            color: #1e40af;
-            font-weight: 600;
-          }
-        }
-
-        &.completed {
-          .step-number {
-            background: #10b981;
-            color: white;
-          }
-
-          .step-title {
-            color: #059669;
-            font-weight: 500;
-          }
-        }
-
-        .step-number {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #e5e7eb;
-          color: #6b7280;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 10px;
-          font-weight: 600;
-          flex-shrink: 0;
-          margin-right: 8px;
-          transition: all 0.3s ease;
-        }
-
-        .step-content {
-          flex: 1;
-          min-width: 0;
-
-          .step-title {
-            font-size: 11px;
-            font-weight: 500;
-            color: #374151;
-            margin-bottom: 2px;
-          }
-
-          .step-description {
-            font-size: 10px;
-            color: #6b7280;
-            line-height: 1.3;
-          }
-        }
-
-        .step-status {
-          margin-left: 8px;
-          flex-shrink: 0;
-
-          .el-icon {
-            font-size: 14px;
-
-            &.loading {
-              color: #3b82f6;
-              animation: rotating 1s linear infinite;
-            }
-
-            &.completed {
-              color: #10b981;
-            }
-
-            &.pending {
-              color: #9ca3af;
-            }
-          }
-        }
-      }
-    }
+  to {
+    transform: rotate(360deg);
   }
 }
 
-// 自定义API对话框样式
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 5px rgba(59, 130, 246, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* 自定义API对话框样式 */
 .api-info {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  border-left: 3px solid #409eff;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
 }
 </style>
