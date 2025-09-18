@@ -195,6 +195,7 @@ const completeCleaning = () => {
       :analysis-result="analysisResult"
       :selected-cleaning-actions="selectedCleaningActions"
       :cleaning-suggestions="cleaningSuggestions"
+      :cleaned-file-id="cleanedFileId"
       @complete="completeCleaning"
       @skip-and-upload="skipAndUpload"
       @analyze="startAnalysis" />

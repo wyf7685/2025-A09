@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
-import { CircleCheck, EditPen, RefreshRight, Upload } from '@element-plus/icons-vue';
-import { ElButton, ElCard, ElIcon, ElResult, ElTag } from 'element-plus';
+import { CircleCheck, EditPen, RefreshRight, Upload, View } from '@element-plus/icons-vue';
+import { ElButton, ElCard, ElDialog, ElIcon, ElResult, ElTag, ElMessage } from 'element-plus';
+import { ref } from 'vue';
+
+// 导入项目中统一的API实例
+import { cleaningAPI } from '@/utils/api';
 
 // 当前步骤的双向绑定
 const step = defineModel<CleaningStep>('step', { required: true });
 
 // 定义组件属性
-defineProps<{
+const props = defineProps<{
   analysisResult: AnalyzeDataQualityState | null;
   selectedCleaningActions: CleaningAction[];
   cleaningSuggestions: CleaningSuggestion[];
+  cleanedFileId?: string;
 }>();
 
 // 定义组件事件
@@ -20,6 +25,11 @@ const emit = defineEmits<{
   analyze: [];
 }>();
 
+// 代码查看相关状态
+const showCodeDialog = ref(false);
+const generatedCode = ref('');
+const isLoadingCode = ref(false);
+
 // 完成清洗
 const completeCleaningAndUpload = () => emit('complete');
 
@@ -28,6 +38,38 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
 
 // 重新分析
 const startAnalysis = () => emit('analyze');
+
+// 查看生成的清洗代码
+const viewGeneratedCode = async () => {
+  if (!props.cleanedFileId) {
+    ElMessage.warning('没有找到清洗文件ID');
+    return;
+  }
+
+  console.log('开始获取生成代码，文件ID:', props.cleanedFileId);
+  isLoadingCode.value = true;
+  showCodeDialog.value = true;
+  
+  try {
+    console.log('调用API获取生成代码...');
+    const response = await cleaningAPI.getGeneratedCode(props.cleanedFileId);
+    console.log('API响应:', response);
+    
+    if (response.success && response.generated_code) {
+      generatedCode.value = response.generated_code;
+      ElMessage.success('成功获取生成的清洗代码');
+    } else {
+      generatedCode.value = '暂无生成的代码';
+      ElMessage.warning(response.error || '暂无生成的代码');
+    }
+  } catch (error) {
+    console.error('获取生成代码失败:', error);
+    generatedCode.value = '获取代码失败，请稍后重试';
+    ElMessage.error('获取代码失败');
+  } finally {
+    isLoadingCode.value = false;
+  }
+};
 </script>
 
 <template>
@@ -66,6 +108,15 @@ const startAnalysis = () => emit('analyze');
             </el-icon>
             重新选择清洗操作
           </el-button>
+
+          <el-button @click="viewGeneratedCode" size="large" 
+            v-if="cleanedFileId" 
+            type="info">
+            <el-icon>
+              <View />
+            </el-icon>
+            查看生成的清洗代码
+          </el-button>
         </div>
 
         <div class="complete-summary" v-if="selectedCleaningActions.length > 0">
@@ -83,6 +134,25 @@ const startAnalysis = () => emit('analyze');
         </div>
       </template>
     </el-result>
+
+    <!-- 代码查看对话框 -->
+    <el-dialog 
+      v-model="showCodeDialog" 
+      title="生成的清洗代码" 
+      width="80%" 
+      class="code-dialog">
+      <div class="code-content">
+        <div v-if="isLoadingCode" class="loading-text">
+          正在加载代码...
+        </div>
+        <pre v-else class="code-block"><code>{{ generatedCode }}</code></pre>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showCodeDialog = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -139,6 +209,49 @@ const startAnalysis = () => emit('analyze');
         }
       }
     }
+  }
+}
+
+/* 代码对话框样式 */
+.code-dialog {
+  :deep(.el-dialog__body) {
+    padding: 0;
+  }
+
+  .code-content {
+    .loading-text {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #f9fafb;
+      border-radius: 0;
+      padding: 20px;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 500px;
+      overflow-y: auto;
+
+      code {
+        color: inherit;
+        background: transparent;
+        font-family: inherit;
+      }
+    }
+  }
+
+  .dialog-footer {
+    text-align: right;
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
   }
 }
 </style>
