@@ -148,11 +148,11 @@ onMounted(async () => {
   <div class="mcp-connections">
     <!-- 页面头部 -->
     <div class="page-header">
-      <div class="header-left">
+      <div class="header-content">
         <h1>MCP 连接管理</h1>
-        <p class="subtitle">管理和配置 Model Context Protocol 连接</p>
+        <p class="header-subtitle">管理和配置 Model Context Protocol 连接</p>
       </div>
-      <div class="header-right">
+      <div class="header-actions">
         <el-button
           type="primary"
           :icon="Plus"
@@ -286,29 +286,36 @@ onMounted(async () => {
 
 <style scoped>
 .mcp-connections {
+  min-height: 100vh;
+  background: #f8fafc;
   padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 0 8px;
 }
 
-.header-left h1 {
+.header-content h1 {
   margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
+  font-size: 32px;
+  font-weight: 700;
+  color: #1f2937;
 }
 
-.subtitle {
+.header-subtitle {
   margin: 0;
-  color: var(--el-text-color-regular);
-  font-size: 14px;
+  color: #6b7280;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .toolbar {

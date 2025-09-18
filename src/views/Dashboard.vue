@@ -71,7 +71,7 @@ onMounted(() => {
       <div class="card-header">
         <h3>
           <Icon icon="heroicons:rocket-launch" class="section-icon" />
-          <span class="card-header-text"> 快速开始</span>
+          <span class="card-header-text">快速开始</span>
         </h3>
         <p class="subtitle">选择一个操作开始您的数据分析之旅</p>
       </div>
@@ -83,7 +83,7 @@ onMounted(() => {
               <Icon icon="material-symbols:storage" />
             </div>
             <h4>数据管理</h4>
-            <p>连接 Dremio 等数据源</p>
+            <p>管理您的数据源</p>
             <div class="card-arrow">
               <Icon icon="heroicons:arrow-right" />
             </div>
