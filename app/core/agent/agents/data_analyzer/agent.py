@@ -15,7 +15,7 @@ from app.core.chain.llm import get_llm_async
 from app.log import logger
 from app.schemas.mcp import Connection
 from app.schemas.session import SessionID
-from app.utils import escape_tag
+from app.utils import escape_tag, run_sync
 
 from .context import AgentContext
 from .schemas import AgentValues, DataAnalyzerAgentState
@@ -65,8 +65,17 @@ class DataAnalyzerAgent:
         input = report_template or PROMPTS.default_report_template
         return await summary_chain(llm, self.get_messages()).ainvoke(input)
 
-    def _resume_from_state(self, state: DataAnalyzerAgentState) -> None:
-        """从状态恢复 agent"""
+    async def get_state(self) -> DataAnalyzerAgentState:
+        """获取当前 agent 状态"""
+        return DataAnalyzerAgentState(
+            values=cast("AgentValues", self.ctx.graph.get_state(self.ctx.runnable_config).values),
+            models=self.ctx.saved_models,
+            sources_random_state=self.ctx.sources.random_state,
+        )
+
+    @run_sync
+    def set_state(self, state: DataAnalyzerAgentState) -> None:
+        """设置当前 agent 状态"""
         self.ctx.graph.update_state(self.ctx.runnable_config, state.values)
         self.ctx.saved_models.clear()
         self.ctx.saved_models.update(state.models)
@@ -87,15 +96,11 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        await anyio.to_thread.run_sync(self._resume_from_state, state)
+        await self.set_state(state)
 
     async def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
-        state = DataAnalyzerAgentState(
-            values=cast("AgentValues", self.ctx.graph.get_state(self.ctx.runnable_config).values),
-            models=self.ctx.saved_models,
-            sources_random_state=self.ctx.sources.random_state,
-        )
+        state = await self.get_state()
         await anyio.Path(state_file).write_bytes(state.model_dump_json().encode("utf-8"))
         logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
 

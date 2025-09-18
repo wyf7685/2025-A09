@@ -1,10 +1,19 @@
 """
 工作流模型定义
 """
+
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+class WorkflowToolCall(BaseModel):
+    id: str
+    name: str
+    args: dict[str, Any]
+    result: Any | None = None
 
 
 class WorkflowDefinition(BaseModel):
@@ -15,8 +24,9 @@ class WorkflowDefinition(BaseModel):
     description: str = ""
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    tool_calls: list[dict] = Field(default_factory=list)
-    datasource_mappings: dict[str, str] = Field(default_factory=dict)
+    tool_calls: list[WorkflowToolCall] = Field(default_factory=list)
+    initial_datasets: dict[str, str] = Field(default_factory=dict)
+    source_rs: int
 
 
 class SaveWorkflowRequest(BaseModel):

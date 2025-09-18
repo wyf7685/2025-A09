@@ -9,28 +9,12 @@ import {
 import { computed, onMounted, ref, watch, type PropType } from 'vue';
 
 // 组件属性
-const props = defineProps({
-  // 是否显示对话框
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  // 如果为true，表示处于选择模式，用于选择一个工作流执行
-  selectionMode: {
-    type: Boolean,
-    default: false,
-  },
-  // 会话ID
-  sessionId: {
-    type: String,
-    default: '',
-  },
-  // 数据源列表
-  dataSources: {
-    type: Array as PropType<{ id: string; name: string; }[]>,
-    default: () => [],
-  },
-});
+const props = defineProps<{
+  visible: boolean;
+  selectionMode: boolean;
+  sessionId: string;
+  dataSources: { id: string; name: string; }[];
+}>();
 
 // 组件事件
 const emit = defineEmits(['update:visible', 'workflowSelected', 'workflowExecuted', 'cancel']);
@@ -82,8 +66,8 @@ const selectWorkflow = (workflow: WorkflowDefinition) => {
   dataSourceMappings.value = {};
 
   // 如果工作流有数据源映射，为每个数据源提供默认值
-  if (workflow.datasource_mappings) {
-    Object.keys(workflow.datasource_mappings).forEach(sourceId => {
+  if (workflow.initial_datasets) {
+    Object.keys(workflow.initial_datasets).forEach(sourceId => {
       if (props.dataSources && props.dataSources.length > 0) {
         // 默认映射到第一个可用的数据源
         dataSourceMappings.value[sourceId] = props.dataSources[0].id;
@@ -107,7 +91,7 @@ const executeSelectedWorkflow = async () => {
   }
 
   // 验证数据源映射是否完整
-  const requiredSourceIds = Object.keys(selectedWorkflow.value.datasource_mappings || {});
+  const requiredSourceIds = Object.keys(selectedWorkflow.value.initial_datasets || {});
   const mappedSourceIds = Object.keys(dataSourceMappings.value);
 
   const missingMappings = requiredSourceIds.filter(id => !dataSourceMappings.value[id]);
@@ -297,18 +281,18 @@ watch(() => props.visible, (newVal) => {
       <div v-if="selectedWorkflow" class="workflow-detail">
         <p class="description">{{ selectedWorkflow.description || '无描述' }}</p>
 
-        <div class="datasource-mappings" v-if="Object.keys(selectedWorkflow.datasource_mappings || {}).length > 0">
+        <div class="datasource-mappings" v-if="Object.keys(selectedWorkflow.initial_datasets || {}).length > 0">
           <h3>数据源映射 <el-tooltip content="工作流使用的数据源需要映射到当前会话的数据源才能执行"><el-icon>
                 <InfoFilled />
               </el-icon></el-tooltip></h3>
           <el-alert type="info" show-icon :closable="false" title="提示：将工作流中使用的原始数据源映射到当前会话的数据源"
             style="margin-bottom: 15px;" />
           <div class="mapping-list">
-            <div v-for="(sourceDesc, sourceId) in selectedWorkflow.datasource_mappings" :key="sourceId"
+            <div v-for="sourceId in Object.keys(selectedWorkflow.initial_datasets)" :key="sourceId"
               class="mapping-item">
               <div class="mapping-source">
                 <span class="source-label">工作流数据源:</span>
-                <span class="source-name">{{ sourceDesc }}</span>
+                <span class="source-name">{{ selectedWorkflow.initial_datasets[sourceId] }}</span>
               </div>
               <el-divider direction="vertical" />
               <div class="mapping-target">
@@ -356,7 +340,7 @@ watch(() => props.visible, (newVal) => {
           <el-button
             type="primary"
             @click="executeSelectedWorkflow"
-            :disabled="Object.keys(selectedWorkflow?.datasource_mappings || {}).some(id => !dataSourceMappings[id])"
+            :disabled="Object.keys(selectedWorkflow?.initial_datasets || {}).some(id => !dataSourceMappings[id])"
             :loading="executing">
             <el-icon>
               <VideoPlay />

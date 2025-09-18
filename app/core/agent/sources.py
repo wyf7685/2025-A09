@@ -52,9 +52,15 @@ class Sources:
     def _next_uuid(self) -> DatasetID:
         return str(uuid.UUID(bytes=self._random.randbytes(16), version=4))
 
-    def create(self, df: pd.DataFrame, new_id: DatasetID | None = None) -> DatasetID:
+    def create(
+        self,
+        df: pd.DataFrame,
+        new_id: DatasetID | None = None,
+        description: str | None = None,
+    ) -> DatasetID:
         dataset_id = new_id if new_id is not None else self._next_uuid()
-        self.sources[dataset_id] = create_df_source(df, dataset_id)
+        self.sources[dataset_id] = source = create_df_source(df, dataset_id)
+        source.metadata.description = description or "[Tool Generated Source]"
         logger.opt(colors=True).info(f"创建数据源: <c>{escape_tag(dataset_id)}</>")
         return dataset_id
 

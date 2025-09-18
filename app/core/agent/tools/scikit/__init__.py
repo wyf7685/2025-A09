@@ -473,7 +473,9 @@ def scikit_tools(
 
         logger.opt(colors=True).info(f"<g>使用模型进行预测</>, ID = <c>{escape_tag(model_id)}</>")
         prediction, result = predict_with_model(train_model_cache[model_id], sources.read(dataset_id), input_features)
-        result["prediction_dataset_id"] = sources.create(prediction, prediction_dataset_id)
+        result["prediction_dataset_id"] = sources.create(
+            prediction, prediction_dataset_id, f"[{model_id} 在 {dataset_id} 上的预测结果]"
+        )
         return result
 
     @tool(response_format="content_and_artifact")

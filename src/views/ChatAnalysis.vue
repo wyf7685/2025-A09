@@ -58,11 +58,17 @@ const workflowManagerDialogVisible = ref(false);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
-const currentDatasets = computed(() =>
+const currentDatasetMetadatas = computed(() =>
   sessionStore.currentSession
     ? sessionStore.currentSession.dataset_ids
       .map(id => dataSourceStore.dataSources[id] || null).filter(ds => ds)
     : null
+);
+const currentDatasets = computed(() =>
+  sessionStore.currentSession
+    ? sessionStore.currentSession.dataset_ids
+      .map(id => { return { id, name: dataSourceStore.dataSources[id]?.name || "unknown" }; })
+    : []
 );
 
 // 当前会话的MCP连接
@@ -374,7 +380,7 @@ const sendMessage = async (): Promise<void> => {
   await chat.sendMessage(
     userMessage,
     currentSessionId.value || null,
-    currentDatasets.value,
+    currentDatasetMetadatas.value,
     scrollToBottom,
   );
 };
@@ -442,14 +448,14 @@ onMounted(async () => {
       <!-- Chat Messages Area -->
       <ChatMessages :messages="messages"
         :currentSessionId="currentSessionId"
-        :currentDatasetExists="(currentDatasets?.length || 0) > 0"
+        :currentDatasetExists="(currentDatasetMetadatas?.length || 0) > 0"
         @add-sample-question="userInput = $event"
         ref="chatMessagesRef" />
 
       <!-- Chat Input Area -->
       <ChatInput v-model:input="userInput"
         :isProcessingChat="isProcessingChat"
-        :currentDatasets="currentDatasets"
+        :currentDatasets="currentDatasetMetadatas"
         :mcpConnections="currentMCPConnections"
         :sessionModels="sessionModels"
         @send="sendMessage"
@@ -489,7 +495,7 @@ onMounted(async () => {
       v-model:visible="workflowManagerDialogVisible"
       :selectionMode="true"
       :sessionId="currentSessionId || ''"
-      :dataSources="currentDatasets || []"
+      :dataSources="currentDatasets"
       @workflowExecuted="onWorkflowExecuted" />
   </div>
 </template>

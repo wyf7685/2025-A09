@@ -7,7 +7,7 @@ export interface WorkflowDefinition {
   created_at: string;
   updated_at: string;
   tool_calls: ToolCall[];
-  datasource_mappings: Record<string, string>; // 原始数据源ID -> 可映射的新数据源ID
+  initial_datasets: Record<string, string>; // 初始数据集名称列表
 }
 
 export interface WorkflowExecutionOptions {

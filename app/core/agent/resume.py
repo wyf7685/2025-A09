@@ -31,6 +31,7 @@ def resumable(tool_name: str, fn: ResumeCall | None = None, /) -> Callable[[Resu
     """
     装饰器，用于注册可恢复的工具函数
     """
+
     def decorator(fn: ResumeCall) -> ResumeCall:
         # 规范化工具名称（移除首尾空格）
         normalized_name = tool_name.strip()
@@ -96,7 +97,11 @@ def resumable(tool_name: str, fn: ResumeCall | None = None, /) -> Callable[[Resu
     return decorator if fn is None else decorator(fn)
 
 
-def resume_tool_call(tool_call: dict[str, Any] | ToolCall, extra: dict[str, Any]) -> Any:
+def is_resumable_tool(name: str) -> bool:
+    return name in _RESUME_TOOL_REGISTRY
+
+
+def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
     """
     恢复工具调用
 
@@ -111,7 +116,7 @@ def resume_tool_call(tool_call: dict[str, Any] | ToolCall, extra: dict[str, Any]
     name = tool_call["name"] if isinstance(tool_call, dict) else tool_call.name
 
     # 打印当前注册工具总数
-    logger.info(f"当前已注册的工具数量: {len(_RESUME_TOOL_REGISTRY)}")
+    # logger.info(f"当前已注册的工具数量: {len(_RESUME_TOOL_REGISTRY)}")
 
     # 工具名称映射表（旧名称 -> 新名称）
     tool_name_mappings = {
@@ -194,4 +199,4 @@ def resume_tool_call(tool_call: dict[str, Any] | ToolCall, extra: dict[str, Any]
     # 如果无法匹配，提供更详细的诊断信息
     logger.error(f"工具 {name} 未找到匹配")
     logger.info(f"所有注册的工具名称: {list(_RESUME_TOOL_REGISTRY.keys())}")
-    return f"工具 {name} 未注册（尝试映射到 {mapped_name} 失败）"
+    raise ValueError(f"工具 {name} 未注册（尝试映射到 {mapped_name} 失败）")

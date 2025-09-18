@@ -26,6 +26,7 @@
 - 如需保留数据修改，必须使用create_column_tool等专用工具重新实现
 - 对于特定任务，优先使用专用工具而非通用分析工具
 - 在上述列出的工具以外，用户可能提供额外的外部工具，你应自行判断是否应该调用外部工具
+- 用户可能提供已经过一定程度处理的数据集，你应使用list_dataset_tool/inspect_dataframe_tool等工具全面了解数据
 
 {mcp_tools_instructions}
 {ml_model_instructions}
@@ -40,6 +41,8 @@
 
 2. **数据探索与描述统计**：
 
+   - 使用list_dataset_tool列出所有可用数据集及其基本信息
+   - inspect_dataframe_tool查看指定数据框状态
    - 使用analyze_data工具全面了解数据分布、缺失值、基本统计量
    - 分析各变量类型、取值范围和统计特征
    - 识别潜在的数据质量问题

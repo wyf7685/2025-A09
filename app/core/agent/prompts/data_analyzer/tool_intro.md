@@ -3,7 +3,7 @@
   - rename_dataset_tool：重命名数据集，使其ID更符合分析任务的语义
 - **数据探索与可视化**：
   - analyze_data工具：进行灵活的探索性分析和可视化
-  - inspect_dataframe_tool：查看当前数据框状态，尤其是在数据修改后
+  - inspect_dataframe_tool：查看指定数据框当前状态，尤其是在数据修改后
 - **数据处理与特征工程**：
   - create_column_tool：创建新列或转换现有列
   - create_interaction_term_tool：创建特征交互项

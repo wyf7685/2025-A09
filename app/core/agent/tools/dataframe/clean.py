@@ -155,7 +155,7 @@ def infer_and_convert_dtypes(
         "null_counts": {col: int(df_copy[col].isna().sum()) for col in columns},
     }
 
-    new_dataset_id = sources.create(df_copy, new_dataset_id)
+    new_dataset_id = sources.create(df_copy, new_dataset_id, f"[自动推断并转换自{dataset_id}的数据集]")
     if in_place:
         sources.rename(new_dataset_id, dataset_id)
         new_dataset_id = dataset_id
@@ -268,7 +268,7 @@ def fix_misaligned_data(
         # 保存修复后的样本
         sample_after = df_copy.head(3).to_dict()
 
-        new_dataset_id = sources.create(df_copy, new_dataset_id)
+        new_dataset_id = sources.create(df_copy, new_dataset_id, f"[自动修复自{dataset_id}的数据集]")
         if in_place:
             sources.rename(new_dataset_id, dataset_id)
             new_dataset_id = dataset_id

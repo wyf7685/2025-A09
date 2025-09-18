@@ -106,7 +106,7 @@ def join_dataframes(
             result_df = df_left.merge(df_right, how=join_type, left_on=left_on, right_on=right_on)
 
         # 保存结果数据集
-        dataset_id = sources.create(result_df, new_dataset_id)
+        dataset_id = sources.create(result_df, new_dataset_id, f"[连接自{left_dataset_id}和{right_dataset_id}的数据集]")
 
         # 生成结果
         join_details = {
@@ -264,7 +264,7 @@ def combine_dataframes(
                     result_df = pd.DataFrame(columns=dfs[0].columns)  # 空DataFrame，保持列名
 
         # 保存结果数据集
-        dataset_id = sources.create(result_df, new_dataset_id)
+        dataset_id = sources.create(result_df, new_dataset_id, f"[{operation}自{', '.join(dataset_ids)}的数据集]")
 
         # 生成结果
         combine_details = {
@@ -370,7 +370,7 @@ def create_dataset_from_query(
             }
 
         # 保存结果数据集
-        dataset_id = sources.create(filtered_df, new_dataset_id)
+        dataset_id = sources.create(filtered_df, new_dataset_id, f"[查询自{dataset_id}的数据集, 查询语句: {query}]")
 
         # 生成结果
         creation_details = {
@@ -497,7 +497,7 @@ def create_dataset_by_sampling(
             sampled_df = source_df.sample(**sample_kwargs).reset_index(drop=True)
 
         # 保存结果数据集
-        dataset_id = sources.create(sampled_df, new_dataset_id)
+        dataset_id = sources.create(sampled_df, new_dataset_id, f"[采样自{dataset_id}的数据集, 采样: {sample_desc}]")
 
         # 生成结果
         creation_details = {
