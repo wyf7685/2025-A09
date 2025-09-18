@@ -241,6 +241,18 @@ export const cleaningAPI = {
     });
     return response.data;
   },
+
+  // 获取生成的清洗代码
+  getGeneratedCode: async (cleanedFileId: string): Promise<{
+    success: boolean;
+    file_id?: string;
+    generated_code?: string;
+    message?: string;
+    error?: string;
+  }> => {
+    const response = await api.get(`/clean/${cleanedFileId}/code`);
+    return response.data;
+  },
 };
 
 // 数据源管理相关 API

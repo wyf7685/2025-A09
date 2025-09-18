@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 # 创建路由实例
 router = APIRouter(prefix="/clean", tags=["数据清洗"])
 
+# 内存存储：文件ID -> 生成的清洗代码
+_generated_code_storage: dict[str, str] = {}
+
 
 @router.post("/analyze")
 async def analyze_data_quality(
@@ -211,6 +214,13 @@ async def execute_cleaning(
                 raise HTTPException(status_code=500, detail=result.message)
             assert is_success(result)
 
+            # 调试：检查result对象的内容
+            logger.info(f"执行清洗后 - 结果对象类型: {type(result)}")
+            logger.info(f"执行清洗后 - 结果对象属性: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+            logger.info(f"执行清洗后 - result.generated_code 存在: {hasattr(result, 'generated_code')}")
+            if hasattr(result, 'generated_code'):
+                logger.info(f"执行清洗后 - generated_code 长度: {len(result.generated_code) if result.generated_code else 0}")
+
             # 构建返回结果
             response = {
                 "file_info": {
@@ -225,6 +235,7 @@ async def execute_cleaning(
                 "applied_operations": result.applied_operations,
                 "final_columns": result.final_columns,
                 "field_mappings_applied": result.field_mappings_applied,
+                "generated_code": result.generated_code,  # 添加AI生成的代码
                 "cleaned_data_info": {
                     "shape": result.summary.final_shape,
                     "rows": result.summary.final_shape[0],
@@ -251,7 +262,19 @@ async def execute_cleaning(
                 cleaned_df.to_excel(cleaned_file_path, index=False)
                 logger.info("数据已保存为Excel文件")
 
+            logger.info(f"准备注册临时文件: {cleaned_file_path}")
             response["cleaned_file_id"] = await temp_file_service.register(cleaned_file_path)
+            logger.info(f"临时文件注册完成，文件ID: {response['cleaned_file_id']}")
+            
+            # 保存生成的代码到内存存储
+            logger.info(f"准备保存生成代码 - 文件ID: {response['cleaned_file_id']}, 代码存在: {bool(result.generated_code)}")
+            if response["cleaned_file_id"] and result.generated_code:
+                _generated_code_storage[response["cleaned_file_id"]] = result.generated_code
+                logger.info(f"已保存生成的代码到存储，文件ID: {response['cleaned_file_id']}")
+                logger.info(f"存储后的key列表: {list(_generated_code_storage.keys())}")
+                logger.debug(f"存储的代码内容: {result.generated_code[:200]}...")  # 只记录前200个字符
+            else:
+                logger.warning(f"未保存代码 - 文件ID: {response['cleaned_file_id']}, 代码: {bool(result.generated_code)}")
 
             # 记录日志
             logger.info(
@@ -348,6 +371,7 @@ async def analyze_and_clean(
                 "field_mappings": result.field_mappings,
                 "applied_operations": result.applied_operations,
                 "summary": result.summary,
+                "generated_code": result.cleaning_result.generated_code,  # 添加AI生成的代码
             }
 
             # 保存清洗后的数据到临时文件
@@ -360,6 +384,16 @@ async def analyze_and_clean(
                 cleaned_df.to_excel(cleaned_file_path, index=False)
 
             response["cleaned_file_id"] = await temp_file_service.register(cleaned_file_path)
+            
+            # 保存生成的代码到内存存储
+            logger.info(f"准备保存生成代码 - 文件ID: {response['cleaned_file_id']}, 代码存在: {bool(result.cleaning_result.generated_code)}")
+            if response["cleaned_file_id"] and result.cleaning_result.generated_code:
+                _generated_code_storage[response["cleaned_file_id"]] = result.cleaning_result.generated_code
+                logger.info(f"已保存生成的代码到存储，文件ID: {response['cleaned_file_id']}")
+                logger.info(f"存储后的key列表: {list(_generated_code_storage.keys())}")
+            else:
+                logger.warning(f"未保存代码 - 文件ID: {response['cleaned_file_id']}, 代码: {bool(result.cleaning_result.generated_code)}")
+                
             response["cleaned_data_info"] = {
                 "shape": cleaned_df.shape,
                 "rows": len(cleaned_df),
@@ -550,3 +584,38 @@ async def save_field_mappings(request: FieldMappingRequest) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"保存字段映射失败: {e}")
         raise HTTPException(status_code=500, detail=f"保存失败: {e}") from e
+
+
+@router.get("/{file_id}/code")
+async def get_generated_code(file_id: str) -> dict[str, Any]:
+    """
+    获取指定文件ID的生成清洗代码
+    
+    Args:
+        file_id: 清洗后的文件ID
+        
+    Returns:
+        包含生成代码的响应
+    """
+    try:
+        logger.info(f"尝试获取文件ID的生成代码: {file_id}")
+        logger.info(f"当前存储中的文件ID列表: {list(_generated_code_storage.keys())}")
+        
+        if file_id not in _generated_code_storage:
+            raise HTTPException(status_code=404, detail="未找到该文件的生成代码")
+            
+        generated_code = _generated_code_storage[file_id]
+        logger.info(f"成功获取文件 {file_id} 的生成代码，长度: {len(generated_code)}")
+        
+        return {
+            "success": True,
+            "file_id": file_id,
+            "generated_code": generated_code,
+            "message": "代码获取成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取生成代码失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取代码失败: {e}") from e
