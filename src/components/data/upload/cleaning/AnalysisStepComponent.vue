@@ -2,6 +2,7 @@
 import type { AnalyzeDataQualityState, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue';
 import { ElAlert, ElButton, ElEmpty, ElIcon } from 'element-plus';
+import { Icon } from '@iconify/vue';
 import DataQualityReportDetail from './DataQualityReport.vue';
 import FieldMappingsGrid from './FieldMappingsGrid.vue';
 import QualitySummaryCards from './QualitySummaryCards.vue';
@@ -28,9 +29,7 @@ const emit = defineEmits<{
     <div v-if="isAnalyzing" class="loading-status">
       <el-empty description="正在智能分析数据质量，请稍候...">
         <template #image>
-          <el-icon size="60" color="#667eea">
-            <DataAnalysis />
-          </el-icon>
+          <Icon icon="line-md:loading-loop" width="60" height="60" color="#667eea" />
         </template>
       </el-empty>
     </div>
@@ -59,23 +58,17 @@ const emit = defineEmits<{
         <div class="action-buttons">
           <el-button type="primary" @click="emit('gotoCleaning')" :disabled="cleaningSuggestions.length === 0"
             size="large">
-            <el-icon>
-              <ArrowRight />
-            </el-icon>
+            <Icon icon="material-symbols:cleaning-services-outline-rounded" width="18" height="18" style="margin-right: 4px;" />
             下一步：执行清洗操作 ({{ cleaningSuggestions.length }})
           </el-button>
 
           <el-button type="success" @click="emit('skipAndUpload')" size="large" :disabled="!dataQualityReport">
-            <el-icon>
-              <Upload />
-            </el-icon>
+            <Icon icon="material-symbols:upload-rounded" width="18" height="18" style="margin-right: 4px;" />
             {{ cleaningSuggestions.length === 0 ? '直接上传数据' : '忽略问题，仅应用字段映射并上传' }}
           </el-button>
 
           <el-button @click="emit('gotoUpload')" size="large">
-            <el-icon>
-              <Back />
-            </el-icon>
+            <Icon icon="material-symbols:arrow-back-rounded" width="18" height="18" style="margin-right: 4px;" />
             返回上传
           </el-button>
         </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload, UploadFilled } from '@element-plus/icons-vue';
 import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElRow, ElSelect, ElUpload, type UploadFile } from 'element-plus';
+import { Icon } from '@iconify/vue';
 import { ref } from 'vue';
 
 // 双向绑定数据
@@ -76,7 +77,7 @@ const handleDragleave = () => {
     <!-- 文件详情 -->
     <div v-if="selectedFile" class="file-details">
       <div class="file-icon">
-        <el-icon size="48" color="#667eea">
+        <el-icon size="48" color="#409EFF">
           <Document />
         </el-icon>
       </div>
@@ -92,7 +93,7 @@ const handleDragleave = () => {
           :on-change="handleFileUpload" :multiple="false" @dragover="handleDragover"
           @dragleave="handleDragleave">
           <div class="upload-content" :class="{ 'active-drag': dragover }">
-            <el-icon class="upload-icon">
+            <el-icon class="upload-icon" size="60" color="#409EFF">
               <UploadFilled />
             </el-icon>
             <div class="upload-text">
@@ -140,9 +141,7 @@ const handleDragleave = () => {
           <el-input v-model="userRequirements" type="textarea"
             placeholder="例如：请重点关注数据标准化，确保所有列名都符合命名规范，处理缺失值，并验证邮箱格式..." :rows="3" show-word-limit maxlength="500" />
           <div class="hint-text">
-            <el-icon>
-              <InfoFilled />
-            </el-icon>
+            <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
             描述您的具体清洗需求，AI将根据您的要求生成个性化的清洗建议
           </div>
         </el-form-item>
@@ -156,9 +155,7 @@ const handleDragleave = () => {
                 :value="model.value" />
             </el-select>
             <div class="hint-text">
-              <el-icon>
-                <InfoFilled />
-              </el-icon>
+              <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
               不同模型在字段理解和建议生成方面各有特色
             </div>
           </el-form-item>
@@ -172,13 +169,13 @@ const handleDragleave = () => {
         取消
       </el-button>
       <el-button type="primary" @click="skipAnalysisAndUpload" size="large">
-        <el-icon>
+        <el-icon style="margin-right: 4px;">
           <Upload />
         </el-icon>
         跳过分析，直接上传
       </el-button>
       <el-button type="success" @click="startAnalysis" :loading="isAnalyzing" size="large">
-        <el-icon>
+        <el-icon style="margin-right: 4px;">
           <DataAnalysis />
         </el-icon>
         开始智能分析
@@ -220,9 +217,10 @@ const handleDragleave = () => {
       }
 
       .upload-icon {
-        font-size: 48px;
-        color: #667eea;
         margin-bottom: 16px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
 
       .upload-text {

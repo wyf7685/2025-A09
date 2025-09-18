@@ -5,6 +5,14 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import './assets/styles/main.scss';
 
+// Iconify configuration
+import { addAPIProvider } from '@iconify/vue';
+
+// 配置Iconify API提供者
+addAPIProvider('', {
+  resources: ['https://api.iconify.design'],
+});
+
 const app = createApp(App);
 
 app.use(createPinia());

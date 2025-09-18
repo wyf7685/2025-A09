@@ -2,6 +2,7 @@
 import type { CleaningStep } from '@/types/cleaning';
 import { CircleCheck, CircleClose } from '@element-plus/icons-vue';
 import { ElIcon } from 'element-plus';
+import { Icon } from '@iconify/vue';
 
 // 组件属性
 defineProps<{
@@ -10,30 +11,34 @@ defineProps<{
 
 // 步骤配置
 const steps = [
-  { key: 'upload', name: '文件上传' },
-  { key: 'analysis', name: '智能分析' },
-  { key: 'cleaning', name: '清洗建议' },
-  { key: 'complete', name: '完成上传' },
-] as { key: CleaningStep, name: string; }[];
+  { key: 'upload', name: '文件上传', icon: 'mdi:cloud-upload' },
+  { key: 'analysis', name: '智能分析', icon: 'material-symbols:analytics-outline-rounded' },
+  { key: 'cleaning', name: '清洗建议', icon: 'material-symbols:cleaning-services-outline-rounded' },
+  { key: 'complete', name: '完成上传', icon: 'material-symbols:check-circle-outline-rounded' },
+] as { key: CleaningStep, name: string, icon: string; }[];
+
+// 获取步骤索引
+const getStepIndex = (step: CleaningStep) => {
+  return steps.findIndex(s => s.key === step);
+};
 </script>
 
 <template>
   <div class="cleaning-steps">
-    <div class="step" v-for="stepItem in steps" :key="stepItem.key" :class="{ active: currentStep === stepItem.key }">
+    <div class="step" v-for="stepItem in steps" :key="stepItem.key" :class="{ 
+      active: currentStep === stepItem.key,
+      completed: getStepIndex(currentStep) > getStepIndex(stepItem.key)
+    }">
       <div class="step-icon">
-        <el-icon>
-          <template v-if="currentStep !== 'upload' && currentStep !== stepItem.key">
-            <el-icon>
-              <Check />
-            </el-icon>
-          </template>
-          <template v-else-if="currentStep === stepItem.key">
-            <CircleCheck />
-          </template>
-          <template v-else>
-            <CircleClose />
-          </template>
-        </el-icon>
+        <template v-if="getStepIndex(currentStep) > getStepIndex(stepItem.key)">
+          <Icon :icon="'material-symbols:check-circle-rounded'" width="24" height="24" color="#67C23A" />
+        </template>
+        <template v-else-if="currentStep === stepItem.key">
+          <Icon :icon="stepItem.icon" width="24" height="24" color="#409EFF" />
+        </template>
+        <template v-else>
+          <Icon :icon="stepItem.icon" width="24" height="24" color="#C0C4CC" />
+        </template>
       </div>
       <div class="step-title">{{ stepItem.name }}</div>
     </div>
