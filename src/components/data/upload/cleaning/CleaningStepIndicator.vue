@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import type { CleaningStep } from '@/types/cleaning';
-import { CircleCheck, CircleClose } from '@element-plus/icons-vue';
-import { ElIcon } from 'element-plus';
 import { Icon } from '@iconify/vue';
 
 // 组件属性
@@ -25,7 +23,7 @@ const getStepIndex = (step: CleaningStep) => {
 
 <template>
   <div class="cleaning-steps">
-    <div class="step" v-for="stepItem in steps" :key="stepItem.key" :class="{ 
+    <div class="step" v-for="stepItem in steps" :key="stepItem.key" :class="{
       active: currentStep === stepItem.key,
       completed: getStepIndex(currentStep) > getStepIndex(stepItem.key)
     }">

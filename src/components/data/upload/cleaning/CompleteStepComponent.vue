@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
-import { CircleCheck, EditPen, RefreshRight, Upload, View } from '@element-plus/icons-vue';
-import { ElButton, ElCard, ElDialog, ElIcon, ElResult, ElTag, ElMessage } from 'element-plus';
 import { Icon } from '@iconify/vue';
+import { ElButton, ElCard, ElDialog, ElMessage, ElResult, ElTag } from 'element-plus';
 import { ref } from 'vue';
 
 // 导入项目中统一的API实例
@@ -50,12 +49,12 @@ const viewGeneratedCode = async () => {
   console.log('开始获取生成代码，文件ID:', props.cleanedFileId);
   isLoadingCode.value = true;
   showCodeDialog.value = true;
-  
+
   try {
     console.log('调用API获取生成代码...');
     const response = await cleaningAPI.getGeneratedCode(props.cleanedFileId);
     console.log('API响应:', response);
-    
+
     if (response.success && response.generated_code) {
       generatedCode.value = response.generated_code;
       ElMessage.success('成功获取生成的清洗代码');
@@ -85,12 +84,14 @@ const viewGeneratedCode = async () => {
         <div class="complete-actions">
           <el-button type="primary" @click="completeCleaningAndUpload" size="large"
             v-if="analysisResult?.data_uploaded">
-            <Icon icon="material-symbols:check-circle-outline-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <Icon icon="material-symbols:check-circle-outline-rounded" width="18" height="18"
+              style="margin-right: 4px;" />
             关闭并查看数据源列表
           </el-button>
 
           <el-button type="primary" @click="skipAnalysisAndUpload" size="large" v-if="!analysisResult?.data_uploaded">
-            <Icon icon="material-symbols:cloud-upload-outline-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <Icon icon="material-symbols:cloud-upload-outline-rounded" width="18" height="18"
+              style="margin-right: 4px;" />
             立即上传数据
           </el-button>
 
@@ -105,8 +106,8 @@ const viewGeneratedCode = async () => {
             重新选择清洗操作
           </el-button>
 
-          <el-button @click="viewGeneratedCode" size="large" 
-            v-if="cleanedFileId" 
+          <el-button @click="viewGeneratedCode" size="large"
+            v-if="cleanedFileId"
             type="info">
             <Icon icon="material-symbols:code-rounded" width="18" height="18" style="margin-right: 4px;" />
             查看生成的清洗代码
@@ -130,11 +131,7 @@ const viewGeneratedCode = async () => {
     </el-result>
 
     <!-- 代码查看对话框 -->
-    <el-dialog 
-      v-model="showCodeDialog" 
-      title="生成的清洗代码" 
-      width="80%" 
-      class="code-dialog">
+    <el-dialog v-model="showCodeDialog" title="生成的清洗代码" width="80%" class="code-dialog">
       <div class="code-content">
         <div v-if="isLoadingCode" class="loading-text">
           正在加载代码...

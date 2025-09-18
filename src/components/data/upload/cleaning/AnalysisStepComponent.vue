@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
-import { ArrowRight, Back, DataAnalysis, Upload } from '@element-plus/icons-vue';
-import { ElAlert, ElButton, ElEmpty, ElIcon } from 'element-plus';
 import { Icon } from '@iconify/vue';
+import { ElAlert, ElButton, ElEmpty } from 'element-plus';
 import DataQualityReportDetail from './DataQualityReport.vue';
 import FieldMappingsGrid from './FieldMappingsGrid.vue';
 import QualitySummaryCards from './QualitySummaryCards.vue';
@@ -58,7 +57,8 @@ const emit = defineEmits<{
         <div class="action-buttons">
           <el-button type="primary" @click="emit('gotoCleaning')" :disabled="cleaningSuggestions.length === 0"
             size="large">
-            <Icon icon="material-symbols:cleaning-services-outline-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <Icon icon="material-symbols:cleaning-services-outline-rounded" width="18" height="18"
+              style="margin-right: 4px;" />
             下一步：执行清洗操作 ({{ cleaningSuggestions.length }})
           </el-button>
 

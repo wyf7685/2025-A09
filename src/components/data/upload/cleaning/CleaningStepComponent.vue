@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
-import { Back, DocumentChecked, Upload } from '@element-plus/icons-vue';
-import { ElAlert, ElButton, ElEmpty, ElIcon } from 'element-plus';
 import { Icon } from '@iconify/vue';
+import { ElAlert, ElButton, ElEmpty } from 'element-plus';
 import CleaningSuggestionItem from './CleaningSuggestionItem.vue';
 
 // 当前步骤的双向绑定

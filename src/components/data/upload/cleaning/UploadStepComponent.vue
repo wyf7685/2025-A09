@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowRight, DataAnalysis, Document, InfoFilled, Upload, UploadFilled } from '@element-plus/icons-vue';
-import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElRow, ElSelect, ElUpload, type UploadFile } from 'element-plus';
+import { ArrowDown, ArrowRight, DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
+import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElRow, ElSelect, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
 
 // 双向绑定数据
