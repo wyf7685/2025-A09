@@ -106,7 +106,7 @@ async def get_available_models() -> ModelsResponse:
 
     # 获取自定义模型
     custom_models = custom_model_manager.list_models()
-    
+
     # 只返回用户自定义的模型
     for model_config in custom_models.values():
         # 检查自定义模型是否有有效的API密钥

@@ -46,7 +46,7 @@ const getStatusColor = (available: boolean): string => {
 const getProviderColor = (provider: string): string => {
   const colorMap: Record<string, string> = {
     'OpenAI': '#00a67e',
-    'Google': '#4285f4', 
+    'Google': '#4285f4',
     'DeepSeek': '#8b5cf6',
     'Anthropic': '#d97706'
   };
@@ -84,7 +84,7 @@ const fetchLLMModels = async (): Promise<void> => {
 
 const editLLMModel = async (model: any): Promise<void> => {
   currentEditLLMModel.value = model;
-  
+
   try {
     const customModelConfig = await modelStore.getCustomModel(model.id);
     llmModelForm.value = {
@@ -99,7 +99,7 @@ const editLLMModel = async (model: any): Promise<void> => {
     ElMessage.error('获取模型配置失败');
     return;
   }
-  
+
   showEditLLMDialog.value = true;
 };
 
@@ -165,7 +165,7 @@ const saveLLMModel = async (): Promise<void> => {
 
     // 如果用户没有填写 API URL，使用默认值
     const finalApiUrl = llmModelForm.value.apiUrl.trim() || getDefaultApiUrl(llmModelForm.value.provider);
-    
+
     // 直接使用选择的模型名称作为API调用名称（因为它来自预设列表，保证正确）
     const apiModelName = llmModelForm.value.modelName;
 
@@ -251,13 +251,13 @@ onMounted(async () => {
       <div v-if="llmModels.length > 0" class="llm-models-grid">
         <el-card v-for="llmModel in llmModels" :key="llmModel.id" class="llm-model-card" shadow="hover">
           <div class="llm-model-header">
-            <div class="model-icon" :style="{ background: `linear-gradient(135deg, ${getProviderColor(llmModel.provider)}15, ${getProviderColor(llmModel.provider)}25)` }">
-              <Icon 
-                :icon="getProviderIcon(llmModel.provider)" 
-                width="28" 
-                height="28" 
-                :color="getProviderColor(llmModel.provider)"
-              />
+            <div class="model-icon"
+              :style="{ background: `linear-gradient(135deg, ${getProviderColor(llmModel.provider)}15, ${getProviderColor(llmModel.provider)}25)` }">
+              <Icon
+                :icon="getProviderIcon(llmModel.provider)"
+                width="28"
+                height="28"
+                :color="getProviderColor(llmModel.provider)" />
             </div>
             <div class="model-info">
               <h3>{{ llmModel.name }}</h3>
@@ -270,12 +270,11 @@ onMounted(async () => {
             </div>
             <div class="model-status">
               <div class="status-indicator" :class="{ 'status-active': llmModel.available }">
-                <Icon 
-                  :icon="llmModel.available ? 'material-symbols:check-circle' : 'material-symbols:error-circle-rounded'" 
-                  width="16" 
-                  height="16" 
-                  :color="getStatusColor(llmModel.available ?? false)"
-                />
+                <Icon
+                  :icon="llmModel.available ? 'material-symbols:check-circle' : 'material-symbols:error-circle-rounded'"
+                  width="16"
+                  height="16"
+                  :color="getStatusColor(llmModel.available ?? false)" />
                 <span class="status-text">{{ llmModel.available ? '已配置' : '未配置' }}</span>
               </div>
             </div>
@@ -322,12 +321,11 @@ onMounted(async () => {
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
                 :value="provider.name">
                 <div class="provider-option">
-                  <Icon 
-                    :icon="getProviderIcon(provider.name)" 
-                    width="18" 
-                    height="18" 
-                    :color="getProviderColor(provider.name)"
-                  />
+                  <Icon
+                    :icon="getProviderIcon(provider.name)"
+                    width="18"
+                    height="18"
+                    :color="getProviderColor(provider.name)" />
                   <span>{{ provider.name }}</span>
                 </div>
               </el-option>
@@ -369,12 +367,8 @@ onMounted(async () => {
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
                 :value="provider.name">
                 <div class="provider-option">
-                  <Icon 
-                    :icon="getProviderIcon(provider.name)" 
-                    width="18" 
-                    height="18" 
-                    :color="getProviderColor(provider.name)"
-                  />
+                  <Icon :icon="getProviderIcon(provider.name)" width="18" height="18"
+                    :color="getProviderColor(provider.name)" />
                   <span>{{ provider.name }}</span>
                 </div>
               </el-option>

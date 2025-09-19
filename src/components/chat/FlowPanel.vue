@@ -859,13 +859,13 @@ onMounted(async () => {
       height: 18px;
       line-height: 16px;
       padding: 0 6px;
-      
+
       &.el-tag--success {
         background-color: #f0f9ff;
         border-color: #60a5fa;
         color: #1e40af;
       }
-      
+
       &.el-tag--danger {
         background-color: #fef2f2;
         border-color: #fca5a5;
