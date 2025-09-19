@@ -108,11 +108,6 @@ async def get_available_models() -> ModelsResponse:
             ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=True),
             ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=True),
         ]
-    else:
-        models += [
-            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=False),
-            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=False),
-        ]
 
     # OpenAI Models (only if using real OpenAI API)
     if settings.OPENAI_API_KEY and not settings.OPENAI_API_BASE:
@@ -130,12 +125,12 @@ async def get_available_models() -> ModelsResponse:
     if settings.OPENAI_API_KEY and settings.OPENAI_API_BASE:
         models += [
             ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=True),
-            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=True),
+            ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek", available=True),
         ]
     else:
         models += [
             ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=False),
-            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=False),
+            ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek", available=False),
         ]
 
     # 添加自定义模型

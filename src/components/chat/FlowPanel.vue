@@ -5,7 +5,7 @@ import type { FlowPanel, FlowStep, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Loading, Monitor, Setting } from '@element-plus/icons-vue';
 import {
   ElButton, ElDialog, ElForm, ElFormItem, ElIcon, ElInput, ElMessage,
-  ElOption, ElOptionGroup, ElSelect, ElText
+  ElOption, ElOptionGroup, ElSelect, ElTag, ElText
 } from 'element-plus';
 import { computed, onMounted, ref } from 'vue';
 
@@ -666,7 +666,9 @@ onMounted(async () => {
               :label="model.name" :value="model.id">
               <div class="model-option">
                 <span class="model-name">{{ model.name }}</span>
-                <span v-if="!model.available" class="model-status">(未配置)</span>
+                <el-tag :type="model.available ? 'success' : 'danger'" size="small" class="model-tag">
+                  {{ model.available ? '已配置' : '未配置' }}
+                </el-tag>
               </div>
             </el-option>
           </el-option-group>
@@ -1017,10 +1019,24 @@ onMounted(async () => {
       margin-left: 8px;
     }
 
-    .model-status {
+    .model-tag {
       font-size: 9px;
-      color: #ef4444;
-      font-style: italic;
+      margin-left: 8px;
+      height: 18px;
+      line-height: 16px;
+      padding: 0 6px;
+      
+      &.el-tag--success {
+        background-color: #f0f9ff;
+        border-color: #60a5fa;
+        color: #1e40af;
+      }
+      
+      &.el-tag--danger {
+        background-color: #fef2f2;
+        border-color: #fca5a5;
+        color: #dc2626;
+      }
     }
   }
 
