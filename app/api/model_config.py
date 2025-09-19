@@ -107,26 +107,45 @@ async def get_available_models() -> ModelsResponse:
 
     # Google Models - 只有在用户配置过的情况下才标记为available
     models += [
-        ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google",
-                 available="custom-gemini-2.0-flash" in configured_model_ids),
-        ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google",
-                 available="custom-gemini-1.5-pro" in configured_model_ids),
+        ModelInfo(
+            id="gemini-2.0-flash",
+            name="Gemini 2.0 Flash",
+            provider="Google",
+            available="custom-gemini-2.0-flash" in configured_model_ids,
+        ),
+        ModelInfo(
+            id="gemini-1.5-pro",
+            name="Gemini 1.5 Pro",
+            provider="Google",
+            available="custom-gemini-1.5-pro" in configured_model_ids,
+        ),
     ]
 
     # OpenAI Models - 只有在用户配置过的情况下才标记为available
     models += [
-        ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI",
-                 available="custom-gpt-4" in configured_model_ids),
-        ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI",
-                 available="custom-gpt-3.5-turbo" in configured_model_ids),
+        ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available="custom-gpt-4" in configured_model_ids),
+        ModelInfo(
+            id="gpt-3.5-turbo",
+            name="GPT-3.5 Turbo",
+            provider="OpenAI",
+            available="custom-gpt-3.5-turbo" in configured_model_ids,
+        ),
     ]
 
     # DeepSeek Models - 只有在用户配置过的情况下才标记为available
     models += [
-        ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek",
-                 available="custom-deepseek-chat" in configured_model_ids),
-        ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek",
-                 available="custom-deepseek-reasoner" in configured_model_ids),
+        ModelInfo(
+            id="deepseek-chat",
+            name="DeepSeek V3",
+            provider="DeepSeek",
+            available="custom-deepseek-chat" in configured_model_ids,
+        ),
+        ModelInfo(
+            id="deepseek-reasoner",
+            name="DeepSeek R1",
+            provider="DeepSeek",
+            available="custom-deepseek-reasoner" in configured_model_ids,
+        ),
     ]
 
     # 添加自定义模型
