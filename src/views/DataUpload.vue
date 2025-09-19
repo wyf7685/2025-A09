@@ -155,7 +155,13 @@ const handleDatabaseConnect = (params: {
 .data-upload-view {
   padding: 20px;
   background-color: #f9fafb;
-  min-height: calc(100vh - 60px); // 减去顶部导航的高度
+  min-height: calc(100vh - 32px);
+  /* 减去 layout-content 的 padding */
+  margin: -16px;
+  /* 抵消 layout-content 的 padding */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 
   .breadcrumb-container {
     margin-bottom: 24px;
@@ -170,6 +176,10 @@ const handleDatabaseConnect = (params: {
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     padding: 24px;
+    flex: 1;
+    /* 允许内容区域占满剩余空间 */
+    display: flex;
+    flex-direction: column;
   }
 }
 </style>

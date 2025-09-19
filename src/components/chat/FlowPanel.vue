@@ -881,7 +881,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 12px 16px;
+  /* 修改为与 SessionSidebar 一致的内边距 */
+  height: 56px;
+  /* 固定高度与 SessionSidebar 保持一致 */
   border-bottom: 1px solid #e5e7eb;
   background: #f8fafc;
   flex-shrink: 0;

@@ -1,29 +1,43 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
-import { ChatDotRound, Collection, Connection, DataAnalysis, House, Link, Menu, Monitor } from '@element-plus/icons-vue';
-import { ElAside, ElBadge, ElButton, ElHeader, ElIcon, ElTooltip } from 'element-plus';
+import { ChatDotRound, Collection, Connection, DataAnalysis, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
+import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
 
 // 响应式数据
 const sidebarCollapsed = ref(false);
-const healthStatus = ref(false);
+const apiStatus = ref(false);
 const sidebarTransitioning = ref(false);
 
 // 方法
 const toggleSidebar = () => {
   sidebarTransitioning.value = true;
   sidebarCollapsed.value = !sidebarCollapsed.value;
-  sidebarTransitioning.value = false;
+  setTimeout(() => {
+    sidebarTransitioning.value = false;
+  }, 300); // 与CSS过渡时间同步
+};
+
+const expandSidebar = () => {
+  if (sidebarCollapsed.value) {
+    toggleSidebar();
+  }
+};
+
+const collapseSidebar = () => {
+  if (!sidebarCollapsed.value) {
+    toggleSidebar();
+  }
 };
 
 const checkHealth = async () => {
   try {
     await checkHealthApi();
-    healthStatus.value = true;
+    apiStatus.value = true;
   } catch (error) {
     console.error('健康检查失败:', error);
-    healthStatus.value = false;
+    apiStatus.value = false;
   }
 };
 
@@ -38,33 +52,25 @@ onMounted(async () => {
 
 <template>
   <div class="layout-container">
-    <!-- 顶部导航栏 -->
-    <el-header class="layout-header" height="50px">
-      <div style="display: flex; align-items: center; justify-content: space-between; height: 100%;">
-        <div style="display: flex; align-items: center;">
-          <el-button @click="toggleSidebar" type="text" style="color: white; margin-right: 16px;">
-            <el-icon>
-              <Menu />
-            </el-icon>
-          </el-button>
-          <h1 style="font-size: 20px; font-weight: 500;">智能数据分析平台</h1>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <!-- 系统状态 -->
-          <el-badge :value="healthStatus ? '正常' : '异常'" :type="healthStatus ? 'success' : 'danger'">
-            <el-icon style="color: white; font-size: 20px;">
-              <Monitor />
-            </el-icon>
-          </el-badge>
-        </div>
-      </div>
-    </el-header>
-
     <!-- 主体内容 -->
     <div class="layout-main">
       <!-- 侧边栏 -->
       <el-aside :class="['layout-sidebar', { collapsed: sidebarCollapsed }]">
+        <!-- 侧边栏顶部区域：平台标题和折叠按钮 -->
+        <div class="sidebar-header">
+          <div v-if="!sidebarCollapsed" class="platform-info">
+            <h1 class="platform-title">
+              智能数据分析平台
+            </h1>
+          </div>
+          <el-tooltip :content="sidebarCollapsed ? '展开' : '收起'"
+            placement="right">
+            <el-icon @click="toggleSidebar">
+              <Menu />
+            </el-icon>
+          </el-tooltip>
+        </div>
+
         <div class="sidebar-menu">
           <div :class="['custom-menu', { collapsed: sidebarCollapsed }]">
             <RouterLink v-for="(item, index) in [
@@ -99,6 +105,30 @@ onMounted(async () => {
             </RouterLink>
           </div>
         </div>
+
+        <!-- 添加底部状态指示器 -->
+        <div class="sidebar-footer">
+          <div v-if="!sidebarCollapsed" class="status-indicators">
+            <div class="status-item">
+              <el-icon class="status-icon" :class="{ active: apiStatus }">
+                <Lightning />
+              </el-icon>
+              <span class="status-label">API: {{ apiStatus ? '在线' : '离线' }}</span>
+            </div>
+          </div>
+          <div v-else class="status-indicators-collapsed">
+            <el-tooltip content="API: 在线" placement="right" v-if="apiStatus">
+              <el-icon class="status-icon active">
+                <Lightning />
+              </el-icon>
+            </el-tooltip>
+            <el-tooltip content="API: 离线" placement="right" v-else>
+              <el-icon class="status-icon">
+                <Lightning />
+              </el-icon>
+            </el-tooltip>
+          </div>
+        </div>
       </el-aside>
 
       <!-- 内容区域 -->
@@ -128,43 +158,136 @@ onMounted(async () => {
 .layout-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
+  overflow: hidden;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-.layout-header {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: white;
-  padding: 0 24px;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .layout-main {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .layout-sidebar {
-  width: 180px;
-  background: rgba(255, 255, 255, 0.95);
-  border-right: 1px solid rgba(226, 232, 240, 0.8);
+  width: 220px;
+  background: rgba(27, 38, 54, 0.95);
+  border-right: 1px solid rgba(30, 41, 59, 0.8);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   backdrop-filter: blur(10px);
   will-change: width;
+  display: flex;
+  flex-direction: column;
+  color: #e2e8f0;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 10;
+}
+
+.layout-content {
+  flex: 1;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  overflow-y: auto;
+  margin-left: 220px;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* 侧边栏收缩状态下的内容区域 */
+.layout-sidebar.collapsed+.layout-content {
+  margin-left: 64px;
+}
+
+/* 侧边栏顶部标题区域 */
+.sidebar-header {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.platform-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.platform-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .sidebar-menu {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* 底部状态指示器样式 */
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(20, 29, 41, 0.95);
+}
+
+.status-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-indicators-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-icon {
+  font-size: 16px;
+  color: #64748b;
+}
+
+.status-icon.active {
+  color: #10b981;
+}
+
+.status-label {
+  font-size: 14px;
+  color: #94a3b8;
 }
 
 .layout-sidebar.collapsed {
   width: 64px;
+}
+
+.layout-sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 16px 0;
 }
 
 /* 图标样式 */
@@ -173,13 +296,6 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.layout-content {
-  flex: 1;
-  padding: 10px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  overflow-y: auto;
 }
 
 /* 自定义菜单样式 */
@@ -200,7 +316,7 @@ onMounted(async () => {
   padding: 12px 16px;
   margin: 6px 10px;
   border-radius: 12px;
-  color: #64748b;
+  color: #e2e8f0;
   text-decoration: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
@@ -210,10 +326,9 @@ onMounted(async () => {
 }
 
 .menu-item:hover {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: rgba(255, 255, 255, 0.1);
   transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .menu-item.active {
@@ -286,6 +401,7 @@ onMounted(async () => {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
 /* Tooltip 样式 */
 :deep(.el-tooltip__popper) {
   font-weight: 500;

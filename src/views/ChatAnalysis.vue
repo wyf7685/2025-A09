@@ -503,8 +503,10 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .chat-analysis-container {
   display: flex;
-  height: calc(100vh - 80px);
+  height: 100vh;
   background-color: #ffffff;
+  margin: -16px;
+  /* 抵消 layout-content 的 padding */
 }
 
 // --- Chat Panel Styles ---
@@ -516,14 +518,18 @@ onMounted(async () => {
   height: 100%;
   position: relative;
   background: #ffffff;
+  overflow: hidden;
+  /* 防止内容溢出 */
 }
 
 .chat-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  height: 45px;
+  padding: 12px 16px;
+  /* 修改为与 SessionSidebar 一致的内边距 */
+  height: 56px;
+  /* 固定高度与 SessionSidebar 保持一致 */
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
   background: #ffffff;
