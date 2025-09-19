@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
 import type { LLMModel } from '@/types';
-import { Delete, Edit, Plus, Setting } from '@element-plus/icons-vue';
+import { Delete, Edit, Plus } from '@element-plus/icons-vue';
+import { Icon } from '@iconify/vue';
 import {
   ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElIcon,
   ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTag
 } from 'element-plus';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 const modelStore = useModelStore();
 
@@ -25,6 +26,32 @@ const llmModelForm = ref({
   modelName: ''
 });
 
+// 获取提供商图标
+const getProviderIcon = (provider: string): string => {
+  const iconMap: Record<string, string> = {
+    'OpenAI': 'simple-icons:openai',
+    'Google': 'logos:google-icon',
+    'DeepSeek': 'material-symbols:psychology-alt-outline',
+    'Anthropic': 'simple-icons:anthropic'
+  };
+  return iconMap[provider] || 'material-symbols:settings-outline';
+};
+
+// 获取模型状态颜色
+const getStatusColor = (available: boolean): string => {
+  return available ? '#10b981' : '#ef4444';
+};
+
+// 获取提供商颜色
+const getProviderColor = (provider: string): string => {
+  const colorMap: Record<string, string> = {
+    'OpenAI': '#00a67e',
+    'Google': '#4285f4', 
+    'DeepSeek': '#8b5cf6',
+    'Anthropic': '#d97706'
+  };
+  return colorMap[provider] || '#6b7280';
+};
 // 预设的模型提供商
 const modelProviders = [
   {
@@ -56,29 +83,6 @@ const fetchLLMModels = async (): Promise<void> => {
 };
 
 const editLLMModel = async (model: any): Promise<void> => {
-  if (model.id.startsWith('custom-')) {
-    // 所有自定义模型（包括用户配置的预置模型），获取详细配置进行编辑
-    await editCustomModel(model);
-  } else {
-    // 未配置的预置模型，添加新配置
-    configurePresetModel(model);
-  }
-};
-
-const configurePresetModel = (model: any): void => {
-  currentEditLLMModel.value = model;
-  // 为未配置的预置模型设置默认值
-  llmModelForm.value = {
-    name: model.name,
-    provider: model.provider,
-    apiKey: '',
-    apiUrl: getDefaultApiUrl(model.provider),
-    modelName: model.name
-  };
-  showEditLLMDialog.value = true;
-};
-
-const editCustomModel = async (model: any): Promise<void> => {
   currentEditLLMModel.value = model;
   
   try {
@@ -91,12 +95,24 @@ const editCustomModel = async (model: any): Promise<void> => {
       modelName: customModelConfig.model_name
     };
   } catch (error) {
-    console.error('获取自定义模型配置失败:', error);
+    console.error('获取模型配置失败:', error);
     ElMessage.error('获取模型配置失败');
     return;
   }
   
   showEditLLMDialog.value = true;
+};
+
+const addNewLLMModel = (): void => {
+  currentEditLLMModel.value = null;
+  llmModelForm.value = {
+    name: '',
+    provider: '',
+    apiKey: '',
+    apiUrl: '',
+    modelName: ''
+  };
+  showAddLLMDialog.value = true;
 };
 
 const getDefaultApiUrl = (provider: string): string => {
@@ -109,34 +125,18 @@ const getDefaultApiUrl = (provider: string): string => {
   return defaultUrls[provider] || '';
 };
 
-const getConfigButtonText = (model: any): string => {
-  if (model.available) {
-    return '编辑配置';
-  } else {
-    return '配置';
-  }
-};
-
 const getDialogTitle = (): string => {
-  if (!currentEditLLMModel.value) {
-    return '编辑模型配置';
-  }
-  
-  if (currentEditLLMModel.value.available) {
-    return `编辑 ${currentEditLLMModel.value.name} 配置`;
+  if (currentEditLLMModel.value) {
+    return `编辑 ${currentEditLLMModel.value.name}`;
   } else {
-    return `配置 ${currentEditLLMModel.value.name}`;
+    return '添加新模型';
   }
-};
-
-const isPresetModel = (): boolean => {
-  return !!(currentEditLLMModel.value && !currentEditLLMModel.value.id.startsWith('custom-'));
 };
 
 const deleteLLMModel = async (modelId: string): Promise<void> => {
   try {
     await ElMessageBox.confirm(
-      '确定要删除这个LLM模型配置吗？',
+      '确定要删除这个模型配置吗？',
       '确认删除',
       {
         confirmButtonText: '删除',
@@ -147,11 +147,11 @@ const deleteLLMModel = async (modelId: string): Promise<void> => {
 
     // 调用store的删除方法
     await modelStore.deleteCustomModel(modelId);
-    ElMessage.success('LLM模型配置删除成功');
+    ElMessage.success('模型配置删除成功');
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除LLM模型失败:', error);
-      ElMessage.error('删除LLM模型失败');
+      console.error('删除模型失败:', error);
+      ElMessage.error('删除模型失败');
     }
   }
 };
@@ -163,35 +163,32 @@ const saveLLMModel = async (): Promise<void> => {
       return;
     }
 
-    // 判断是编辑已有模型还是添加新模型
-    if (currentEditLLMModel.value && currentEditLLMModel.value.id.startsWith('custom-')) {
-      // 编辑自定义模型
+    // 如果用户没有填写 API URL，使用默认值
+    const finalApiUrl = llmModelForm.value.apiUrl.trim() || getDefaultApiUrl(llmModelForm.value.provider);
+    
+    // 直接使用选择的模型名称作为API调用名称（因为它来自预设列表，保证正确）
+    const apiModelName = llmModelForm.value.modelName;
+
+    if (currentEditLLMModel.value) {
+      // 编辑现有模型
       await modelStore.updateCustomModel(currentEditLLMModel.value.id, {
         name: llmModelForm.value.name,
         provider: llmModelForm.value.provider,
         api_key: llmModelForm.value.apiKey,
-        api_url: llmModelForm.value.apiUrl,
-        model_name: llmModelForm.value.modelName
+        api_url: finalApiUrl,
+        model_name: llmModelForm.value.modelName,
+        api_model_name: apiModelName
       });
-      ElMessage.success('自定义模型配置更新成功');
-    } else if (currentEditLLMModel.value && !currentEditLLMModel.value.id.startsWith('custom-')) {
-      // 配置预置模型 - 创建新的自定义模型配置
-      await modelStore.submitCustomModel({
-        name: llmModelForm.value.name,
-        provider: llmModelForm.value.provider,
-        api_key: llmModelForm.value.apiKey,
-        api_url: llmModelForm.value.apiUrl,
-        model_name: llmModelForm.value.modelName
-      });
-      ElMessage.success('模型配置保存成功');
+      ElMessage.success('模型配置更新成功');
     } else {
-      // 添加新的自定义模型
+      // 添加新模型
       await modelStore.submitCustomModel({
         name: llmModelForm.value.name,
         provider: llmModelForm.value.provider,
         api_key: llmModelForm.value.apiKey,
-        api_url: llmModelForm.value.apiUrl,
-        model_name: llmModelForm.value.modelName
+        api_url: finalApiUrl,
+        model_name: llmModelForm.value.modelName,
+        api_model_name: apiModelName
       });
       ElMessage.success('新模型配置添加成功');
     }
@@ -215,6 +212,16 @@ const resetLLMForm = (): void => {
   };
   currentEditLLMModel.value = null;
 };
+
+// 监听提供商变化，自动填充默认 URL（仅当 URL 为空时）
+watch(() => llmModelForm.value.provider, (newProvider) => {
+  if (newProvider && !llmModelForm.value.apiUrl.trim()) {
+    const provider = modelProviders.find(p => p.name === newProvider);
+    if (provider) {
+      llmModelForm.value.apiUrl = provider.defaultUrl;
+    }
+  }
+});
 
 // 生命周期
 onMounted(async () => {
@@ -241,33 +248,46 @@ onMounted(async () => {
 
     <div class="llm-models-container">
       <!-- LLM模型列表 -->
-      <div class="llm-models-grid">
+      <div v-if="llmModels.length > 0" class="llm-models-grid">
         <el-card v-for="llmModel in llmModels" :key="llmModel.id" class="llm-model-card" shadow="hover">
           <div class="llm-model-header">
-            <div class="model-icon">
-              <el-icon>
-                <Setting />
-              </el-icon>
+            <div class="model-icon" :style="{ background: `linear-gradient(135deg, ${getProviderColor(llmModel.provider)}15, ${getProviderColor(llmModel.provider)}25)` }">
+              <Icon 
+                :icon="getProviderIcon(llmModel.provider)" 
+                width="28" 
+                height="28" 
+                :color="getProviderColor(llmModel.provider)"
+              />
             </div>
             <div class="model-info">
               <h3>{{ llmModel.name }}</h3>
-              <p class="model-provider">{{ llmModel.provider }}</p>
+              <div class="model-details">
+                <span class="model-provider">{{ llmModel.provider }}</span>
+                <el-tag :color="getProviderColor(llmModel.provider)" effect="light" size="small">
+                  {{ llmModel.provider }}
+                </el-tag>
+              </div>
             </div>
             <div class="model-status">
-              <el-tag :type="llmModel.available ? 'success' : 'danger'" size="small">
-                {{ llmModel.available ? '已配置' : '未配置' }}
-              </el-tag>
+              <div class="status-indicator" :class="{ 'status-active': llmModel.available }">
+                <Icon 
+                  :icon="llmModel.available ? 'material-symbols:check-circle' : 'material-symbols:error-circle-rounded'" 
+                  width="16" 
+                  height="16" 
+                  :color="getStatusColor(llmModel.available ?? false)"
+                />
+                <span class="status-text">{{ llmModel.available ? '已配置' : '未配置' }}</span>
+              </div>
             </div>
           </div>
           <div class="llm-model-actions">
-            <el-button size="small" @click="editLLMModel(llmModel)">
+            <el-button size="small" type="primary" plain @click="editLLMModel(llmModel)">
               <el-icon>
                 <Edit />
               </el-icon>
-              {{ getConfigButtonText(llmModel) }}
+              编辑配置
             </el-button>
-            <el-button size="small" type="danger" @click="deleteLLMModel(llmModel.id)"
-              v-if="llmModel.id.startsWith('custom-')">
+            <el-button size="small" type="danger" plain @click="deleteLLMModel(llmModel.id)">
               <el-icon>
                 <Delete />
               </el-icon>
@@ -277,13 +297,40 @@ onMounted(async () => {
         </el-card>
       </div>
 
+      <!-- 空状态 -->
+      <div v-else class="empty-state">
+        <div class="empty-content">
+          <div class="empty-icon">
+            <Icon icon="material-symbols:psychology-alt-outline" width="80" height="80" color="#d1d5db" />
+          </div>
+          <h3>暂无配置的模型</h3>
+          <p>开始添加您的第一个大语言模型配置</p>
+          <el-button type="primary" size="large" @click="addNewLLMModel()">
+            <el-icon>
+              <Plus />
+            </el-icon>
+            添加第一个模型
+          </el-button>
+        </div>
+      </div>
+
       <!-- 添加LLM模型对话框 -->
       <el-dialog v-model="showAddLLMDialog" title="添加LLM模型" width="600px" @close="resetLLMForm">
         <el-form :model="llmModelForm" label-width="120px">
           <el-form-item label="提供商" required>
             <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
-                :value="provider.name" />
+                :value="provider.name">
+                <div class="provider-option">
+                  <Icon 
+                    :icon="getProviderIcon(provider.name)" 
+                    width="18" 
+                    height="18" 
+                    :color="getProviderColor(provider.name)"
+                  />
+                  <span>{{ provider.name }}</span>
+                </div>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item label="模型名称" required>
@@ -318,15 +365,24 @@ onMounted(async () => {
       <el-dialog v-model="showEditLLMDialog" :title="getDialogTitle()" width="600px" @close="resetLLMForm">
         <el-form :model="llmModelForm" label-width="120px">
           <el-form-item label="提供商" required>
-            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%"
-              :disabled="isPresetModel()">
+            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
-                :value="provider.name" />
+                :value="provider.name">
+                <div class="provider-option">
+                  <Icon 
+                    :icon="getProviderIcon(provider.name)" 
+                    width="18" 
+                    height="18" 
+                    :color="getProviderColor(provider.name)"
+                  />
+                  <span>{{ provider.name }}</span>
+                </div>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item label="模型名称" required>
             <el-select v-model="llmModelForm.modelName" placeholder="选择或输入模型名称" style="width: 100%" filterable
-              allow-create :disabled="isPresetModel()">
+              allow-create>
               <el-option v-for="model in modelProviders.find(p => p.name === llmModelForm.provider)?.models || []"
                 :key="model" :label="model" :value="model" />
             </el-select>
@@ -370,8 +426,15 @@ onMounted(async () => {
   padding: 0 8px;
 }
 
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .header-content h1 {
-  margin: 0 0 8px 0;
+  margin: 0;
   font-size: 32px;
   font-weight: 700;
   color: #1f2937;
@@ -398,71 +461,183 @@ onMounted(async () => {
 }
 
 .llm-models-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
 }
 
 .llm-model-card {
-  border-radius: 12px;
+  width: 380px;
+  flex-shrink: 0;
+  border-radius: 16px;
   border: 1px solid #e5e7eb;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: white;
+  overflow: hidden;
+  position: relative;
+}
+
+.llm-model-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .llm-model-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border-color: #d1d5db;
+}
+
+.llm-model-card:hover::before {
+  opacity: 1;
 }
 
 .llm-model-header {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: 16px;
+  padding: 4px 0;
 }
 
 .model-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: #f3f4f6;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.llm-model-card:hover .model-icon {
+  transform: scale(1.05);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
 .model-info {
   flex: 1;
+  min-width: 0;
 }
 
 .model-info h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
+  margin: 0 0 8px 0;
+  font-size: 18px;
   font-weight: 600;
   color: #1f2937;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.model-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .model-provider {
   margin: 0;
   font-size: 14px;
   color: #6b7280;
+  font-weight: 500;
 }
 
 .model-status {
   flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: rgba(243, 244, 246, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  transition: all 0.3s ease;
+}
+
+.status-indicator.status-active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
 }
 
 .llm-model-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid rgba(229, 231, 235, 0.5);
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.02) 0%, rgba(139, 92, 246, 0.02) 100%);
+  border-radius: 16px;
+  border: 2px dashed rgba(209, 213, 219, 0.8);
+}
+
+.empty-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  margin-bottom: 24px;
+  opacity: 0.8;
+}
+
+.empty-content h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.empty-content p {
+  margin: 0 0 32px 0;
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .form-tip {
   margin-top: 4px;
   font-size: 12px;
   color: #6b7280;
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.provider-option span {
+  font-weight: 500;
 }
 </style>

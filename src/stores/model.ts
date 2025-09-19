@@ -56,6 +56,7 @@ export const useModelStore = defineStore('model', () => {
     api_url: string;
     api_key: string;
     model_name: string;
+    api_model_name: string;
   }) => {
     try {
       const response = await api.post<{
@@ -122,6 +123,7 @@ export const useModelStore = defineStore('model', () => {
     api_url?: string;
     api_key?: string;
     model_name?: string;
+    api_model_name?: string;
   }) => {
     try {
       const response = await api.put(`/models/custom/${modelId}`, params);

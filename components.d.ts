@@ -25,6 +25,7 @@ declare module 'vue' {
     DataSourceHeader: typeof import('./src/components/data/DataSourceHeader.vue')['default']
     DataSourceSearchBar: typeof import('./src/components/data/DataSourceSearchBar.vue')['default']
     DataSourceTable: typeof import('./src/components/data/DataSourceTable.vue')['default']
+    Deepseek: typeof import('./src/components/icons/Deepseek.vue')['default']
     EditDataSourceDialog: typeof import('./src/components/data/EditDataSourceDialog.vue')['default']
     ElTag: typeof import('element-plus/es')['ElTag']
     FieldMappingsGrid: typeof import('./src/components/data/upload/cleaning/FieldMappingsGrid.vue')['default']
