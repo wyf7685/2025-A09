@@ -5,7 +5,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.core.config import settings
 from app.log import logger
 from app.schemas.custom_model import CustomModelConfig, LLModelID
 from app.services.custom_model import custom_model_manager
@@ -102,39 +101,35 @@ async def get_available_models() -> ModelsResponse:
     """获取可用的模型列表"""
     models = []
 
-    # Google Models
-    if settings.GOOGLE_API_KEY:
-        models += [
-            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=True),
-            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=True),
-        ]
+    # 获取已配置的自定义模型ID列表（包括配置过的预置模型）
+    custom_models = custom_model_manager.list_models()
+    configured_model_ids = set(custom_models.keys())
 
-    # OpenAI Models (only if using real OpenAI API)
-    if settings.OPENAI_API_KEY and not settings.OPENAI_API_BASE:
-        models += [
-            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=True),
-            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=True),
-        ]
-    else:
-        models += [
-            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=False),
-            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=False),
-        ]
+    # Google Models - 只有在用户配置过的情况下才标记为available
+    models += [
+        ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google",
+                 available="custom-gemini-2.0-flash" in configured_model_ids),
+        ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google",
+                 available="custom-gemini-1.5-pro" in configured_model_ids),
+    ]
 
-    # DeepSeek Models
-    if settings.OPENAI_API_KEY and settings.OPENAI_API_BASE:
-        models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=True),
-            ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek", available=True),
-        ]
-    else:
-        models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=False),
-            ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek", available=False),
-        ]
+    # OpenAI Models - 只有在用户配置过的情况下才标记为available
+    models += [
+        ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI",
+                 available="custom-gpt-4" in configured_model_ids),
+        ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI",
+                 available="custom-gpt-3.5-turbo" in configured_model_ids),
+    ]
+
+    # DeepSeek Models - 只有在用户配置过的情况下才标记为available
+    models += [
+        ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek",
+                 available="custom-deepseek-chat" in configured_model_ids),
+        ModelInfo(id="deepseek-reasoner", name="DeepSeek R1", provider="DeepSeek",
+                 available="custom-deepseek-reasoner" in configured_model_ids),
+    ]
 
     # 添加自定义模型
-    custom_models = custom_model_manager.list_models()
     for model_config in custom_models.values():
         # 检查自定义模型是否有有效的API密钥
         is_available = bool(model_config.api_key and model_config.api_key.strip())

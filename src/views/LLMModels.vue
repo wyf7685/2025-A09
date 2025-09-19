@@ -55,16 +55,82 @@ const fetchLLMModels = async (): Promise<void> => {
   }
 };
 
-const editLLMModel = (model: any): void => {
+const editLLMModel = async (model: any): Promise<void> => {
+  if (model.id.startsWith('custom-')) {
+    // 所有自定义模型（包括用户配置的预置模型），获取详细配置进行编辑
+    await editCustomModel(model);
+  } else {
+    // 未配置的预置模型，添加新配置
+    configurePresetModel(model);
+  }
+};
+
+const configurePresetModel = (model: any): void => {
   currentEditLLMModel.value = model;
+  // 为未配置的预置模型设置默认值
   llmModelForm.value = {
     name: model.name,
     provider: model.provider,
-    apiKey: model.apiKey || '',
-    apiUrl: model.apiUrl || '',
+    apiKey: '',
+    apiUrl: getDefaultApiUrl(model.provider),
     modelName: model.name
   };
   showEditLLMDialog.value = true;
+};
+
+const editCustomModel = async (model: any): Promise<void> => {
+  currentEditLLMModel.value = model;
+  
+  try {
+    const customModelConfig = await modelStore.getCustomModel(model.id);
+    llmModelForm.value = {
+      name: customModelConfig.name,
+      provider: customModelConfig.provider,
+      apiKey: customModelConfig.api_key || '',
+      apiUrl: customModelConfig.api_url || '',
+      modelName: customModelConfig.model_name
+    };
+  } catch (error) {
+    console.error('获取自定义模型配置失败:', error);
+    ElMessage.error('获取模型配置失败');
+    return;
+  }
+  
+  showEditLLMDialog.value = true;
+};
+
+const getDefaultApiUrl = (provider: string): string => {
+  const defaultUrls: Record<string, string> = {
+    'Google': 'https://generativelanguage.googleapis.com/v1beta',
+    'OpenAI': 'https://api.openai.com/v1',
+    'DeepSeek': 'https://api.deepseek.com/v1',
+    'Anthropic': 'https://api.anthropic.com/v1'
+  };
+  return defaultUrls[provider] || '';
+};
+
+const getConfigButtonText = (model: any): string => {
+  if (model.available) {
+    return '编辑配置';
+  } else {
+    return '配置';
+  }
+};
+
+const getDialogTitle = (): string => {
+  if (!currentEditLLMModel.value) {
+    return '编辑模型配置';
+  }
+  
+  if (currentEditLLMModel.value.available) {
+    return `编辑 ${currentEditLLMModel.value.name} 配置`;
+  } else {
+    return `配置 ${currentEditLLMModel.value.name}`;
+  }
+};
+
+const isPresetModel = (): boolean => {
+  return !!(currentEditLLMModel.value && !currentEditLLMModel.value.id.startsWith('custom-'));
 };
 
 const deleteLLMModel = async (modelId: string): Promise<void> => {
@@ -97,15 +163,39 @@ const saveLLMModel = async (): Promise<void> => {
       return;
     }
 
-    await modelStore.submitCustomModel({
-      name: llmModelForm.value.name,
-      provider: llmModelForm.value.provider,
-      api_key: llmModelForm.value.apiKey,
-      api_url: llmModelForm.value.apiUrl,
-      model_name: llmModelForm.value.modelName
-    });
+    // 判断是编辑已有模型还是添加新模型
+    if (currentEditLLMModel.value && currentEditLLMModel.value.id.startsWith('custom-')) {
+      // 编辑自定义模型
+      await modelStore.updateCustomModel(currentEditLLMModel.value.id, {
+        name: llmModelForm.value.name,
+        provider: llmModelForm.value.provider,
+        api_key: llmModelForm.value.apiKey,
+        api_url: llmModelForm.value.apiUrl,
+        model_name: llmModelForm.value.modelName
+      });
+      ElMessage.success('自定义模型配置更新成功');
+    } else if (currentEditLLMModel.value && !currentEditLLMModel.value.id.startsWith('custom-')) {
+      // 配置预置模型 - 创建新的自定义模型配置
+      await modelStore.submitCustomModel({
+        name: llmModelForm.value.name,
+        provider: llmModelForm.value.provider,
+        api_key: llmModelForm.value.apiKey,
+        api_url: llmModelForm.value.apiUrl,
+        model_name: llmModelForm.value.modelName
+      });
+      ElMessage.success('模型配置保存成功');
+    } else {
+      // 添加新的自定义模型
+      await modelStore.submitCustomModel({
+        name: llmModelForm.value.name,
+        provider: llmModelForm.value.provider,
+        api_key: llmModelForm.value.apiKey,
+        api_url: llmModelForm.value.apiUrl,
+        model_name: llmModelForm.value.modelName
+      });
+      ElMessage.success('新模型配置添加成功');
+    }
 
-    ElMessage.success('LLM模型配置保存成功');
     showAddLLMDialog.value = false;
     showEditLLMDialog.value = false;
     await fetchLLMModels();
@@ -174,7 +264,7 @@ onMounted(async () => {
               <el-icon>
                 <Edit />
               </el-icon>
-              配置
+              {{ getConfigButtonText(llmModel) }}
             </el-button>
             <el-button size="small" type="danger" @click="deleteLLMModel(llmModel.id)"
               v-if="llmModel.id.startsWith('custom-')">
@@ -225,17 +315,18 @@ onMounted(async () => {
       </el-dialog>
 
       <!-- 编辑LLM模型对话框 -->
-      <el-dialog v-model="showEditLLMDialog" title="编辑LLM模型" width="600px" @close="resetLLMForm">
+      <el-dialog v-model="showEditLLMDialog" :title="getDialogTitle()" width="600px" @close="resetLLMForm">
         <el-form :model="llmModelForm" label-width="120px">
           <el-form-item label="提供商" required>
-            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
+            <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%"
+              :disabled="isPresetModel()">
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
                 :value="provider.name" />
             </el-select>
           </el-form-item>
           <el-form-item label="模型名称" required>
             <el-select v-model="llmModelForm.modelName" placeholder="选择或输入模型名称" style="width: 100%" filterable
-              allow-create>
+              allow-create :disabled="isPresetModel()">
               <el-option v-for="model in modelProviders.find(p => p.name === llmModelForm.provider)?.models || []"
                 :key="model" :label="model" :value="model" />
             </el-select>

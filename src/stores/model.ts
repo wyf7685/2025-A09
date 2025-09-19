@@ -104,6 +104,17 @@ export const useModelStore = defineStore('model', () => {
     }
   };
 
+  // 获取自定义模型详细配置
+  const getCustomModel = async (modelId: string) => {
+    try {
+      const response = await api.get(`/models/custom/${modelId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get custom model:', error);
+      throw error;
+    }
+  };
+
   // 更新自定义模型
   const updateCustomModel = async (modelId: string, params: {
     name?: string;
@@ -167,6 +178,7 @@ export const useModelStore = defineStore('model', () => {
     setSelectedModel,
     setCustomModel,
     submitCustomModel,
+    getCustomModel,
     deleteCustomModel,
     updateCustomModel,
     downloadModel,
