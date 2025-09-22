@@ -5,7 +5,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.core.config import settings
 from app.log import logger
 from app.schemas.custom_model import CustomModelConfig, LLModelID
 from app.services.custom_model import custom_model_manager
@@ -26,6 +25,7 @@ class CustomModelRequest(BaseModel):
     api_url: str
     api_key: str
     model_name: str
+    api_model_name: str  # API调用时使用的正确模型名称
 
 
 class UpdateCustomModelRequest(BaseModel):
@@ -34,6 +34,7 @@ class UpdateCustomModelRequest(BaseModel):
     api_url: str | None = None
     api_key: str | None = None
     model_name: str | None = None
+    api_model_name: str | None = None  # API调用时使用的正确模型名称
 
 
 _DEFAULT_API_URL = {
@@ -52,6 +53,7 @@ async def set_custom_model(request: CustomModelRequest) -> dict:
             api_url=request.api_url or _DEFAULT_API_URL.get(request.provider, ""),
             api_key=request.api_key,
             model_name=request.model_name,
+            api_model_name=request.api_model_name,
         )
         await custom_model_manager.add_model(config)
         logger.info(f"设置自定义模型: {config.name} ({config.id})")
@@ -99,47 +101,13 @@ class ModelsResponse(BaseModel):
 
 @router.get("/available")
 async def get_available_models() -> ModelsResponse:
-    """获取可用的模型列表"""
+    """获取可用的模型列表（仅包含用户自定义模型）"""
     models = []
 
-    # Google Models
-    if settings.GOOGLE_API_KEY:
-        models += [
-            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=True),
-            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=True),
-        ]
-    else:
-        models += [
-            ModelInfo(id="gemini-2.0-flash", name="Gemini 2.0 Flash", provider="Google", available=False),
-            ModelInfo(id="gemini-1.5-pro", name="Gemini 1.5 Pro", provider="Google", available=False),
-        ]
-
-    # OpenAI Models (only if using real OpenAI API)
-    if settings.OPENAI_API_KEY and not settings.OPENAI_API_BASE:
-        models += [
-            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=True),
-            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=True),
-        ]
-    else:
-        models += [
-            ModelInfo(id="gpt-4", name="GPT-4", provider="OpenAI", available=False),
-            ModelInfo(id="gpt-3.5-turbo", name="GPT-3.5 Turbo", provider="OpenAI", available=False),
-        ]
-
-    # DeepSeek Models
-    if settings.OPENAI_API_KEY and settings.OPENAI_API_BASE:
-        models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=True),
-            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=True),
-        ]
-    else:
-        models += [
-            ModelInfo(id="deepseek-chat", name="DeepSeek V3", provider="DeepSeek", available=False),
-            ModelInfo(id="deepseek-reasonser", name="DeepSeek R1", provider="DeepSeek", available=False),
-        ]
-
-    # 添加自定义模型
+    # 获取自定义模型
     custom_models = custom_model_manager.list_models()
+
+    # 只返回用户自定义的模型
     for model_config in custom_models.values():
         # 检查自定义模型是否有有效的API密钥
         is_available = bool(model_config.api_key and model_config.api_key.strip())
@@ -151,7 +119,7 @@ async def get_available_models() -> ModelsResponse:
         )
         models.append(model)
 
-    logger.info(f"返回 {len(models)} 个模型，其中 {len([m for m in models if m.available])} 个可用")
+    logger.info(f"返回 {len(models)} 个自定义模型，其中 {len([m for m in models if m.available])} 个可用")
     return ModelsResponse(models=models)
 
 
@@ -184,6 +152,7 @@ async def list_custom_models() -> dict:
                 "provider": model_config.provider,
                 "api_url": model_config.api_url,
                 "model_name": model_config.model_name,
+                "api_model_name": getattr(model_config, "api_model_name", model_config.model_name),
                 "available": True,
             }
             for model_config in custom_models.values()

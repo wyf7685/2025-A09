@@ -4,7 +4,7 @@ import FileUploadStep from '@/components/data/upload/FileUploadStep.vue';
 import UploadMethodSelector from '@/components/data/upload/UploadMethodSelector.vue';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useModelStore } from '@/stores/model';
-import type { AnyDatabaseConnection, DremioDatabaseType } from '@/types';
+import type { AnyDatabaseConnection, DremioDatabaseType, LLMModel } from '@/types';
 import { dataSourceAPI } from '@/utils/api';
 import { withLoading } from '@/utils/tools';
 import { ArrowRight } from '@element-plus/icons-vue';
@@ -34,7 +34,7 @@ const connectionDescription = ref('');
 const isConnecting = ref(false);
 
 // 可用模型列表
-const availableModels = ref<Array<{ value: string, label: string; }>>([]);
+const availableModels = ref<LLMModel[]>([]);
 
 const loadingText = computed(() =>
   isUploading.value ? '文件上传中...' : isConnecting.value ? '连接数据库中...' : '');
@@ -43,10 +43,7 @@ const loadingText = computed(() =>
 onMounted(async () => {
   try {
     const models = await modelStore.fetchAvailableModels();
-    availableModels.value = models.map(model => ({
-      value: model.id,
-      label: model.name
-    }));
+    availableModels.value = models;
   } catch (error) {
     console.error('Failed to fetch models:', error);
     ElMessage.error('获取模型列表失败');

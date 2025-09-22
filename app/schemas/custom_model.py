@@ -11,4 +11,5 @@ class CustomModelConfig(BaseModel):
     provider: str
     api_url: str
     api_key: str
-    model_name: str  # 实际调用的模型名称
+    model_name: str  # 用户自定义的显示名称
+    api_model_name: str  # API调用时使用的正确模型名称

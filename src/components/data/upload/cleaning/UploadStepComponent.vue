@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import type { LLMModel } from '@/types';
 import { ArrowDown, ArrowRight, DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
-import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElRow, ElSelect, ElUpload, type UploadFile } from 'element-plus';
+import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRow, ElSelect, ElTag, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
 
 // 双向绑定数据
@@ -12,9 +13,9 @@ const selectedModel = defineModel<string>('selectedModel', { required: true });
 const selectedFile = defineModel<File | null>('selectedFile', { required: true });
 
 // 定义组件属性
-defineProps<{
+const props = defineProps<{
   isAnalyzing: boolean;
-  availableModels: Array<{ value: string, label: string; }>;
+  availableModels: LLMModel[];
 }>();
 
 // 定义组件事件
@@ -29,6 +30,22 @@ const dragover = ref(false);
 
 // 高级选项显示状态
 const showAdvancedOptions = ref(false);
+
+// 按提供商分组模型
+const getProviderGroups = () => {
+  const groups: { name: string; models: LLMModel[]; }[] = [];
+  const providers = new Set(props.availableModels.map(m => m.provider));
+
+  providers.forEach(provider => {
+    const models = props.availableModels.filter(m => m.provider === provider);
+    groups.push({
+      name: provider,
+      models: models
+    });
+  });
+
+  return groups;
+};
 
 // 处理函数
 const startAnalysis = () => emit('analyze');
@@ -151,8 +168,18 @@ const handleDragleave = () => {
         <div v-show="showAdvancedOptions" class="advanced-options">
           <el-form-item label="选择AI模型">
             <el-select v-model="selectedModel" placeholder="请选择AI模型">
-              <el-option v-for="model in availableModels" :key="model.value" :label="model.label"
-                :value="model.value" />
+              <!-- 按提供商分组显示模型 -->
+              <el-option-group v-for="provider in getProviderGroups()" :key="provider.name" :label="provider.name">
+                <el-option v-for="model in provider.models" :key="model.id"
+                  :label="model.name" :value="model.id">
+                  <div class="model-option">
+                    <span class="model-name">{{ model.name }}</span>
+                    <el-tag :type="model.available ? 'success' : 'danger'" size="small" class="model-tag">
+                      {{ model.available ? '已配置' : '未配置' }}
+                    </el-tag>
+                  </div>
+                </el-option>
+              </el-option-group>
             </el-select>
             <div class="hint-text">
               <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
@@ -338,6 +365,52 @@ const handleDragleave = () => {
         font-size: 12px;
         color: #6b7280;
         margin-top: 4px;
+      }
+
+      :deep(.el-select) {
+        width: 100%;
+      }
+
+      :deep(.el-select__popper) {
+        .el-option-group__title {
+          font-size: 10px;
+          padding: 4px 8px;
+          color: #6b7280;
+          font-weight: 600;
+        }
+      }
+
+      .model-option {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+
+        .model-name {
+          font-size: 11px;
+          color: #374151;
+          flex: 1;
+        }
+
+        .model-tag {
+          font-size: 9px;
+          margin-left: 8px;
+          height: 18px;
+          line-height: 16px;
+          padding: 0 6px;
+          
+          &.el-tag--success {
+            background-color: #f0f9ff;
+            border-color: #60a5fa;
+            color: #1e40af;
+          }
+          
+          &.el-tag--danger {
+            background-color: #fef2f2;
+            border-color: #fca5a5;
+            color: #dc2626;
+          }
+        }
       }
     }
   }

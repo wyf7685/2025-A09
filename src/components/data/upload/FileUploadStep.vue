@@ -9,7 +9,8 @@ import { cleaningAPI } from '@/utils/api';
 import { withLoading } from '@/utils/tools';
 import { ArrowLeft } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage } from 'element-plus';
-import { ref } from 'vue';
+import type { LLMModel } from '@/types';
+import { nextTick, ref } from 'vue';
 
 // 文件元数据模型
 const fileName = defineModel<string>('fileName', { required: true });
@@ -20,7 +21,7 @@ const selectedFile = defineModel<File | null>('selectedFile', { required: true }
 
 // 定义属性
 defineProps<{
-  availableModels: { value: string; label: string; }[];
+  availableModels: LLMModel[];
 }>();
 
 // 定义事件
