@@ -7,7 +7,8 @@ import {
   ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElIcon,
   ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTag
 } from 'element-plus';
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch, type CreateComponentPublicInstanceWithMixins, type DefineComponent } from 'vue';
+import LLMModelIcon from '@/components/LLMModelIcon.vue';
 
 const modelStore = useModelStore();
 
@@ -26,17 +27,6 @@ const llmModelForm = ref({
   modelName: ''
 });
 
-// 获取提供商图标
-const getProviderIcon = (provider: string): string => {
-  const iconMap: Record<string, string> = {
-    'OpenAI': 'simple-icons:openai',
-    'Google': 'logos:google-icon',
-    'DeepSeek': 'material-symbols:psychology-alt-outline',
-    'Anthropic': 'simple-icons:anthropic'
-  };
-  return iconMap[provider] || 'material-symbols:settings-outline';
-};
-
 // 获取模型状态颜色
 const getStatusColor = (available: boolean): string => {
   return available ? '#10b981' : '#ef4444';
@@ -52,6 +42,7 @@ const getProviderColor = (provider: string): string => {
   };
   return colorMap[provider] || '#6b7280';
 };
+
 // 预设的模型提供商
 const modelProviders = [
   {
@@ -253,19 +244,12 @@ onMounted(async () => {
           <div class="llm-model-header">
             <div class="model-icon"
               :style="{ background: `linear-gradient(135deg, ${getProviderColor(llmModel.provider)}15, ${getProviderColor(llmModel.provider)}25)` }">
-              <Icon
-                :icon="getProviderIcon(llmModel.provider)"
-                width="28"
-                height="28"
-                :color="getProviderColor(llmModel.provider)" />
+              <LLMModelIcon :provider="llmModel.provider" :size="28" />
             </div>
             <div class="model-info">
               <h3>{{ llmModel.name }}</h3>
               <div class="model-details">
                 <span class="model-provider">{{ llmModel.provider }}</span>
-                <el-tag :color="getProviderColor(llmModel.provider)" effect="light" size="small">
-                  {{ llmModel.provider }}
-                </el-tag>
               </div>
             </div>
             <div class="model-status">
@@ -321,11 +305,7 @@ onMounted(async () => {
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
                 :value="provider.name">
                 <div class="provider-option">
-                  <Icon
-                    :icon="getProviderIcon(provider.name)"
-                    width="18"
-                    height="18"
-                    :color="getProviderColor(provider.name)" />
+                  <LLMModelIcon :provider="provider.name" :size="18" />
                   <span>{{ provider.name }}</span>
                 </div>
               </el-option>
@@ -367,8 +347,7 @@ onMounted(async () => {
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
                 :value="provider.name">
                 <div class="provider-option">
-                  <Icon :icon="getProviderIcon(provider.name)" width="18" height="18"
-                    :color="getProviderColor(provider.name)" />
+                  <LLMModelIcon :provider="provider.name" :size="18" />
                   <span>{{ provider.name }}</span>
                 </div>
               </el-option>
