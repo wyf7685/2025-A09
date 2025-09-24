@@ -1,6 +1,7 @@
 """
 简单移动平均法预测 - 基于原始notebook实现
 """
+
 import csv
 import logging
 from pathlib import Path
@@ -97,14 +98,14 @@ def sma_forecast_try(n: int) -> Tuple[float, float, pd.Index]:
     time_values = df["time"].to_numpy()
     plt.figure(figsize=(10, 6))
     plt.plot(df["time"], df.iloc[:, n], label="原始数据", color="black")
-    
+
     # 确保 y_2_predict 不是 None
     if y_2_predict is not None:
         plt.plot(time_values[1:], y[:-1].to_numpy(), label=f"一次 ({window_size}天)", color="b")
         plt.plot(time_values[1:], y_2_predict[:-1].to_numpy(), label=f"加权 ({window_size}天)", color="r")
     else:
         plt.plot(time_values[1:], y[:-1].to_numpy(), label=f"一次 ({window_size}天)", color="b")
-    
+
     plt.xlabel("日期")
     plt.ylabel("数值")
     # 标题分行显示以符合长度限制
@@ -137,11 +138,13 @@ def sma_run() -> None:
     with output_file.open("w", encoding="utf-8") as f:
         # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
         for material_number, mape_single, mape_wight in sma_mape_values:
-            line = (f"物料号：{material_number}, MAPE Single: {round(mape_single, 2)}, "
-                   f"MAPE Weight: {round(mape_wight, 2)}\n")
+            line = (
+                f"物料号：{material_number}, MAPE Single: {round(mape_single, 2)}, "
+                f"MAPE Weight: {round(mape_wight, 2)}\n"
+            )
             f.write(line)
     csv_filename = Path("SMA不平稳杭宁.csv")
-    with csv_filename.open("a", newline="", encoding="utf-8") as f:  
+    with csv_filename.open("a", newline="", encoding="utf-8") as f:
         # 使用追加模式，并且指定 newline='' 来避免空行
         writer = csv.writer(f)
         # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件

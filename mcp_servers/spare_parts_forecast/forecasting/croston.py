@@ -1,6 +1,7 @@
 """
 Croston方法及其变体用于间歇性需求预测 - 基于原始notebook实现
 """
+
 import csv
 import logging
 from pathlib import Path
@@ -29,13 +30,14 @@ except ImportError:
 def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
     """
     运行Croston方法及其变体进行预测
-    
+
     Args:
         n: 物料列索引
-        
+
     Returns:
         tuple: (best_mape_cst, best_mape_sba, best_mape_tsb, col)
     """
+
     # croston
     def croston(ts: pd.Series, alpha: float, extra_periods: int = 1) -> pd.DataFrame:
         # 将输入数据转换为NumPy数组

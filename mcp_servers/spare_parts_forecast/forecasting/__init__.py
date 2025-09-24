@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # 传统统计预测方法
 try:
     from .sma import sma_forecast_try
+
     logger.info("SMA forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import SMA forecasting: {e}")
@@ -24,6 +25,7 @@ except ImportError as e:
 
 try:
     from .exponential_smoothing import ema_forecast_try
+
     logger.info("Exponential smoothing module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import exponential smoothing: {e}")
@@ -31,6 +33,7 @@ except ImportError as e:
 
 try:
     from .arimaforecast import arimaforecast_try
+
     logger.info("ARIMA forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import ARIMA forecasting: {e}")
@@ -39,6 +42,7 @@ except ImportError as e:
 # 间歇需求预测方法
 try:
     from .croston import croston_forecast_try
+
     logger.info("Croston forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import Croston forecasting: {e}")
@@ -47,6 +51,7 @@ except ImportError as e:
 # 机器学习预测方法
 try:
     from .forest import forest_try, fst_run
+
     logger.info("Random Forest forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import Random Forest forecasting: {e}")
@@ -56,6 +61,7 @@ except ImportError as e:
 try:
     from .xgboost import preprocess_data as xgb_preprocess_data
     from .xgboost import sanitized_gwo, xgboost_forecast
+
     logger.info("XGBoost forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import XGBoost forecasting: {e}")
@@ -67,6 +73,7 @@ except ImportError as e:
 try:
     from .zero_and_bp import bp_run, zero_and_bp_predict
     from .zero_and_bp import preprocess_data as bp_preprocess_data
+
     logger.info("BP neural network forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import BP neural network forecasting: {e}")
@@ -97,21 +104,10 @@ __description__ = "Time series forecasting algorithms for spare parts demand pre
 
 # 算法类别映射
 ALGORITHM_CATEGORIES = {
-    "statistical": [
-        "sma_forecast_try",
-        "ema_forecast_try",
-        "arimaforecast_try"
-    ],
-    "intermittent": [
-        "croston_forecast_try"
-    ],
-    "machine_learning": [
-        "forest_try",
-        "xgboost_forecast"
-    ],
-    "neural_network": [
-        "zero_and_bp_predict"
-    ]
+    "statistical": ["sma_forecast_try", "ema_forecast_try", "arimaforecast_try"],
+    "intermittent": ["croston_forecast_try"],
+    "machine_learning": ["forest_try", "xgboost_forecast"],
+    "neural_network": ["zero_and_bp_predict"],
 }
 
 
@@ -159,7 +155,7 @@ def get_algorithm_info() -> dict[str, str]:
         "croston_forecast_try": "Croston间歇需求预测",
         "forest_try": "随机森林预测",
         "xgboost_forecast": "XGBoost梯度提升预测",
-        "zero_and_bp_predict": "BP神经网络预测"
+        "zero_and_bp_predict": "BP神经网络预测",
     }
 
     available = list_algorithms()

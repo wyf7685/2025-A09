@@ -49,9 +49,9 @@ def arimaforecast_try(n: int) -> float:
         return train_data, test_data
 
     #### Step 3  差分转平稳
-    def stationarity(timeseries: pd.DataFrame) -> tuple[
-        pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame
-    ]:  # 平稳性处理（timeseries 时间序列）
+    def stationarity(
+        timeseries: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:  # 平稳性处理（timeseries 时间序列）
         ## 差分法,保存成新的列
         diff1 = timeseries.diff(1).dropna()  # 1阶差分 dropna() 删除缺失值
         diff2 = diff1.diff(1).dropna()  # 在一阶差分基础上再做一次一阶差分，即二阶查分
@@ -74,16 +74,16 @@ def arimaforecast_try(n: int) -> float:
         x = np.array(timeseries[column_name])
         adftest = adfuller(x, autolag="AIC")
         logger.debug("ADF test results: %s", adftest)
-        
+
         # adftest返回的是一个元组，第4个元素是临界值字典，第1个元素是p值
         critical_values = adftest[4] if len(adftest) > 4 else {}
         p_value = adftest[1]
-        
+
         if isinstance(critical_values, dict) and "1%" in critical_values:
             is_stationary = adftest[0] < critical_values["1%"] and p_value < 1e-8
         else:
             is_stationary = p_value < 0.05  # 简化判断
-            
+
         if is_stationary:
             logger.info("序列平稳")
             return True
@@ -96,7 +96,7 @@ def arimaforecast_try(n: int) -> float:
         try:
             p_value = acorr_ljungbox(timeseries, lags=1)  # p_value 返回二维数组，第二维为P值
             logger.debug("Ljung-Box test results: %s", p_value)
-            
+
             if "lb_pvalue" in p_value.columns and p_value["lb_pvalue"].iloc[0] < 0.05:
                 logger.info("非随机性序列")
                 return True
@@ -150,23 +150,16 @@ def arimaforecast_try(n: int) -> float:
         # （3）利用预测值和真实值的误差检测，这里用的是标准差
         logger.debug(
             "标准差为%f",
-            mean_squared_error(train_data, predict_data, sample_weight=None, multioutput="uniform_average")
+            mean_squared_error(train_data, predict_data, sample_weight=None, multioutput="uniform_average"),
         )  # 标准差（均方差）
 
-    def draw_picture(
-        row_train_data: pd.DataFrame,
-        out_sample_pred_arima: pd.Series,
-        test_data: pd.DataFrame
-    ) -> float:
+    def draw_picture(row_train_data: pd.DataFrame, out_sample_pred_arima: pd.Series, test_data: pd.DataFrame) -> float:
         # print(out_sample_pred)
         # 样本外预测传入 test_data,out_sample_pred
         # 由于预测都是由差分后的平稳序列得出,因此需要对差分后的数据进行还原
         # 还原后绘制同一起点的曲线
         # 将差分后的序列还原,re_out_sample_pred为还原之后
-        base_series = pd.Series(
-            np.array(row_train_data)[-2][0],
-            index=[row_train_data.index[-2]]
-        )
+        base_series = pd.Series(np.array(row_train_data)[-2][0], index=[row_train_data.index[-2]])
         re_out_sample_pred_arima = pd.concat([base_series, out_sample_pred_arima[1:]]).cumsum()
 
         # # 横坐标
@@ -253,7 +246,7 @@ def arimaforecast_try(n: int) -> float:
     # #
     # # 可视化
     draw_picture(row_train_data, out_sample_pred_arima, test_data)
-    
+
     # 返回ARIMA模型的MAPE值作为示例
     return 0.0  # 临时返回值，实际应返回计算的MAPE
 
@@ -345,7 +338,9 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
 
     logger.info(
         "The smallest AIC is %s for model SARIMAX%sx%s",
-        min(AIC), SARIMAX_model[AIC.index(min(AIC))][0], SARIMAX_model[AIC.index(min(AIC))][1]
+        min(AIC),
+        SARIMAX_model[AIC.index(min(AIC))][0],
+        SARIMAX_model[AIC.index(min(AIC))][1],
     )
 
     # 重新拟合最佳模型
@@ -364,7 +359,7 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
     try:
         # 使用简单的预测方法，避免复杂的类型检查问题
         forecast_steps = len(test_data)
-        
+
         # 尝试多种预测方法
         prediction = None
         if hasattr(results, "forecast"):
@@ -372,7 +367,7 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
                 prediction = results.forecast(steps=forecast_steps)  # type: ignore
             except Exception as e:
                 logger.debug("forecast方法失败: %s", e)
-                
+
         if prediction is None and hasattr(results, "get_forecast"):
             try:
                 pred_result = results.get_forecast(steps=forecast_steps)  # type: ignore
@@ -380,25 +375,25 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
                     prediction = pred_result.predicted_mean
             except Exception as e:
                 logger.debug("get_forecast方法失败: %s", e)
-        
+
         # 如果仍然没有预测结果，使用默认值
         if prediction is None:
             prediction = np.full(forecast_steps, test_data.iloc[0, 0])
             logger.warning("无法获取预测结果，使用默认值")
-        
+
         # 确保预测结果是numpy数组
         if not isinstance(prediction, np.ndarray):
             prediction = np.array(prediction)
-            
+
         # 获取真实值
         truth = test_data.iloc[:, 0].to_numpy()
-        
+
         # 确保长度匹配
         min_len = min(len(prediction), len(truth))
         if min_len > 0:
             prediction = prediction[:min_len]
             truth = truth[:min_len]
-            
+
             # 避免除零错误
             truth_nonzero = np.where(truth != 0, truth, 1e-10)
             mape = float(np.mean(np.abs((truth - prediction) / truth_nonzero)))
@@ -406,7 +401,7 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
         else:
             mape = float("inf")
             logger.warning("无法计算MAPE，数据长度为0")
-            
+
     except Exception:
         logger.exception("预测过程出错")
         mape = float("inf")
@@ -415,11 +410,11 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
     # 绘图
     plt.figure(figsize=(10, 6))
     plt.plot(data.index, data, label="原始数据", color="black")
-    
+
     # 只有当预测有效时才绘制预测线
     if len(prediction) > 0 and len(prediction) == len(test_data):
         plt.plot(test_data.index, prediction, label="样本外预测", color="r")
-        
+
     plt.ylabel("数量")
     plt.xlabel("日期")
     plt.xticks(rotation=45)

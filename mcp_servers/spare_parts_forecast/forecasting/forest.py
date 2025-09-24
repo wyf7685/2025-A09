@@ -81,13 +81,17 @@ def forest_try(n: int) -> tuple[float, pd.Index]:
                 best_max_depth = max_depth
                 best_predicted = y_pred
                 # 记录参数组合和性能
-            logger.debug("n_estimators=%d, max_depth=%d, MAPE=%f, Best_predicted=%s",
-                        n_estimators, max_depth, mape, str(y_pred))
+            logger.debug(
+                "n_estimators=%d, max_depth=%d, MAPE=%f, Best_predicted=%s", n_estimators, max_depth, mape, str(y_pred)
+            )
 
     # 记录最佳参数组合和最小的 MAPE
     logger.info(
         "Best parameters: n_estimators=%d, max_depth=%d, Min MAPE=%f, Best_predicted=%s",
-        best_n_estimators, best_max_depth, min_mape, str(best_predicted)
+        best_n_estimators,
+        best_max_depth,
+        min_mape,
+        str(best_predicted),
     )
 
     # # 预测未来3个月的销售额

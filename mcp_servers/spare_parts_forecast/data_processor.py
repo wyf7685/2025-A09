@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def transferdata_try() -> pd.DataFrame:
     """
     转换数据格式，从原始CSV文件生成透视表
-    
+
     Returns:
         处理后的数据透视表DataFrame
     """
@@ -214,17 +214,17 @@ def transferdata_try() -> pd.DataFrame:
     unstable_demand_data.to_csv("不稳定需求_季度_杭州.csv", index=False, encoding="utf-8")
     logger.debug("数据透视表: %s", df_pivot)
     df_pivot.to_csv("季度数据_all.csv", index=False, encoding="utf-8")
-    
+
     return df_pivot
 
 
 def preprocess_try(input_file: str = "不稳定杭宁.csv") -> pd.DataFrame:
     """
     预处理数据，将CSV文件转换为适用于预测的格式
-    
+
     Args:
         input_file: 输入的CSV文件路径
-    
+
     Returns:
         预处理后的DataFrame
     """

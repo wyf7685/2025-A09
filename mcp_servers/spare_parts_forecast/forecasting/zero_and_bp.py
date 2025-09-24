@@ -31,6 +31,7 @@ try:
     from tensorflow.keras.layers import Dense  # type: ignore
     from tensorflow.keras.models import Sequential  # type: ignore
     from tensorflow.keras.optimizers import Adam  # type: ignore
+
     _TF_AVAILABLE = True
     _TF_IMPORT_ERROR: Exception | None = None
 except Exception as _e:  # 捕获所有异常（包含可能的硬件 / DLL 兼容问题）
@@ -50,14 +51,14 @@ plt.rcParams["axes.unicode_minus"] = False
 def preprocess_data() -> pd.DataFrame:
     """
     数据预处理函数 - 创建示例数据
-    
+
     Returns:
         pd.DataFrame: 预处理后的数据框
     """
     # 创建示例时间序列数据
     time_periods = []
     values = []
-    
+
     # 生成2018-2025年的季度数据
     for year in range(2018, 2026):
         for quarter in range(1, 5):
@@ -66,21 +67,20 @@ def preprocess_data() -> pd.DataFrame:
             base_value = 1000 + (year - 2018) * 100 + quarter * 50
             noise = np.random.normal(0, 100)
             values.append(base_value + noise)
-    
-    return pd.DataFrame({
-        "time": time_periods[:len(time_periods)],
-        "values": values[:len(values)]
-    })
+
+    return pd.DataFrame({"time": time_periods[: len(time_periods)], "values": values[: len(values)]})
+
+
 __all__ = ["zero_and_bp_predict"]
 
 
 def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
     """
     BP神经网络预测主函数
-    
+
     Args:
         column_index: 数据列索引
-        
+
     Returns:
         tuple: (列名列表, 最小MAPE值)
     """
@@ -100,12 +100,12 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
     def bp_neural_network(sr: int, yh: int) -> tuple[float, np.ndarray, pd.DataFrame, pd.Index]:
         """
         BP神经网络模型训练和预测
-        
+
         Args:
             sr: 输入层神经元数量
             yh: 隐含层神经元数量
             isplt: 是否绘图
-            
+
         Returns:
             tuple: (MAPE值, 预测值, 数据, 测试索引)
         """
@@ -168,7 +168,7 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
 
         y_pred = scaler.inverse_transform(y_pred)
         y_test = scaler.inverse_transform(y_test)
-        
+
         logger.info(f"预测值: {y_pred.flatten()}")
         logger.info(f"真实值: {y_test.flatten()}")
 
@@ -206,7 +206,7 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
                 plt.show()
             logger.info(f"第{i}次循环")
             logger.info(f"输入层{sr}个,隐含层{yh}个")
-    
+
     logger.info(f"最佳输入: {best_sr}")
     logger.info(f"最佳隐含层: {best_yh}")
     logger.info(f"最佳MAPE: {min_mape}")
@@ -228,14 +228,14 @@ def bp_run() -> None:
         logger.info(f"MAPE: {min_mape}")
         # 将 MAPE 值作为元组添加到列表中
         bp_mape_values.append((material_number, min_mape))
-    
+
     # 将 MAPE 值写入文件
     output_file = Path("BP不平稳杭宁.txt")
     with output_file.open("w", encoding="utf-8") as f:
         # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
         for material_number, min_mape in bp_mape_values:
             f.write(f"物料号：{material_number}, MAPE BP: {round(min_mape, 2)}\n")
-    
+
     csv_filename = Path("BP不平稳杭宁.csv")
     with csv_filename.open("a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)

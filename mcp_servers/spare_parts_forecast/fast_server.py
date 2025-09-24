@@ -3,6 +3,7 @@
 Run (package mode):
     python -m mcp_servers.spare_parts_forecast.fast_server
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -18,9 +19,11 @@ app = FastMCP(name="spare-parts-forecast-fast", version="1.0.0")
 with contextlib.suppress(Exception):  # pragma: no cover
     app.description = "Spare parts demand forecasting tools (FastMCP)"  # type: ignore[attr-defined]
 
+
 def create_fast_server() -> FastMCP:
     """Factory returning FastMCP app (for embedding)."""
     return app
+
 
 __all__ = [
     "algorithm_categories",

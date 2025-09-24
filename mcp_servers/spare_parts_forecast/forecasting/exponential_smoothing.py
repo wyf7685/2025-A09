@@ -1,6 +1,7 @@
 """
 指数平滑预测(一次、二次、三次) - 基于原始notebook实现
 """
+
 import itertools
 import logging
 
@@ -29,10 +30,10 @@ except ImportError:
 def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, float, float, float, float, float]:
     """
     运行指数平滑预测(一次、二次、三次)
-    
+
     Args:
         n: 物料列索引
-        
+
     Returns:
         tuple: (best_mape_one, best_mape_two, best_mape_three, col,
                 best_alpha_d, best_beta_d, best_alpha_t, best_beta_t,
@@ -91,9 +92,7 @@ def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, floa
         for alpha in alphas:  # 遍历alpha参数列表
             for beta in betas:  # 遍历beta参数列表
                 # 使用ExponentialSmoothing模型拟合训练数据，设置趋势为"add"，并指定alpha和beta参数
-                des_model = ExponentialSmoothing(train, trend="add").fit(
-                    smoothing_level=alpha, smoothing_trend=beta
-                )
+                des_model = ExponentialSmoothing(train, trend="add").fit(smoothing_level=alpha, smoothing_trend=beta)
                 y_pred = des_model.forecast(step)  # 预测未来step个时间步长的值
                 # 计算预测值与测试集的平均绝对误差（MAPE）
                 mape_two = np.mean(np.abs((y_pred.to_numpy() - test.to_numpy()) / test.to_numpy()))
@@ -111,9 +110,7 @@ def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, floa
 
     # 定义一个三次指数平滑模型的超参数优化函数
     # 用于选择最佳的 alpha、beta、gamma 参数
-    def tes_optimizer(
-        train: pd.Series, abg: list, step: int = 4
-    ) -> tuple[float, float, float, float, float]:
+    def tes_optimizer(train: pd.Series, abg: list, step: int = 4) -> tuple[float, float, float, float, float]:
         # 初始化最佳的 alpha、beta、gamma 和最佳 MAPE
         best_alpha: float = 0.1
         best_beta: float = 0.1
