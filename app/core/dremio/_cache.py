@@ -20,7 +20,7 @@ async def _init_cache() -> BaseCache:
         await cache.client.connection_pool.get_connection()
         logger.opt(colors=True).info("使用 <g>RedisCache</> 作为缓存")
     except Exception:
-        logger.warning("<g>RedisCache</> 连接失败，使用 <g>SimpleMemoryCache</>")
+        logger.opt(colors=True).warning("<g>RedisCache</> 连接失败，使用 <g>SimpleMemoryCache</>")
         cache = SimpleMemoryCache()
 
     return cache

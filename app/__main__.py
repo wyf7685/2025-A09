@@ -8,7 +8,7 @@ from app.utils import configure_matplotlib_fonts
 configure_logging()
 configure_matplotlib_fonts()
 
-from app import api
+from app.api import router as api_router
 from app.core.config import settings
 from app.core.lifespan import lifespan
 
@@ -30,7 +30,7 @@ app.add_middleware(
 )
 
 # 注册API路由
-app.include_router(api.router)
+app.include_router(api_router)
 
 
 if __name__ == "__main__":
