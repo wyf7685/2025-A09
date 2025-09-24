@@ -27,7 +27,7 @@ class AsyncDremioFlightClient(AbstractAsyncDremioClient):
         self.external_name = settings.DREMIO_EXTERNAL_NAME
         self._login_finished = threading.Event()
 
-        @lifespan.on_startup
+        @lifespan.on_ready
         def _() -> None:
             self._client.login(
                 username=settings.DREMIO_USERNAME,

@@ -1,4 +1,6 @@
 import contextlib
+import enum
+import functools
 import threading
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
@@ -8,7 +10,7 @@ import anyio
 from anyio.abc import TaskGroup
 
 from app.log import logger
-from app.utils import is_coroutine_callable, run_sync
+from app.utils import escape_tag, is_coroutine_callable, run_sync
 
 type SyncLifespanFunc = Callable[[], object]
 type AsyncLifespanFunc = Callable[[], Awaitable[object]]
@@ -19,9 +21,18 @@ def _ensure_async(func: LifespanFunc) -> AsyncLifespanFunc:
     return cast("AsyncLifespanFunc", func) if is_coroutine_callable(func) else run_sync(func)
 
 
+class LifespanState(int, enum.Enum):
+    INITIAL = 0  # task group not created
+    STARTING = 1  # task group created, running startup functions
+    STARTED = 2  # lifespan started, running ready functions
+    STOPPING = 3  # running shutdown functions
+    STOPPED = 4  # task group stopped
+
+
 class Lifespan:
     def __init__(self, name: str) -> None:
         self._name = name
+        self._state: LifespanState = LifespanState.INITIAL
         self._task_group: TaskGroup | None = None
 
         self._startup_funcs: list[AsyncLifespanFunc] = []
@@ -40,12 +51,12 @@ class Lifespan:
             raise RuntimeError("Lifespan already started")
         self._task_group = task_group
 
-    @property
-    def started(self) -> bool:
-        return self._task_group is not None
-
     def start_soon[*Ts](self, func: Callable[[*Ts], Awaitable[object]], /, *args: *Ts, name: object = None) -> None:
-        self.task_group.start_soon(func, *args, name=name)
+        @functools.wraps(func)
+        async def wrapper() -> None:
+            await func(*args)
+
+        self.task_group.start_soon(self._run, wrapper, "后台任务执行失败", False, name=name)
 
     def from_thread[*Ts, R](self, func: Callable[[*Ts], Awaitable[R]], /, *args: *Ts) -> R:
         event = threading.Event()
@@ -72,7 +83,7 @@ class Lifespan:
     def on_startup[F: LifespanFunc](self, func: F) -> F:
         f = _ensure_async(func)
         self._startup_funcs.append(f)
-        if self.started:
+        if self._state in (LifespanState.STARTING, LifespanState.STARTED):
             self.start_soon(f)
         return func
 
@@ -83,28 +94,44 @@ class Lifespan:
     def on_ready[F: LifespanFunc](self, func: F) -> F:
         f = _ensure_async(func)
         self._ready_funcs.append(f)
-        if self.started:
+        if self._state == LifespanState.STARTED:
             self.start_soon(f)
         return func
+
+    async def _run(self, func: AsyncLifespanFunc, err_msg: str, should_raise: bool) -> None:
+        try:
+            await func()
+        except Exception:
+            logger.opt(colors=True, exception=True).error(
+                f"<m>{self._name}</> | {err_msg} - <y>{escape_tag(repr(func))}</>"
+            )
+            if should_raise:
+                raise
 
     async def _run_lifespan_func(self, funcs: Iterable[AsyncLifespanFunc]) -> None:
         async with anyio.create_task_group() as tg:
             for func in funcs:
-                tg.start_soon(func)
+                tg.start_soon(self._run, func, "生命周期函数执行失败", True)
 
     def _log(self, msg: str, /) -> None:
         logger.opt(colors=True).debug(f"<m>{self._name}</> | {msg}")
 
     async def startup(self) -> None:
+        if self._state != LifespanState.INITIAL:
+            raise RuntimeError("Lifespan already started or starting")
+
         # create background task group
         self._log("生命周期启动中...")
         self.task_group = anyio.create_task_group()
         await self.task_group.__aenter__()
+        self._state = LifespanState.STARTING
 
         # run startup funcs
         if self._startup_funcs:
             self._log(f"执行生命周期函数: <g>startup</> - <y>{len(self._startup_funcs)}</>")
             await self._run_lifespan_func(self._startup_funcs[:])
+
+        self._state = LifespanState.STARTED
 
         # run ready funcs
         if self._ready_funcs:
@@ -120,7 +147,11 @@ class Lifespan:
         exc_val: BaseException | None = None,
         exc_tb: TracebackType | None = None,
     ) -> None:
+        if self._state in (LifespanState.INITIAL, LifespanState.STOPPED):
+            raise RuntimeError("Lifespan not started or already stopped")
+
         self._log("正在关闭生命周期...")
+        self._state = LifespanState.STOPPING
 
         if self._shutdown_funcs:
             self._log(f"执行生命周期函数: <g>shutdown</> - <y>{len(self._shutdown_funcs)}</>")
@@ -135,6 +166,7 @@ class Lifespan:
 
         self._log("生命周期关闭完成")
         self._task_group = None
+        self._state = LifespanState.STOPPED
 
     async def __aenter__(self, *_: object) -> None:
         await self.startup()
