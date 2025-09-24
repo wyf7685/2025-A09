@@ -33,11 +33,12 @@ export default defineConfig({
           if (assetInfo.names.includes('favicon.ico')) {
             return 'favicon.ico';
           }
-          return 'assets/[name]-[hash][extname]';
+          return 'assets/[hash][extname]';
         },
+        chunkFileNames: 'assets/[hash].js',
+        entryFileNames: 'assets/[hash].js',
         manualChunks: {
           vendor: ['vue', 'vue-router', 'axios', 'pinia'],
-          // echarts: ['echarts'],  // unused
           marked: ['marked'],
           'element-plus': ['element-plus'],
           'element-plus-icons': ['@element-plus/icons-vue'],
