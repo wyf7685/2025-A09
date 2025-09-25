@@ -10,10 +10,8 @@ BP神经网络预测模块
 - 批量预测和结果导出
 """
 
-import csv
 import logging
 import warnings
-from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -48,33 +46,33 @@ plt.rcParams["font.sans-serif"] = ["SimHei"]
 plt.rcParams["axes.unicode_minus"] = False
 
 
-def preprocess_data() -> pd.DataFrame:
-    """
-    数据预处理函数 - 创建示例数据
+# def preprocess_data() -> pd.DataFrame:
+#     """
+#     数据预处理函数 - 创建示例数据
 
-    Returns:
-        pd.DataFrame: 预处理后的数据框
-    """
-    # 创建示例时间序列数据
-    time_periods = []
-    values = []
+#     Returns:
+#         pd.DataFrame: 预处理后的数据框
+#     """
+#     # 创建示例时间序列数据
+#     time_periods = []
+#     values = []
 
-    # 生成2018-2025年的季度数据
-    for year in range(2018, 2026):
-        for quarter in range(1, 5):
-            time_periods.append(f"{year} 第{quarter}季度")
-            # 生成带有趋势的随机值
-            base_value = 1000 + (year - 2018) * 100 + quarter * 50
-            noise = np.random.normal(0, 100)
-            values.append(base_value + noise)
+#     # 生成2018-2025年的季度数据
+#     for year in range(2018, 2026):
+#         for quarter in range(1, 5):
+#             time_periods.append(f"{year} 第{quarter}季度")
+#             # 生成带有趋势的随机值
+#             base_value = 1000 + (year - 2018) * 100 + quarter * 50
+#             noise = np.random.normal(0, 100)
+#             values.append(base_value + noise)
 
-    return pd.DataFrame({"time": time_periods[: len(time_periods)], "values": values[: len(values)]})
+#     return pd.DataFrame({"time": time_periods[: len(time_periods)], "values": values[: len(values)]})
 
 
 __all__ = ["zero_and_bp_predict"]
 
 
-def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
+def zero_and_bp_predict(column_index: int, df: pd.DataFrame) -> tuple[list[str], float]:
     """
     BP神经网络预测主函数
 
@@ -93,7 +91,7 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
         )
 
     # 读取列索引名（当前示例生成模拟数据，实际可替换为真实数据加载）
-    df = preprocess_data()
+    # df = preprocess_data()
     col = df.columns
 
     # 正常bp（循环）
@@ -110,7 +108,6 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
             tuple: (MAPE值, 预测值, 数据, 测试索引)
         """
         # 读取数据
-        df = preprocess_data()
         data = df
 
         # 选择指定列
@@ -212,40 +209,3 @@ def zero_and_bp_predict(column_index: int) -> tuple[list[str], float]:
     logger.info(f"最佳MAPE: {min_mape}")
     return col.tolist(), float(min_mape)
 
-
-def bp_run() -> None:
-    """
-    运行BP神经网络批量预测
-    """
-    # 创建一个空列表，用于存储 MAPE 值
-    bp_mape_values = []
-    for n in data_bp:
-        # 运行 zero_and_bp_predict() 并计算 MAPE
-        col, min_mape = zero_and_bp_predict(n)
-        # 取出对应的物料号
-        material_number = col[n] if n < len(col) else f"Column_{n}"
-        logger.info(f"物料号: {material_number}")
-        logger.info(f"MAPE: {min_mape}")
-        # 将 MAPE 值作为元组添加到列表中
-        bp_mape_values.append((material_number, min_mape))
-
-    # 将 MAPE 值写入文件
-    output_file = Path("BP不平稳杭宁.txt")
-    with output_file.open("w", encoding="utf-8") as f:
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, min_mape in bp_mape_values:
-            f.write(f"物料号：{material_number}, MAPE BP: {round(min_mape, 2)}\n")
-
-    csv_filename = Path("BP不平稳杭宁.csv")
-    with csv_filename.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, min_mape in bp_mape_values:
-            writer.writerow([material_number, round(min_mape, 2)])
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_bp = range(1, 2)
-    # 运行
-    bp_run()

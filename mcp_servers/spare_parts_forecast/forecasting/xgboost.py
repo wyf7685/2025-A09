@@ -154,30 +154,30 @@ def sanitized_gwo(
     return best_depth, best_lr, best_estimators, iterations, accuracy  # 返回数据
 
 
-def preprocess_data() -> pd.DataFrame:
-    """
-    数据预处理函数 - 创建示例数据
+# def preprocess_data() -> pd.DataFrame:
+#     """
+#     数据预处理函数 - 创建示例数据
 
-    Returns:
-        pd.DataFrame: 预处理后的数据框
-    """
-    # 创建示例时间序列数据
-    time_periods = []
-    values = []
+#     Returns:
+#         pd.DataFrame: 预处理后的数据框
+#     """
+#     # 创建示例时间序列数据
+#     time_periods = []
+#     values = []
 
-    # 生成2018-2025年的季度数据
-    for year in range(2018, 2026):
-        for quarter in range(1, 5):
-            time_periods.append(f"{year} 第{quarter}季度")
-            # 生成带有趋势的随机值
-            base_value = 1000 + (year - 2018) * 100 + quarter * 50
-            noise = np.random.normal(0, 100)
-            values.append(base_value + noise)
+#     # 生成2018-2025年的季度数据
+#     for year in range(2018, 2026):
+#         for quarter in range(1, 5):
+#             time_periods.append(f"{year} 第{quarter}季度")
+#             # 生成带有趋势的随机值
+#             base_value = 1000 + (year - 2018) * 100 + quarter * 50
+#             noise = np.random.normal(0, 100)
+#             values.append(base_value + noise)
 
-    return pd.DataFrame({"time": time_periods[: len(time_periods)], "values": values[: len(values)]})
+#     return pd.DataFrame({"time": time_periods[: len(time_periods)], "values": values[: len(values)]})
 
 
-def xgboost_forecast(column_index: int = 16) -> dict:
+def xgboost_forecast(column_index: int, df: pd.DataFrame) -> dict:
     """
     XGBoost预测主函数
 
@@ -185,7 +185,7 @@ def xgboost_forecast(column_index: int = 16) -> dict:
         column_index: 数据列索引，默认为16
     """
     # 获取预处理数据
-    df = preprocess_data()
+    # df = preprocess_data()
 
     # 选择指定列
     df = df.iloc[:, [0, column_index]] if len(df.columns) > column_index else df.iloc[:, [0, 1]]
@@ -258,9 +258,3 @@ def xgboost_forecast(column_index: int = 16) -> dict:
         "predictions": y_pred.tolist(),
         "actual": y_test.tolist(),
     }
-
-
-if __name__ == "__main__":
-    # 运行XGBoost预测
-    result = xgboost_forecast(column_index=1)
-    logger.info(f"预测完成，MAPE: {result['mape']:.4f}")

@@ -10,24 +10,11 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 
-# 导入数据预处理函数
-try:
-    from ..data_processor import preprocess_try
-except ImportError:
-    # 如果没有找到预处理函数，提供一个简单的替代实现
-    def preprocess_try() -> pd.DataFrame:
-        # 创建示例数据用于测试
-        dates = [f"2018 第{i // 4 + 1}季度" if i < 16 else f"2022 第{(i - 16) // 4 + 1}季度" for i in range(22)]
-        data = {
-            "time": dates,
-            "物料号1": np.random.poisson(2, 22),
-            "物料号2": np.random.poisson(1.5, 22),
-        }
-        return pd.DataFrame(data)
-
 
 # 指数平滑预测(一、二、三)
-def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, float, float, float, float, float]:
+def ema_forecast_try(
+    n: int, df: pd.DataFrame
+) -> tuple[float, float, float, pd.Index, float, float, float, float, float, float]:
     """
     运行指数平滑预测(一次、二次、三次)
 
@@ -40,7 +27,7 @@ def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, floa
                 best_gamma_t, best_season_periods)
     """
     # 数据预处理
-    df = preprocess_try()
+    # df = preprocess_try()
     # 读取列索引名
     col = df.columns
     # 转换为日期时间索引
@@ -217,56 +204,3 @@ def ema_forecast_try(n: int) -> tuple[float, float, float, pd.Index, float, floa
         best_season_periods,
     )
 
-
-# 运行指数平滑法、写入
-def ema_run() -> None:
-    """运行指数平滑预测的批量处理函数"""
-    # 创建一个空列表，用于存储 MAPE 值
-    ema_mape_values = []
-    for n in data_ema:
-        # 运行 ema_forecast_try() 并计算 MAPE
-        (
-            best_mape_one,
-            best_mape_two,
-            best_mape_three,
-            col,
-            best_alpha_d,
-            best_beta_d,
-            best_alpha_t,
-            best_beta_t,
-            best_gamma_t,
-            best_season_periods,
-        ) = ema_forecast_try(n)
-        # 取出对应的物料号
-        material_number = col[n]
-        logging.info(f"这是 {material_number}")
-        logging.info(
-            f"{best_mape_one}, {best_mape_two}, {best_mape_three}, "
-            f"{best_alpha_d}, {best_beta_d}, {best_alpha_t}, {best_beta_t}, "
-            f"{best_gamma_t}, {best_season_periods}"
-        )
-        # 将 MAPE 值作为元组添加到列表中
-        ema_mape_values.append(
-            (
-                material_number,
-                best_mape_one,
-                best_mape_two,
-                best_mape_three,
-                best_alpha_d,
-                best_beta_d,
-                best_alpha_t,
-                best_beta_t,
-                best_gamma_t,
-                best_season_periods,
-            )
-        )
-    # 可选：将结果写入文件 (当前已注释)
-    # 可选：将结果写入CSV文件 (当前已注释)
-    return
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_ema = range(1, 2)
-    # 运行
-    ema_run()

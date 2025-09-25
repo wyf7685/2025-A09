@@ -4,27 +4,20 @@
 用于预测备件需求。
 """
 
-import csv
 import logging
-import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
-# 导入数据预处理函数
-sys.path.append(str(Path(__file__).parent.parent))
-from data_processor import preprocess_try
-
 logger = logging.getLogger(__name__)
 
 
 # 随机森林预测
-def forest_try(n: int) -> tuple[float, pd.Index]:
+def forest_try(n: int, df: pd.DataFrame) -> tuple[float, pd.Index]:
     # 读取数据
-    df = preprocess_try()
+    # df = preprocess_try()
 
     col = df.columns
 
@@ -135,41 +128,3 @@ def forest_try(n: int) -> tuple[float, pd.Index]:
     plt.savefig("FST")
     plt.show()
     return float(min_mape), col
-
-
-def fst_run() -> None:
-    """运行随机森林预测并保存结果"""
-    # 创建一个空列表，用于存储 MAPE 值
-    fst_mape_values = []
-    for n in data_fst:
-        # 运行 SMAforecast_try() 并计算 MAPE
-        min_mape, col = forest_try(n)
-        # 取出对应的物料号
-        material_number = col[n]
-        logger.info("物料号: %s", material_number)
-        logger.info("MAPE: %f", min_mape)
-        # 将 MAPE 值作为元组添加到列表中
-        fst_mape_values.append((material_number, min_mape))
-    # 将 MAPE 值写入文件
-    output_path = Path("FST不平稳杭宁.txt")
-    with output_path.open("w", encoding="utf-8") as f:
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, min_mape in fst_mape_values:
-            f.write(f"物料号：{material_number}, MAPE FSR: {round(min_mape, 2)}\n")
-    csv_filename = "FST不平稳杭宁.csv"
-    csv_path = Path(csv_filename)
-    with csv_path.open("a", newline="", encoding="utf-8") as f:  # 使用追加模式，并且指定 newline='' 来避免空行
-        writer = csv.writer(f)
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, min_mape in fst_mape_values:
-            writer.writerow([material_number, round(min_mape, 2)])
-
-    plt.show()
-    return
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_fst = range(1, 2)
-    # 运行
-    fst_run()

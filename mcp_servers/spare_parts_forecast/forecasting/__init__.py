@@ -50,16 +50,15 @@ except ImportError as e:
 
 # 机器学习预测方法
 try:
-    from .forest import forest_try, fst_run
+    from .forest import forest_try
 
     logger.info("Random Forest forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import Random Forest forecasting: {e}")
     forest_try = None
-    fst_run = None
 
 try:
-    from .xgboost import preprocess_data as xgb_preprocess_data
+    # from .xgboost import preprocess_data as xgb_preprocess_data
     from .xgboost import sanitized_gwo, xgboost_forecast
 
     logger.info("XGBoost forecasting module loaded successfully")
@@ -67,32 +66,24 @@ except ImportError as e:
     logger.warning(f"Could not import XGBoost forecasting: {e}")
     xgboost_forecast = None
     sanitized_gwo = None
-    xgb_preprocess_data = None
 
 # 神经网络预测方法
 try:
-    from .zero_and_bp import bp_run, zero_and_bp_predict
-    from .zero_and_bp import preprocess_data as bp_preprocess_data
+    from .zero_and_bp import zero_and_bp_predict
 
     logger.info("BP neural network forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import BP neural network forecasting: {e}")
     zero_and_bp_predict = None
-    bp_run = None
-    bp_preprocess_data = None
 
 # 定义公共接口
 __all__ = [
     "arimaforecast_try",
-    "bp_preprocess_data",
-    "bp_run",
     "croston_forecast_try",
     "ema_forecast_try",
     "forest_try",
-    "fst_run",
     "sanitized_gwo",
     "sma_forecast_try",
-    "xgb_preprocess_data",
     "xgboost_forecast",
     "zero_and_bp_predict",
 ]

@@ -17,6 +17,7 @@ from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_la
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, create_react_agent
+from mcp.types import Implementation as MCPImplementation
 
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import format_sources_overview
@@ -132,13 +133,26 @@ class AgentContext:
             self._mcp_instructions = ""
             return []
 
+        assert self.lifespan is not None
+        stack = contextlib.AsyncExitStack()
+
+        async def shutdown_mcp_stack() -> None:
+            try:
+                await stack.aclose()
+            except BaseException as e:
+                logger.warning(f"关闭 MCP 连接时发生错误: {e!r}")
+
+        self.lifespan.on_shutdown(shutdown_mcp_stack)
+
         instructions: list[str] = []
         mcp_tools: list[BaseTool] = []
-        for idx, connection in enumerate(self.mcp_connections, 1):
-            conn = cast("LangChainMCPConnection", deepcopy(connection))
-            async with create_session(conn) as tool_session:
-                init = await tool_session.initialize()
-                tools = await _list_all_tools(tool_session)
+        client_info = MCPImplementation(name=self.session_id, version="0.1.0")
+        for idx, conn in enumerate(self.mcp_connections, 1):
+            connection = cast("LangChainMCPConnection", deepcopy(conn))
+            connection["session_kwargs"] = {"client_info": client_info}
+            session = await stack.enter_async_context(create_session(connection))
+            init = await session.initialize()
+            tools = await _list_all_tools(session)
             instruction = PROMPTS.mcp_server.format(
                 idx=idx,
                 server_instructions=init.instructions or "无",
@@ -147,7 +161,7 @@ class AgentContext:
                 ),
             )
             instructions.append(instruction)
-            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(None, tool, connection=conn) for tool in tools)
+            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(session, tool) for tool in tools)
 
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n".join(instructions))
         return mcp_tools

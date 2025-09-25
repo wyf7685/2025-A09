@@ -238,6 +238,26 @@ class TempFileService:
 
         return file_id
 
+    async def allocate(self, suffix: str = "", ttl: float | None = None) -> tuple[str, Path]:
+        """
+        分配临时文件路径
+
+        Args:
+            suffix: 临时文件后缀
+
+        Returns:
+            tuple[str, Path]: (临时文件ID, 临时文件路径)
+        """
+        file_id = str(uuid.uuid4())
+        temp_path = _TEMP_DIR / f"{file_id}{suffix}"
+        await temp_path.touch()
+        self._data[file_id] = temp_path
+
+        if ttl is not None and ttl > 0:
+            lifespan.start_soon(self._delete_after, file_id, ttl)
+
+        return file_id, Path(temp_path)
+
     def get(self, file_id: str) -> Path | None:
         """
         获取临时文件路径

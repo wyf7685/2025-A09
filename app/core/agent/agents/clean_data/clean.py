@@ -272,6 +272,7 @@ def create_cleaning_suggestion(issue: dict[str, Any], df: pd.DataFrame) -> dict[
 
     return None
 
+
 def _chain_prompt(input: tuple[pd.DataFrame, str]) -> str:
     df, user_requirements = input
     return PROMPTS.clean_suggestion.format(

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.agent_source import router as agent_source_router
 from app.api.chat import router as chat_router
 from app.api.clean import router as clean_router
 from app.api.datasources import router as datasources_router
@@ -20,3 +21,4 @@ router.include_router(datasources_router)
 router.include_router(clean_router)
 router.include_router(mcp_router)
 router.include_router(workflow_router)
+router.include_router(agent_source_router)

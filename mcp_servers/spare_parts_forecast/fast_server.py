@@ -11,6 +11,8 @@ from typing import Any
 
 from mcp.server import FastMCP
 
+from .data_source import read_agent_source_data
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -73,6 +75,19 @@ from .forecasting import (
 )
 
 
+def get_client_name() -> str | None:
+    ctx = app.get_context()
+    params = ctx.request_context.session.client_params
+    return params and params.clientInfo.name
+
+
+# See app/core/agent/agents/data_analyzer/context.py
+def get_session_id() -> str:
+    name = get_client_name()
+    assert name is not None, "Session ID is required"
+    return name
+
+
 @app.tool()
 def algorithms() -> list[str]:
     """列出所有算法名称"""
@@ -86,62 +101,52 @@ def algorithm_categories() -> dict[str, list[str]]:
 
 
 @app.tool()
-def sma_forecast(n: int = 4) -> Any:
+def sma_forecast(source_id: str, n: int = 4) -> Any:
     """SMA 简单移动平均预测"""
-    if sma_forecast_try is None:
-        return {"error": "SMA unavailable"}
-    return sma_forecast_try(n)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return sma_forecast_try(n, df)
 
 
 @app.tool()
-def ema_forecast(n: int = 4) -> Any:
+def ema_forecast(source_id: str, n: int = 4) -> Any:
     """EMA 指数平滑预测"""
-    if ema_forecast_try is None:
-        return {"error": "EMA unavailable"}
-    return ema_forecast_try(n)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return ema_forecast_try(n, df)
 
 
 @app.tool()
-def croston_forecast(n: int = 4) -> Any:
+def croston_forecast(source_id: str, n: int = 4) -> Any:
     """Croston 间歇需求预测"""
-    if croston_forecast_try is None:
-        return {"error": "Croston unavailable"}
-    return croston_forecast_try(n)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return croston_forecast_try(n, df)
 
 
 @app.tool()
-def arima_forecast(n: int = 4) -> Any:
+def arima_forecast(source_id: str, n: int = 4) -> Any:
     """ARIMA 预测"""
-    if arimaforecast_try is None:
-        return {"error": "ARIMA unavailable"}
-    return arimaforecast_try(n)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return arimaforecast_try(n, df)
 
 
 @app.tool()
-def forest_forecast(n: int = 4) -> Any:
+def forest_forecast(source_id: str, n: int = 4) -> Any:
     """随机森林预测"""
-    if forest_try is None:
-        return {"error": "Forest unavailable"}
-    return forest_try(n)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return forest_try(n, df)
 
 
 @app.tool()
-def xgb_forecast(column_index: int = 16) -> Any:
+def xgb_forecast(source_id: str, column_index: int = 16) -> Any:
     """XGBoost 预测"""
-    if xgboost_forecast is None:
-        return {"error": "XGBoost unavailable"}
-    return xgboost_forecast(column_index=column_index)
+    df = read_agent_source_data(get_session_id(), source_id)
+    return xgboost_forecast(column_index, df)
 
 
 @app.tool()
-def bp_forecast(column_index: int = 16) -> Any:
+def bp_forecast(source_id: str, column_index: int = 16) -> Any:
     """BP 神经网络预测 (需要 TensorFlow)"""
-    if zero_and_bp_predict is None:
-        return {"error": "BP unavailable"}
-    try:
-        return zero_and_bp_predict(column_index)
-    except Exception as e:  # pragma: no cover
-        return {"error": str(e)}
+    df = read_agent_source_data(get_session_id(), source_id)
+    return zero_and_bp_predict(column_index, df)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -5,11 +5,8 @@ ARIMA预测模型
 参数优化和预测评估等功能。
 """
 
-import csv
 import itertools
 import logging
-import sys
-from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -24,16 +21,12 @@ from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 
-# 导入数据预处理函数
-sys.path.append(str(Path(__file__).parent.parent))
-from data_processor import preprocess_try
-
 logger = logging.getLogger(__name__)
 
 
 # ARIMA预测
 # 基础 ARIMA 模型
-def arimaforecast_try(n: int) -> float:
+def arimaforecast_try(n: int, df: pd.DataFrame) -> float:
     # 重采样
     def resampling(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """数据重采样函数"""
@@ -174,7 +167,7 @@ def arimaforecast_try(n: int) -> float:
         # for i in range(44):
         #     x_1.append(i + 1)
         # x_1 = np.array(x_1)
-        df_all = preprocess_try()
+        # df_all = preprocess_try()
         # print(x)
         # 使用between方法来切片时间列
         # x_train_time = x[x['time'].between('2018 第1季度', '2022 第2季度')]
@@ -208,7 +201,7 @@ def arimaforecast_try(n: int) -> float:
     # n = 6                        # 读取的列索引序号
 
     # 数据预处理
-    df = preprocess_try()
+    df_all = df.copy()
     df = df.iloc[:, [0, n]]  # 选择第0列和第n列，这将保留时间列和第n列
 
     # # 重采样,划分训练测试
@@ -254,9 +247,8 @@ def arimaforecast_try(n: int) -> float:
 
 
 # SARIMA模型（考虑季节性）
-def arima_try(n: int) -> tuple[float, pd.Index]:
+def arima_try(n: int, data: pd.DataFrame) -> tuple[float, pd.Index]:
     # Load the data
-    data = preprocess_try()
     col = data.columns
     data = data.iloc[:, [0, n]]
     # A bit of pre-processing to make it nicer
@@ -428,39 +420,3 @@ def arima_try(n: int) -> tuple[float, pd.Index]:
     plt.savefig("SARIMA")
     plt.show()
     return float(mape), col
-
-
-def ari_run() -> None:
-    """运行ARIMA预测并保存结果"""
-    # 创建一个空列表，用于存储 MAPE 值
-    ari_mape_values = []
-    for n in data_ari:
-        # 运行 arima_try() 并计算 MAPE
-        mape, col = arima_try(n)
-        # 取出对应的物料号
-        material_number = col[n]
-        logger.info("物料号: %s, MAPE: %f", material_number, mape)
-        # 将 MAPE 值作为元组添加到列表中
-        ari_mape_values.append((material_number, mape))
-    # 将 MAPE 值写入文件
-    output_path = Path("ARI平稳杭宁_5.txt")
-    with output_path.open("w", encoding="utf-8") as f:
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, MAPE in ari_mape_values:
-            f.write(f"物料号：{material_number}, MAPE ARI: {round(MAPE, 2)}\n")
-    csv_filename = "ARI平稳杭宁_5.csv"
-    csv_path = Path(csv_filename)
-    with csv_path.open("a", newline="", encoding="utf-8") as f:  # 使用追加模式，并且指定 newline='' 来避免空行
-        writer = csv.writer(f)
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, MAPE in ari_mape_values:
-            writer.writerow([material_number, round(MAPE, 2)])
-
-    return
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_ari = range(1, 2)
-    # 运行
-    ari_run()

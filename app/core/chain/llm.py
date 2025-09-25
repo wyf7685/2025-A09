@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.services.custom_model import custom_model_manager
+from app.utils import escape_tag
 
 type LLM = Runnable[LanguageModelInput, str]
 
@@ -83,7 +84,7 @@ def _select_model(
     model_id: LLModelID,
     type: Literal["LLM", "ChatModel", "ALL"],  # noqa: A002
 ) -> LLM | BaseChatModel | tuple[LLM, BaseChatModel]:
-    logger.debug(f"选择模型: {model_id} {type=}")
+    logger.opt(colors=True).debug(f"选择模型: model_id=<c>{escape_tag(model_id)}</> type=<y>{escape_tag(type)}</>")
     model_name = model_id or settings.TEST_MODEL_NAME
 
     # 优先检查是否是自定义模型

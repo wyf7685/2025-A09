@@ -54,7 +54,7 @@ class DataAnalyzerAgentService:
 
     async def _create(self, session: Session) -> DataAnalyzerAgent:
         """创建新的数据分析 Agent"""
-        if self._get(session):
+        if self.get(session):
             await self._destroy(session.id, save_state=True, pop=False)
 
         mcps = mcp_service.gets(*(session.mcp_ids or []))
@@ -73,7 +73,7 @@ class DataAnalyzerAgentService:
         )
         return agent
 
-    def _get(self, session: Session) -> DataAnalyzerAgent | None:
+    def get(self, session: Session) -> DataAnalyzerAgent | None:
         """获取指定会话和模型的 Agent"""
         state = self.agents.get(session.id)
         if state is None or state.agent is None:
@@ -82,7 +82,7 @@ class DataAnalyzerAgentService:
 
     async def _get_or_create(self, session: Session) -> DataAnalyzerAgent:
         """获取或创建会话的 Agent"""
-        if agent := self._get(session):
+        if agent := self.get(session):
             return agent
         return await self._create(session)
 

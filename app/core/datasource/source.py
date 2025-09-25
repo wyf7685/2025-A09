@@ -1,4 +1,5 @@
 import abc
+import io
 from datetime import datetime
 from typing import Any
 
@@ -325,3 +326,17 @@ class DataSource(abc.ABC):
             DataSource: 反序列化后的数据源对象
         """
         raise NotImplementedError("子类必须实现deserialize方法")
+
+    def dump(self) -> bytes:
+        with io.BytesIO() as buffer:
+            full = self.get_full()
+            full.to_pickle(buffer)
+            buffer.seek(0)
+            return buffer.read()
+
+    async def dump_async(self) -> bytes:
+        with io.BytesIO() as buffer:
+            full = await self.get_full_async()
+            await anyio.to_thread.run_sync(full.to_pickle, buffer)
+            buffer.seek(0)
+            return buffer.read()

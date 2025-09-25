@@ -2,38 +2,20 @@
 简单移动平均法预测 - 基于原始notebook实现
 """
 
-import csv
 import logging
-from pathlib import Path
-from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# 导入数据预处理函数
-try:
-    from ..data_processor import preprocess_try
-except ImportError:
-    # 如果没有找到预处理函数，提供一个简单的替代实现
-    def preprocess_try() -> pd.DataFrame:
-        # 创建示例数据用于测试
-        dates = [f"2018 第{i // 4 + 1}季度" if i < 16 else f"2022 第{(i - 16) // 4 + 1}季度" for i in range(22)]
-        data = {
-            "time": dates,
-            "物料号1": np.random.poisson(2, 22),
-            "物料号2": np.random.poisson(1.5, 22),
-        }
-        return pd.DataFrame(data)
 
-
-def sma_forecast_try(n: int) -> Tuple[float, float, pd.Index]:
+def sma_forecast_try(n: int, df: pd.DataFrame) -> tuple[float, float, pd.Index]:
     # 参数
     # n = 6               # 读取的列索引序号
     window_size = 3  # 窗口期
 
-    # 数据预处理
-    df = preprocess_try()
+    # # 数据预处理
+    # df = preprocess_try()
     # print(df.columns)
     # 读取列索引名
     col = df.columns
@@ -121,40 +103,3 @@ def sma_forecast_try(n: int) -> Tuple[float, float, pd.Index]:
     plt.show()
 
     return float(mape_single), float(mape_wight), col
-
-
-def sma_run() -> None:
-    # 创建一个空列表，用于存储 MAPE 值
-    sma_mape_values = []
-    for n in data_sma:
-        # 运行 sma_forecast_try() 并计算 MAPE
-        mape_single, mape_wight, col = sma_forecast_try(n)
-        # 取出对应的物料号
-        material_number = col[n]
-        # 将 MAPE 值作为元组添加到列表中
-        sma_mape_values.append((col[n], mape_single, mape_wight))
-    # 将 MAPE 值写入文件
-    output_file = Path("SMA不平稳杭宁.txt")
-    with output_file.open("w", encoding="utf-8") as f:
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, mape_single, mape_wight in sma_mape_values:
-            line = (
-                f"物料号：{material_number}, MAPE Single: {round(mape_single, 2)}, "
-                f"MAPE Weight: {round(mape_wight, 2)}\n"
-            )
-            f.write(line)
-    csv_filename = Path("SMA不平稳杭宁.csv")
-    with csv_filename.open("a", newline="", encoding="utf-8") as f:
-        # 使用追加模式，并且指定 newline='' 来避免空行
-        writer = csv.writer(f)
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, mape_single, mape_wight in sma_mape_values:
-            writer.writerow([material_number, round(mape_single, 2), round(mape_wight, 2)])
-    plt.show()
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_sma = range(1, 2)
-    # 运行
-    sma_run()

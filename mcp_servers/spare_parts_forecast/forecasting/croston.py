@@ -2,32 +2,15 @@
 Croston方法及其变体用于间歇性需求预测 - 基于原始notebook实现
 """
 
-import csv
 import logging
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# 导入数据预处理函数
-try:
-    from ..data_processor import preprocess_try
-except ImportError:
-    # 如果没有找到预处理函数，提供一个简单的替代实现
-    def preprocess_try() -> pd.DataFrame:
-        # 创建示例数据用于测试
-        dates = [f"2018 第{i // 4 + 1}季度" if i < 16 else f"2022 第{(i - 16) // 4 + 1}季度" for i in range(22)]
-        data = {
-            "time": dates,
-            "物料号1": np.random.poisson(2, 22),
-            "物料号2": np.random.poisson(1.5, 22),
-        }
-        return pd.DataFrame(data)
-
 
 # croston预测
-def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
+def croston_forecast_try(n: int, df: pd.DataFrame) -> tuple[float, float, float, pd.Index]:
     """
     运行Croston方法及其变体进行预测
 
@@ -235,7 +218,7 @@ def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
         return best_alpha_tsb, best_beta_tsb, best_mape_tsb
 
     # 调用
-    df = preprocess_try()
+    # df = preprocess_try()
     # df = preprocess()
     data = df.iloc[:, n]
 
@@ -287,48 +270,3 @@ def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
     plt.savefig("cst")
     # plt.show()
     return best_mape_cst, best_mape_sba, best_mape_tsb, col
-
-
-# crosotn及其变体
-def cro_run() -> None:
-    """运行Croston预测的批量处理函数"""
-    # 创建一个空列表，用于存储 MAPE 值
-    cro_mape_values = []
-    for n in data_cro:
-        # 运行 croston_forecast_try() 并计算 MAPE
-        best_mape_cst, best_mape_sba, best_mape_tsb, col = croston_forecast_try(n)
-        # 取出对应的物料号
-        material_number = col[n]
-        logging.info(f"这是 {material_number}")
-        logging.info(f"{best_mape_cst}, {best_mape_sba}, {best_mape_tsb}")
-        # 将 MAPE 值作为元组添加到列表中
-        cro_mape_values.append((material_number, best_mape_cst, best_mape_sba, best_mape_tsb))
-    # 将 MAPE 值写入文件
-    output_path = Path("CRO不平稳.txt")
-    with output_path.open("w", encoding="utf-8") as f:
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, best_mape_cst, best_mape_sba, best_mape_tsb in cro_mape_values:
-            f.write(
-                f"物料号：{material_number}, "
-                f"MAPE CRO: {round(best_mape_cst, 2)}, "
-                f"MAPE SBA: {round(best_mape_sba, 2)}, "
-                f"MAPE TSB:{round(best_mape_tsb, 2)}\n"
-            )
-    csv_filename = "CRO不平稳杭宁.csv"
-    csv_path = Path(csv_filename)
-    with csv_path.open("a", newline="", encoding="utf-8") as f:  # 使用追加模式，并且指定 newline='' 来避免空行
-        writer = csv.writer(f)
-        # 循环遍历每个 n 对应的 MAPE 值，并将其写入文件
-        for material_number, best_mape_cst, best_mape_sba, best_mape_tsb in cro_mape_values:
-            writer.writerow(
-                [material_number, round(best_mape_cst, 2), round(best_mape_sba, 2), round(best_mape_tsb, 2)]
-            )
-    plt.show()
-    return
-
-
-if __name__ == "__main__":
-    # 物料取值
-    data_cro = range(1, 2)
-    # 运行
-    cro_run()

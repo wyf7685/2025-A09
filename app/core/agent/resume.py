@@ -197,6 +197,5 @@ def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
             return registered_tool.fn(**{k: v for k, v in args.items() if k in registered_tool.params})
 
     # 如果无法匹配，提供更详细的诊断信息
-    logger.error(f"工具 {name} 未找到匹配")
-    logger.info(f"所有注册的工具名称: {list(_RESUME_TOOL_REGISTRY.keys())}")
-    raise ValueError(f"工具 {name} 未注册（尝试映射到 {mapped_name} 失败）")
+    logger.warning(f"工具 {name} 未找到匹配")
+    return None
