@@ -1,3 +1,4 @@
+# ruff: noqa: E731
 import datetime
 import threading
 from collections.abc import Callable
@@ -11,7 +12,7 @@ from pydantic import SecretStr
 
 from app.core.config import settings
 from app.log import logger
-from app.schemas.custom_model import LLModelID
+from app.schemas.custom_model import CustomModelConfig, LLModelID
 from app.services.custom_model import custom_model_manager
 from app.utils import escape_tag
 
@@ -72,6 +73,75 @@ def _convert_model(
             return (llm() if llm else _chat_model | _convert), _chat_model
 
 
+def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, Callable[[], BaseChatModel]]:
+    # 根据提供商选择正确的模型类
+    if config.provider.lower() == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
+
+        llm = lambda: GoogleGenerativeAI(
+            model=config.api_model_name,
+            google_api_key=SecretStr(config.api_key),
+            transport="rest",
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+        chat_model = lambda: ChatGoogleGenerativeAI(
+            model=config.api_model_name,
+            google_api_key=SecretStr(config.api_key),
+            transport="rest",
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+    elif config.provider.lower() == "deepseek":
+        from langchain_deepseek import ChatDeepSeek
+
+        llm = None
+        chat_model = lambda: ChatDeepSeek(
+            model=config.api_model_name,
+            api_key=SecretStr(config.api_key),
+            base_url=config.api_url,
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+    # elif config.provider.lower() == "openai":
+    #     from langchain_openai import ChatOpenAI, OpenAI
+
+    #     llm = lambda: OpenAI(
+    #         model=config.api_model_name,
+    #         api_key=SecretStr(config.api_key),
+    #         base_url=config.api_url,
+    #         timeout=30,  # 30秒超时
+    #         max_retries=2,  # 最多重试2次
+    #     )
+    #     chat_model = lambda: ChatOpenAI(
+    #         model=config.api_model_name,
+    #         api_key=SecretStr(config.api_key),
+    #         base_url=config.api_url,
+    #         timeout=30,  # 30秒超时
+    #         max_retries=2,  # 最多重试2次
+    #     )
+    else:
+        # 默认使用 OpenAI 兼容格式
+        from langchain_openai import ChatOpenAI, OpenAI
+
+        llm = lambda: OpenAI(
+            model=config.api_model_name,
+            api_key=SecretStr(config.api_key),
+            base_url=config.api_url,
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+        chat_model = lambda: ChatOpenAI(
+            model=config.api_model_name,
+            api_key=SecretStr(config.api_key),
+            base_url=config.api_url,
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+
+    return llm, chat_model
+
+
 @overload
 def _select_model(model_id: LLModelID, type: Literal["LLM"]) -> LLM: ...
 @overload
@@ -93,39 +163,7 @@ def _select_model(
             if config := custom_model_manager.get_model(model_name):
                 logger.info(f"使用自定义模型: {config.name} ({config.provider})")
 
-                # 根据提供商选择正确的模型类
-                if config.provider.lower() == "google":
-                    from langchain_google_genai import ChatGoogleGenerativeAI
-
-                    chat_model = ChatGoogleGenerativeAI(
-                        model=config.api_model_name,
-                        google_api_key=SecretStr(config.api_key),
-                        transport="rest",
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                elif config.provider.lower() in ["openai", "deepseek"]:
-                    from langchain_openai import ChatOpenAI
-
-                    chat_model = ChatOpenAI(
-                        model=config.api_model_name,
-                        api_key=SecretStr(config.api_key),
-                        base_url=config.api_url,
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                else:
-                    # 默认使用 OpenAI 兼容格式
-                    from langchain_openai import ChatOpenAI
-
-                    chat_model = ChatOpenAI(
-                        model=config.api_model_name,
-                        api_key=SecretStr(config.api_key),
-                        base_url=config.api_url,
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                return _convert_model(type, None, chat_model)
+                return _convert_model(type, *_from_config(config))
         except Exception as e:
             logger.error(f"创建自定义模型失败: {e}")
             logger.warning("回退到环境变量配置")
@@ -133,6 +171,7 @@ def _select_model(
     # 如果不是自定义模型，检查是否有对应的自定义配置
     # 尝试查找具有相同模型名称的自定义配置
     all_custom_models = custom_model_manager.list_models()
+    custom_config = None
     for custom_config in all_custom_models.values():
         # 更灵活的匹配逻辑：
         # 1. 直接匹配 model_name
@@ -149,43 +188,13 @@ def _select_model(
             or config_name_normalized == model_name_normalized
         ):
             logger.info(f"找到匹配的自定义配置: {custom_config.name} (匹配模型: {model_name})")
-            try:
-                # 根据提供商选择正确的模型类
-                if custom_config.provider.lower() == "google":
-                    from langchain_google_genai import ChatGoogleGenerativeAI
+            break
 
-                    chat_model = ChatGoogleGenerativeAI(
-                        model=custom_config.api_model_name,
-                        google_api_key=SecretStr(custom_config.api_key),
-                        transport="rest",
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                elif custom_config.provider.lower() in ["openai", "deepseek"]:
-                    from langchain_openai import ChatOpenAI
-
-                    chat_model = ChatOpenAI(
-                        model=custom_config.api_model_name,
-                        api_key=SecretStr(custom_config.api_key),
-                        base_url=custom_config.api_url,
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                else:
-                    # 默认使用 OpenAI 兼容格式
-                    from langchain_openai import ChatOpenAI
-
-                    chat_model = ChatOpenAI(
-                        model=custom_config.api_model_name,
-                        api_key=SecretStr(custom_config.api_key),
-                        base_url=custom_config.api_url,
-                        timeout=30,  # 30秒超时
-                        max_retries=2,  # 最多重试2次
-                    )
-                return _convert_model(type, None, chat_model)
-            except Exception as e:
-                logger.error(f"使用自定义配置创建模型失败: {e}")
-                break
+    if custom_config is not None:
+        try:
+            return _convert_model(type, *_from_config(custom_config))
+        except Exception as e:
+            logger.error(f"使用自定义配置创建模型失败: {e}")
 
     # 如果没有找到自定义配置，记录警告并回退到环境变量
     logger.warning(f"未找到模型 '{model_name}' 的自定义配置，使用环境变量回退")
