@@ -133,26 +133,15 @@ class AgentContext:
             self._mcp_instructions = ""
             return []
 
-        assert self.lifespan is not None
-        stack = contextlib.AsyncExitStack()
-
-        async def shutdown_mcp_stack() -> None:
-            try:
-                await stack.aclose()
-            except BaseException as e:
-                logger.warning(f"关闭 MCP 连接时发生错误: {e!r}")
-
-        self.lifespan.on_shutdown(shutdown_mcp_stack)
-
         instructions: list[str] = []
         mcp_tools: list[BaseTool] = []
         client_info = MCPImplementation(name=self.session_id, version="0.1.0")
         for idx, conn in enumerate(self.mcp_connections, 1):
             connection = cast("LangChainMCPConnection", deepcopy(conn))
             connection["session_kwargs"] = {"client_info": client_info}
-            session = await stack.enter_async_context(create_session(connection))
-            init = await session.initialize()
-            tools = await _list_all_tools(session)
+            async with create_session(connection) as session:
+                init = await session.initialize()
+                tools = await _list_all_tools(session)
             instruction = PROMPTS.mcp_server.format(
                 idx=idx,
                 server_instructions=init.instructions or "无",
@@ -161,7 +150,7 @@ class AgentContext:
                 ),
             )
             instructions.append(instruction)
-            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(session, tool) for tool in tools)
+            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(None, tool, connection=connection) for tool in tools)
 
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n".join(instructions))
         return mcp_tools
