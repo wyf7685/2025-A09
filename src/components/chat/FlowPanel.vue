@@ -7,7 +7,7 @@ import {
   ElButton, ElDialog, ElForm, ElFormItem, ElIcon, ElInput, ElMessage,
   ElOption, ElOptionGroup, ElSelect, ElTag, ElText
 } from 'element-plus';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 // 扩展 FlowRoute 类型，支持 nextLoop 和 toolName 字段
 type FlowRouteEx = {
@@ -139,7 +139,15 @@ const executedSteps = computed(() => {
 
 
 const selectedModel = computed({
-  get: () => modelStore.selectedModel?.id || 'gemini-2.0-flash',
+  get: () => {
+    // 优先使用当前会话的模型配置
+    const sessionModel = sessionStore.currentSession?.agent_model_config?.default;
+    if (sessionModel) {
+      return sessionModel;
+    }
+    // 回退到全局模型选择或默认值
+    return modelStore.selectedModel?.id || 'gemini-2.0-flash';
+  },
   set: (value: string) => {
     const model = storeAvailableModels.value.find(m => m.id === value);
     if (model) {
@@ -194,23 +202,41 @@ const clearFlowSteps = () => {
 
 // 模型配置方法
 const changeModel = async (modelId: string) => {
-  selectedModel.value = modelId;
-  await sessionStore.updateSessionAgentModelConfig({ default: modelId });
   const model = storeAvailableModels.value.find(m => m.id === modelId);
 
-  // 添加模型切换步骤到流程图
-  addFlowStep({
-    title: '模型切换',
-    description: `切换到模型: ${model?.name || modelId}`,
-    status: 'completed'
-  });
+  if (model) {
+    // 同时更新全局模型状态和当前会话的模型配置
+    modelStore.setSelectedModel(model);
 
-  ElMessage.success(`已切换到模型: ${model?.name || modelId}`);
+    // 如果有当前会话，更新会话的模型配置
+    if (sessionStore.currentSession) {
+      await sessionStore.updateSessionAgentModelConfig({ default: modelId });
+    }
+
+    // 添加模型切换步骤到流程图
+    addFlowStep({
+      title: '模型切换',
+      description: `切换到模型: ${model.name}`,
+      status: 'completed'
+    });
+
+    ElMessage.success(`已切换到模型: ${model.name}`);
+  }
 };
 
 
 
 const getCurrentModelInfo = computed(() => {
+  // 优先使用当前会话配置的模型
+  const sessionModelId = sessionStore.currentSession?.agent_model_config?.default;
+  if (sessionModelId) {
+    const sessionModel = storeAvailableModels.value.find(m => m.id === sessionModelId);
+    if (sessionModel) {
+      return sessionModel;
+    }
+  }
+
+  // 回退到全局模型或默认值
   return modelStore.selectedModel || storeAvailableModels.value[0] || { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google' };
 });
 
@@ -487,6 +513,19 @@ defineExpose({
     logRouteStatus,
   } as FlowPanel,
 });
+
+// --- Watchers ---
+// 监听当前会话变化，确保模型显示正确
+watch(
+  () => sessionStore.currentSession?.id,
+  (newSessionId) => {
+    if (newSessionId) {
+      console.log(`[FlowPanel] 会话切换到: ${newSessionId}`);
+      console.log(`[FlowPanel] 会话模型配置:`, sessionStore.currentSession?.agent_model_config);
+    }
+  },
+  { immediate: true }
+);
 
 // --- Lifecycle Hooks ---
 onMounted(async () => {

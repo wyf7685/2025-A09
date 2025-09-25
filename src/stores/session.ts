@@ -292,6 +292,15 @@ export const useSessionStore = defineStore('session', () => {
         `/sessions/${currentSession.value.id}/model_config`,
         config,
       );
+
+      // 成功更新后端配置后，同步更新前端的 currentSession 状态
+      if (currentSession.value.agent_model_config) {
+        currentSession.value.agent_model_config = {
+          ...currentSession.value.agent_model_config,
+          ...config
+        };
+      }
+      
     } catch (error) {
       console.error('更新会话模型配置失败:', error);
       ElMessage.error('更新会话模型配置失败');
