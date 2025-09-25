@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
 import { ChatDotRound, Collection, Connection, DataAnalysis, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
+import { Icon } from '@iconify/vue';
 import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
@@ -74,13 +75,13 @@ onMounted(async () => {
         <div class="sidebar-menu">
           <div :class="['custom-menu', { collapsed: sidebarCollapsed }]">
             <RouterLink v-for="(item, index) in [
-              { path: '/dashboard', icon: House, label: '工作台' },
-              { path: '/data-management', icon: Collection, label: '数据管理' },
-              { path: '/data-upload', icon: Connection, label: '数据上传' },
-              { path: '/chat-analysis', icon: ChatDotRound, label: '对话分析' },
-              { path: '/mcp-connections', icon: Link, label: 'MCP连接' },
-              { path: '/llm-models', icon: Connection, label: '大语言模型' },
-              { path: '/trained-models', icon: DataAnalysis, label: '机器学习模型' }
+              { path: '/dashboard', icon: House, label: '工作台', type: 'element' },
+              { path: '/data-management', icon: 'tabler:database', label: '数据管理', type: 'iconify' },
+              { path: '/data-upload', icon: 'tabler:cloud-upload', label: '数据上传', type: 'iconify' },
+              { path: '/chat-analysis', icon: ChatDotRound, label: '对话分析', type: 'element' },
+              { path: '/mcp-connections', icon: Link, label: 'MCP连接', type: 'element' },
+              { path: '/llm-models', icon: 'tabler:robot', label: '大语言模型', type: 'iconify' },
+              { path: '/trained-models', icon: 'tabler:chart-dots', label: '机器学习模型', type: 'iconify' }
             ]"
               :key="index"
               :to="item.path"
@@ -92,13 +93,19 @@ onMounted(async () => {
                 placement="right"
                 :offset="12"
                 :show-after="300">
-                <el-icon class="menu-icon">
+                <div class="menu-icon">
+                  <Icon v-if="item.type === 'iconify'" :icon="item.icon as string" />
+                  <el-icon v-else>
+                    <component :is="item.icon" />
+                  </el-icon>
+                </div>
+              </el-tooltip>
+              <div v-else class="menu-icon">
+                <Icon v-if="item.type === 'iconify'" :icon="item.icon as string" />
+                <el-icon v-else>
                   <component :is="item.icon" />
                 </el-icon>
-              </el-tooltip>
-              <el-icon v-else class="menu-icon">
-                <component :is="item.icon" />
-              </el-icon>
+              </div>
               <Transition name="label-fade">
                 <span v-if="!sidebarCollapsed && !sidebarTransitioning" class="menu-label">{{ item.label }}</span>
               </Transition>
@@ -296,6 +303,12 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.menu-icon .el-icon {
+  font-size: 18px;
 }
 
 /* 自定义菜单样式 */

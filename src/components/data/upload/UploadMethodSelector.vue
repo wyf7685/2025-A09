@@ -38,7 +38,7 @@ const goToNextStep = () => {
         </div>
         <div class="card-content">
           <h3>上传文件</h3>
-          <p>支持上传 CSV、Excel 文件。文件大小不超过 100MB</p>
+          <p>支持上传 CSV、Excel 文件</p>
         </div>
       </div>
 
