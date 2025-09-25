@@ -177,11 +177,14 @@ const onWorkflowSaved = () => {
 };
 
 // 工作流执行成功回调
-const onWorkflowExecuted = async (result: any) => {
+const onWorkflowExecuted = async (result: {
+  success: boolean;
+  session_id: string;
+  message?: string;
+  executed_tools?: number;
+}) => {
   // 构建详细的成功消息
-  const successMessage = result.message
-    ? result.message
-    : `工作流执行成功，共执行了${result.executed_tools || '多个'}工具调用`;
+  const successMessage = result.message || `工作流执行成功，共执行了${result.executed_tools || '多个'}工具调用`;
 
   // 使用更突出的消息框而不是普通消息
   ElMessageBox.alert(

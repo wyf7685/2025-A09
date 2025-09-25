@@ -6,24 +6,28 @@ import {
   ElAlert, ElButton, ElCard, ElCollapse, ElCollapseItem, ElDialog, ElDivider, ElEmpty,
   ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTag, ElTooltip
 } from 'element-plus';
-import { computed, onMounted, ref, watch, type PropType } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+
+const visible = defineModel<boolean>('visible', { required: true });
 
 // 组件属性
 const props = defineProps<{
-  visible: boolean;
   selectionMode: boolean;
   sessionId: string;
   dataSources: { id: string; name: string; }[];
 }>();
 
-// 组件事件
-const emit = defineEmits(['update:visible', 'workflowSelected', 'workflowExecuted', 'cancel']);
+interface WorkflowExecutionResult {
+  success: boolean;
+  session_id: string;
+  message?: string;
+  executed_tools?: number;
+}
 
-// 计算属性：用于v-model绑定
-const dialogVisible = computed({
-  get: () => props.visible,
-  set: (value) => emit('update:visible', value)
-});
+// 组件事件
+const emit = defineEmits<{
+  workflowExecuted: [result: WorkflowExecutionResult];
+}>();
 
 // 使用工作流存储
 const workflowStore = useWorkflowStore();
@@ -115,7 +119,7 @@ const executeSelectedWorkflow = async () => {
 
       ElMessage.success(message);
       emit('workflowExecuted', result);
-      dialogVisible.value = false;
+      visible.value = false;
     }
   } catch (error) {
     console.error('执行工作流失败:', error);
@@ -159,7 +163,7 @@ const closeDialog = () => {
 
 // 处理对话框关闭
 const handleClose = () => {
-  emit('update:visible', false);
+  visible.value = false;
   selectedWorkflow.value = null;
   detailDialogVisible.value = false;
 };
@@ -214,7 +218,7 @@ onMounted(() => {
 });
 
 // 监听visible属性变化
-watch(() => props.visible, (newVal) => {
+watch(() => visible.value, (newVal) => {
   if (newVal) {
     loadWorkflows();
   }
@@ -223,8 +227,7 @@ watch(() => props.visible, (newVal) => {
 
 <template>
   <el-dialog
-    :model-value="dialogVisible"
-    @update:model-value="$emit('update:visible', $event)"
+    v-model="visible"
     title="工作流管理"
     width="800px"
     :before-close="handleClose"
