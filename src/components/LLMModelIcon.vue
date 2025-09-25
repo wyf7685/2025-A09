@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
+import DeepseekIcon from '@/assets/icons/deepseek.ico';
 
 defineProps<{
   provider: string;
@@ -13,7 +14,7 @@ const standardIcons = {
 } as Record<string, { icon: string, color: string; }>;
 
 const extraIcons = {
-  'DeepSeek': 'https://www.deepseek.com/favicon.ico',
+  'DeepSeek': DeepseekIcon,
 } as Record<string, string>;
 </script>
 
