@@ -94,7 +94,7 @@ def transferdata_try() -> pd.DataFrame:
     # non_zero_demand_count = (df_pivot.iloc[:, 0:] != 0).sum(axis=1)
 
     # 计算每年的年度总和
-    for year in range(df["年份"].min(), df["年份"].max() + 1):
+    for year in range(int(df["年份"].min()), df["年份"].max() + 1):
         end_quarter = 2 if year == 2023 else 4
 
         columns_for_year = [f"{year} 第{quarter}季度" for quarter in range(1, end_quarter + 1)]
@@ -144,7 +144,7 @@ def transferdata_try() -> pd.DataFrame:
     df_pivot = df_pivot.reset_index()
 
     # 添加物料描述列
-    material_description = df[["物料号", "物料描述"]].drop_duplicates(subset=["物料号"]).set_index("物料号")
+    material_description = df[["物料号", "物料描述"]].drop_duplicates(subset=["物料号"]).set_index("物料号")  # pyright: ignore[reportCallIssue]
     df_pivot = df_pivot.join(material_description, on="物料号")
     # print(len(df_pivot))
     # df_pivot.to_csv("all数据表.csv", index=False, encoding='utf-8')
@@ -238,7 +238,7 @@ def preprocess_try(input_file: str = "不稳定杭宁.csv") -> pd.DataFrame:
     # print(df)
     # 定义一个函数，用于将负数转换为正数
     def make_positive(x: Any) -> Any:
-        if isinstance(x, (int, float)):
+        if isinstance(x, int | float):
             return abs(x)
         return x  # 保持其他类型不变
 

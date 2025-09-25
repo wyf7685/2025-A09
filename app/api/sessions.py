@@ -120,6 +120,7 @@ async def get_sessions() -> list[SessionListItem]:
 async def delete_session(session: CurrentSession) -> dict[str, Any]:
     """删除会话"""
     try:
+        await daa_service.safe_destroy(session.id)
         await session_service.delete(session.id)
         return {"success": True, "message": f"Session {session.id} deleted"}
     except Exception as e:

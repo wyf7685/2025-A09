@@ -158,6 +158,11 @@ class DataAnalyzerAgentService:
                         if scope.cancel_called:
                             raise AgentCancelled(session.id)
 
+    async def safe_destroy(self, session_id: SessionID) -> None:
+        """安全销毁会话的 Agent"""
+        with contextlib.suppress(AgentNotFound):
+            await self._destroy(session_id, save_state=True, pop=True)
+
     async def refresh_mcp(self, session: Session) -> None:
         """刷新会话的 MCP 连接"""
         # 直接销毁当前 Agent，下次调用会创建带有新 MCP 的 Agent

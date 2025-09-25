@@ -164,7 +164,7 @@ def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
             result_cr = croston(data, float(alpha))
             forecast_cst = result_cr["Forecast"]
 
-            mape_cst = np.mean(np.abs((forecast_cst[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))
+            mape_cst = np.mean(np.abs((forecast_cst[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))  # pyright: ignore[reportAttributeAccessIssue]
             # mae_cst = mean_absolute_error(data.values, forecast_cst[:-1].values)
             if mape_cst < best_mape_cst:
                 best_alpha_cst, best_mape_cst = float(alpha), float(mape_cst)
@@ -189,7 +189,7 @@ def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
             result_sba = croston_sba(data, float(alpha))
             forecast_sba = result_sba["Forecast"]
 
-            mape_sba = np.mean(np.abs((forecast_sba[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))
+            mape_sba = np.mean(np.abs((forecast_sba[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))  # pyright: ignore[reportAttributeAccessIssue]
             # mae_sba = mean_absolute_error(data.values, forecast_sba[:-1].values)
 
             if mape_sba < best_mape_sba:
@@ -219,7 +219,7 @@ def croston_forecast_try(n: int) -> tuple[float, float, float, pd.Index]:
                 result_tsb = croston_tsb(data, float(alpha), float(beta))
                 forecast_tsb = result_tsb["Forecast"]
 
-                mape_tsb = np.mean(np.abs((forecast_tsb[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))
+                mape_tsb = np.mean(np.abs((forecast_tsb[:-1].to_numpy() - data.to_numpy()) / data.to_numpy()))  # pyright: ignore[reportAttributeAccessIssue]
                 # mae_tsb = mean_absolute_error(data.values, forecast_tsb[:-1].values)
                 if mape_tsb < best_mape_tsb:
                     best_alpha_tsb, best_beta_tsb, best_mape_tsb = float(alpha), float(beta), float(mape_tsb)

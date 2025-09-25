@@ -68,7 +68,7 @@ def forest_try(n: int) -> tuple[float, pd.Index]:
     for n_estimators in n_estimators_list:
         for max_depth in max_depth_list:
             # 创建和训练随机森林模型
-            rf_model = RandomForestRegressor(n_estimators=n_estimators, random_state=0, max_depth=max_depth)
+            rf_model = RandomForestRegressor(n_estimators=int(n_estimators), random_state=0, max_depth=max_depth)
             rf_model.fit(X_train, y_train)
             # 在测试集上评估模型性能
             y_pred = rf_model.predict(X_test)

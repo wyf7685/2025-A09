@@ -6,18 +6,40 @@ Run (package mode):
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import Any
 
-from fastmcp import FastMCP
+from mcp.server import FastMCP
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-app = FastMCP(name="spare-parts-forecast-fast", version="1.0.0")
-with contextlib.suppress(Exception):  # pragma: no cover
-    app.description = "Spare parts demand forecasting tools (FastMCP)"  # type: ignore[attr-defined]
+instructions = """\
+此服务器提供多种备件需求预测算法:
+
+可用算法分类和功能:
+- 统计类: SMA(简单移动平均), EMA(指数平滑), Croston(间歇需求), ARIMA
+- 机器学习: 随机森林, XGBoost
+- 深度学习: BP神经网络
+
+主要工具:
+- algorithms: 列出所有可用算法
+- algorithm_categories: 按类别显示算法列表
+- sma_forecast: 简单移动平均预测
+- ema_forecast: 指数平滑预测
+- croston_forecast: 间歇需求预测
+- arima_forecast: ARIMA预测
+- forest_forecast: 随机森林预测
+- xgb_forecast: XGBoost预测
+- bp_forecast: BP神经网络预测
+
+对于大多数算法,可通过参数n指定预测步数。机器学习算法可通过column_index指定预测列。
+"""
+
+app = FastMCP(
+    name="spare-parts-forecast-fast",
+    instructions=instructions,
+)
 
 
 def create_fast_server() -> FastMCP:
@@ -34,40 +56,21 @@ __all__ = [
     "croston_forecast",
     "ema_forecast",
     "forest_forecast",
-    "ping",
     "sma_forecast",
     "xgb_forecast",
 ]
 
-# Try import algorithms
-try:
-    from .forecasting import (
-        arimaforecast_try,
-        croston_forecast_try,
-        ema_forecast_try,
-        forest_try,
-        get_available_algorithms,
-        list_algorithms,
-        sma_forecast_try,
-        xgboost_forecast,
-        zero_and_bp_predict,
-    )
-except Exception:  # pragma: no cover
-    logger.exception("Failed to import forecasting algorithms")
-    arimaforecast_try = croston_forecast_try = ema_forecast_try = forest_try = None  # type: ignore
-    sma_forecast_try = xgboost_forecast = zero_and_bp_predict = None  # type: ignore
-
-    def list_algorithms() -> list[str]:  # type: ignore
-        return []
-
-    def get_available_algorithms() -> dict[str, list[str]]:  # type: ignore
-        return {}
-
-
-@app.tool()
-def ping() -> str:
-    """连接测试"""
-    return "pong"
+from .forecasting import (
+    arimaforecast_try,
+    croston_forecast_try,
+    ema_forecast_try,
+    forest_try,
+    get_available_algorithms,
+    list_algorithms,
+    sma_forecast_try,
+    xgboost_forecast,
+    zero_and_bp_predict,
+)
 
 
 @app.tool()
@@ -142,5 +145,4 @@ def bp_forecast(column_index: int = 16) -> Any:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    # FastMCP 提供 uvicorn/stdio 等多种运行方式；默认使用 stdio
-    app.run()
+    app.run("sse")

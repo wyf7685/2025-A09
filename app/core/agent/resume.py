@@ -37,7 +37,7 @@ def resumable(tool_name: str, fn: ResumeCall | None = None, /) -> Callable[[Resu
         normalized_name = tool_name.strip()
 
         # 记录注册信息
-        logger.info(f"注册工具: {normalized_name}")
+        # logger.info(f"注册工具: {normalized_name}")
 
         # 从TOOL_NAMES中获取所有可能的工具名称
         for func_name, name in TOOL_NAMES.items():

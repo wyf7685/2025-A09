@@ -3,7 +3,7 @@ import uuid
 
 import anyio
 
-from app.const import SESSION_DIR
+from app.const import SESSION_DIR, STATE_DIR
 from app.core.agent.tools import TOOL_NAMES
 from app.core.lifespan import lifespan
 from app.exception import SessionDeleteFailed, SessionLoadFailed, SessionNotFound
@@ -11,6 +11,7 @@ from app.log import logger
 from app.schemas.session import Session, SessionID, SessionListItem
 
 _SESSION_DIR = anyio.Path(SESSION_DIR)
+_AGENT_STATE_DIR = anyio.Path(STATE_DIR)
 
 
 class SessionService:
@@ -122,10 +123,18 @@ class SessionService:
             if await fp.exists():
                 await fp.unlink()
                 logger.info(f"删除会话文件成功: {session_id}")
-        except Exception as e:
+        except Exception:
             # 即使文件删除失败，也不抛出异常，因为内存中的会话已经被删除
             # 这样前端仍然可以认为删除成功
-            logger.exception(f"删除会话文件失败: {e}")
+            logger.exception("删除会话文件失败")
+
+        try:
+            state_fp = _AGENT_STATE_DIR / f"{session_id}.json"
+            if await state_fp.exists():
+                await state_fp.unlink()
+                logger.info(f"删除会话 Agent 状态文件成功: {session_id}")
+        except Exception:
+            logger.exception("删除会话 Agent 状态文件失败")
 
     @staticmethod
     def tool_name_repr(session: Session) -> Session:

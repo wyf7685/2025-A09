@@ -46,7 +46,7 @@ def arimaforecast_try(n: int) -> float:
         # train_data = train_data.resample('M').mean()
         # test_data = test.resample('M').mean()
         # print(train_data, test_data)
-        return train_data, test_data
+        return train_data, test_data  # pyright: ignore[reportReturnType]
 
     #### Step 3  差分转平稳
     def stationarity(
@@ -59,12 +59,14 @@ def arimaforecast_try(n: int) -> float:
         # diff1.plot(color='red', title='diff 1', figsize=(10, 4))
         # diff2.plot(color='black', title='diff 2', figsize=(10, 4))
         ## 平滑法
-        rollmean = timeseries.rolling(window=4, center=False).mean().dropna()  ## 滚动平均
+        rollmean = (
+            timeseries.rolling(window=4, center=False).mean()  ## 滚动平均
+        ).dropna()  # pyright: ignore[reportAttributeAccessIssue]
         rollstd = timeseries.rolling(window=4, center=False).std().dropna()  ## 滚动标准差
         ## 画图
         # rollmean.plot(color='yellow', title='Rolling Mean', figsize=(10, 4))
         # rollstd.plot(color='blue', title='Rolling Std', figsize=(10, 4))
-        return diff1, diff2, rollmean, rollstd
+        return diff1, diff2, rollmean, rollstd  # pyright: ignore[reportReturnType]
 
     # 平稳性检验
     #### Step 4  平稳性检验
@@ -160,7 +162,7 @@ def arimaforecast_try(n: int) -> float:
         # 还原后绘制同一起点的曲线
         # 将差分后的序列还原,re_out_sample_pred为还原之后
         base_series = pd.Series(np.array(row_train_data)[-2][0], index=[row_train_data.index[-2]])
-        re_out_sample_pred_arima = pd.concat([base_series, out_sample_pred_arima[1:]]).cumsum()
+        re_out_sample_pred_arima = pd.concat([base_series, out_sample_pred_arima[1:]]).cumsum()  # pyright: ignore[reportCallIssue, reportArgumentType]
 
         # # 横坐标
         # x = []
