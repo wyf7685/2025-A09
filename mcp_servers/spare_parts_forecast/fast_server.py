@@ -4,7 +4,6 @@ Run (package mode):
     python -m mcp_servers.spare_parts_forecast.fast_server
 """
 
-import logging
 from typing import Any, Literal
 
 import pandas as pd
@@ -14,22 +13,22 @@ from mcp.server.fastmcp import Image
 from .data_source import read_agent_source_data
 from .forecasting import (
     ARIMAAnalysisResult,
+    BPNNAnalysisResult,
     CrostonAnalysisResult,
     EMAAnalysisResult,
+    RandomForestAnalysisResult,
     SMAAnalysisResult,
+    XGBoostAnalysisResult,
     arima_forecast_impl,
+    bp_forecast_impl,
     croston_forecast_impl,
     ema_forecast_impl,
-    forest_try,
+    forest_forecast_impl,
     get_available_algorithms,
     list_algorithms,
     sma_forecast_impl,
-    xgboost_forecast,
-    zero_and_bp_predict,
+    xgboost_forecast_impl,
 )
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 instructions = """\
 此服务器提供多种备件需求预测算法:
@@ -69,13 +68,23 @@ def read_source(source_id: str) -> pd.DataFrame:
 
 @app.tool()
 def algorithms() -> list[str]:
-    """列出所有算法名称"""
+    """
+    列出所有可用的预测算法
+
+    Returns:
+        list: 可用算法名称列表
+    """
     return list_algorithms()
 
 
 @app.tool()
 def algorithm_categories() -> dict[str, list[str]]:
-    """按类别列出可用算法"""
+    """
+    获取当前可用的预测算法列表
+
+    Returns:
+        dict: 按类别分组的可用算法字典
+    """
     return get_available_algorithms()
 
 
@@ -460,25 +469,321 @@ def arima_forecast(
 
 
 @app.tool()
-def forest_forecast(source_id: str, n: int = 4) -> Any:
-    """随机森林预测"""
+def forest_forecast(
+    source_id: str,
+    target_column: str,
+    time_column: str = "time",
+    feature_columns: list[str] | None = None,
+    n_estimators_range: list[int] | None = None,
+    max_depth_range: list[int] | None = None,
+    enable_diagnostics: bool = True,
+    column_label: str | None = None,
+    plot_title: str | None = None,
+) -> tuple[RandomForestAnalysisResult, Any | None]:
+    """
+    随机森林时间序列预测分析
+
+    执行随机森林模型预测，优化模型参数并提供详细的统计分析和诊断信息。
+    自动执行特征工程，参数优化和模型评估。
+
+    Args:
+        source_id: 数据源ID，用于获取预测数据
+        target_column: 目标预测列名，指定要预测的数据列
+        time_column: 时间列名，默认为"time"
+        feature_columns: 特征列名列表，默认为None（自动生成时间特征）
+        n_estimators_range: 随机森林树数量范围，默认为[5, 10, ..., 95, 100]
+        max_depth_range: 决策树最大深度范围，默认为[5, 10, ..., 95, 100]
+        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        column_label: 图表中显示的列标签，默认使用target_column值
+        plot_title: 图表标题，默认为None(自动生成)
+
+    Returns:
+        RandomForestAnalysisResult | tuple[RandomForestAnalysisResult, Image]: 包含以下分析结果:
+            - target_column: 预测目标列名
+            - total_samples: 总样本数
+            - train_samples: 训练样本数
+            - test_samples: 测试样本数
+            - mape: 平均绝对百分比误差(%)
+            - mae: 平均绝对误差
+            - rmse: 均方根误差
+            - r_squared: 决定系数
+            - n_estimators: 最优树的数量
+            - max_depth: 最优树的最大深度
+            - feature_importances: 特征重要性字典
+            - actual_values: 实际观测值列表
+            - predicted_values: 预测值列表
+            - execution_time: 执行时间(秒)
+            - warnings: 警告信息列表
+            启用诊断模式时，还会返回图表
+
+    Raises:
+        ValueError: 当指定的列不存在或数据格式错误时
+        RuntimeError: 当预测过程出错时
+
+    Example:
+        基础预测:
+        ```
+        result = forest_forecast("data_001", "demand_quantity")
+        print(f"预测MAPE: {result.mape:.2f}%")
+        print(f"最佳树数量: {result.n_estimators}")
+        ```
+
+        自定义参数预测:
+        ```
+        result = forest_forecast(
+            source_id="data_001",
+            target_column="sales_volume",
+            time_column="date",
+            n_estimators_range=[50, 100, 150],
+            max_depth_range=[10, 20, 30],
+            plot_title="销量随机森林预测分析"
+        )
+        ```
+
+    Note:
+        - 随机森林适合复杂非线性数据，不受线性关系限制
+        - 自动特征工程可处理时间列的年、季度、月信息
+        - 参数优化可以找到最佳的模型配置
+        - 如需自定义特征，可通过feature_columns参数指定
+        - 模型会计算特征重要性，帮助理解影响因素
+    """
     df = read_source(source_id)
-    return forest_try(n, df)
+
+    # 调用随机森林预测函数
+    result, image_bytes = forest_forecast_impl(
+        df=df,
+        target_column=target_column,
+        time_column=time_column,
+        feature_columns=feature_columns,
+        n_estimators_range=n_estimators_range,
+        max_depth_range=max_depth_range,
+        enable_diagnostics=enable_diagnostics,
+        column_label=column_label,
+        plot_title=plot_title,
+    )
+
+    return result, Image(data=image_bytes) if image_bytes else None
 
 
 @app.tool()
-def xgb_forecast(source_id: str, column_index: int = 16) -> Any:
-    """XGBoost 预测"""
+def xgb_forecast(
+    source_id: str,
+    target_column: str,
+    time_column: str = "time",
+    feature_columns: list[str] | None = None,
+    learning_rate_range: list[float] | None = None,
+    max_depth_range: list[int] | None = None,
+    n_estimators_range: list[int] | None = None,
+    gwo_agents: int = 10,
+    gwo_iterations: int = 2,
+    enable_diagnostics: bool = True,
+    column_label: str | None = None,
+    plot_title: str | None = None,
+) -> tuple[XGBoostAnalysisResult, Any | None]:
+    """
+    XGBoost时间序列预测分析（基于灰狼优化）
+
+    执行基于XGBoost的时间序列预测，并使用灰狼优化算法自动调整超参数。
+    提供详细的统计分析、特征重要性和诊断信息。
+
+    Args:
+        source_id: 数据源ID，用于获取预测数据
+        target_column: 目标预测列名，指定要预测的数据列
+        time_column: 时间列名，默认为"time"
+        feature_columns: 特征列名列表，默认为None（自动生成时间特征）
+        learning_rate_range: 学习率范围，默认为[0.01, 0.05, 0.1, 0.2]
+        max_depth_range: 最大深度范围，默认为[3, 5, 7, 9]
+        n_estimators_range: 估计器数量范围，默认为[50, 100, 200, 300]
+        gwo_agents: 灰狼优化算法搜索代理数量，默认为10
+        gwo_iterations: 灰狼优化算法最大迭代次数，默认为2
+        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        column_label: 图表中显示的列标签，默认使用target_column值
+        plot_title: 图表标题，默认为None(自动生成)
+
+    Returns:
+        XGBoostAnalysisResult | tuple[XGBoostAnalysisResult, Image]: 包含以下键值的分析结果:
+            - target_column: 预测目标列名
+            - total_samples: 总样本数
+            - train_samples: 训练样本数
+            - test_samples: 测试样本数
+            - mape: 平均绝对百分比误差(%)
+            - mae: 平均绝对误差
+            - rmse: 均方根误差
+            - r_squared: 决定系数
+            - learning_rate: 最优学习率
+            - max_depth: 最优最大深度
+            - n_estimators: 最优估计器数量
+            - feature_importances: 特征重要性字典
+            - optimization_iterations: 优化迭代次数
+            - optimization_scores: 各迭代分数列表
+            - actual_values: 实际观测值列表
+            - predicted_values: 预测值列表
+            - execution_time: 执行时间(秒)
+            - warnings: 警告信息列表
+            启用诊断模式时，还会返回图表
+
+    Raises:
+        ValueError: 当指定的列不存在或数据格式错误时
+        RuntimeError: 当预测过程出错时
+
+    Example:
+        基础预测:
+        ```
+        result = xgb_forecast("data_001", "demand_quantity")
+        print(f"预测MAPE: {result.mape:.2f}%")
+        ```
+
+        自定义参数优化:
+        ```
+        result = xgb_forecast(
+            source_id="data_001",
+            target_column="sales_volume",
+            time_column="date",
+            learning_rate_range=[0.01, 0.1, 0.5],
+            max_depth_range=[3, 6, 9],
+            n_estimators_range=[50, 150, 250],
+            gwo_iterations=5,
+            plot_title="销量XGBoost预测分析"
+        )
+        ```
+
+    Note:
+        - XGBoost结合灰狼优化算法能高效处理复杂非线性关系
+        - 自动特征工程可处理时间列的年、季度、月等信息
+        - 灰狼优化算法自动寻找最佳超参数组合
+        - 可查看特征重要性，了解影响预测的关键因素
+        - 增加gwo_iterations可提高参数优化质量，但会增加计算时间
+    """
     df = read_source(source_id)
-    return xgboost_forecast(column_index, df)
+
+    # 调用XGBoost预测函数
+    result, image_bytes = xgboost_forecast_impl(
+        df=df,
+        target_column=target_column,
+        time_column=time_column,
+        feature_columns=feature_columns,
+        learning_rate_range=learning_rate_range,
+        max_depth_range=max_depth_range,
+        n_estimators_range=n_estimators_range,
+        gwo_agents=gwo_agents,
+        gwo_iterations=gwo_iterations,
+        random_state=42,
+        extra_periods=0,
+        enable_diagnostics=enable_diagnostics,
+        column_label=column_label,
+        plot_title=plot_title,
+    )
+
+    return result, Image(data=image_bytes) if image_bytes else None
 
 
 @app.tool()
-def bp_forecast(source_id: str, column_index: int = 16) -> Any:
-    """BP 神经网络预测 (需要 TensorFlow)"""
+def bp_forecast(
+    source_id: str,
+    target_column: str,
+    time_column: str = "time",
+    input_sizes: list[int] | None = None,
+    hidden_sizes: list[int] | None = None,
+    epochs: int = 100,
+    batch_size: int = 16,
+    learning_rate: float = 0.001,
+    enable_diagnostics: bool = True,
+    column_label: str | None = None,
+    plot_title: str | None = None,
+) -> tuple[BPNNAnalysisResult, Any | None]:
+    """
+    BP神经网络时间序列预测分析
+
+    执行基于BP神经网络的时间序列预测，支持自动调整输入和隐含层网络结构。
+    提供详细的统计分析和诊断信息。需要安装TensorFlow库。
+
+    Args:
+        source_id: 数据源ID，用于获取预测数据
+        target_column: 目标预测列名，指定要预测的数据列
+        time_column: 时间列名，默认为"time"
+        input_sizes: 输入层尺寸范围，默认为[2,3,4,5,6]
+        hidden_sizes: 隐含层尺寸范围，默认为[2,4,6,8,10,12]
+        epochs: 训练轮数，默认为100
+        batch_size: 批次大小，默认为16
+        learning_rate: 学习率，默认为0.001
+        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        column_label: 图表中显示的列标签，默认使用target_column值
+        plot_title: 图表标题，默认为None(自动生成)
+
+    Returns:
+        BPNNAnalysisResult | tuple[BPNNAnalysisResult, Image]: 包含以下键值的分析结果:
+            - target_column: 预测目标列名
+            - total_samples: 总样本数
+            - train_samples: 训练样本数
+            - test_samples: 测试样本数
+            - mape: 平均绝对百分比误差(%)
+            - mae: 平均绝对误差
+            - rmse: 均方根误差
+            - r_squared: 决定系数
+            - input_size: 最优输入层大小
+            - hidden_size: 最优隐含层大小
+            - learning_rate: 使用的学习率
+            - epochs: 训练轮数
+            - batch_size: 批次大小
+            - loss_history: 训练损失历史
+            - val_loss_history: 验证损失历史
+            - actual_values: 实际观测值列表
+            - predicted_values: 预测值列表
+            - execution_time: 执行时间(秒)
+            - warnings: 警告信息列表
+
+    Raises:
+        ValueError: 当指定的列不存在或数据格式错误时
+        RuntimeError: 当TensorFlow不可用或预测过程出错时
+
+    Example:
+        基础预测:
+        ```
+        result = bp_forecast("data_001", "demand_quantity")
+        print(f"预测MAPE: {result.mape:.2f}%")
+        ```
+
+        自定义参数预测:
+        ```
+        result = bp_forecast(
+            source_id="data_001",
+            target_column="sales_volume",
+            time_column="date",
+            epochs=200,
+            learning_rate=0.005,
+            plot_title="销量BP神经网络预测分析"
+        )
+        ```
+
+    Note:
+        - BP神经网络适用于具有复杂非线性关系的时间序列数据
+        - 模型需要足够的训练样本以避免过拟合
+        - 此函数依赖TensorFlow库，若未安装将返回错误
+        - 对于小样本或高噪声数据，可能需要调整学习率和网络结构
+    """
     df = read_source(source_id)
-    return zero_and_bp_predict(column_index, df)
+
+    # 调用BP神经网络预测函数
+    result, image_bytes = bp_forecast_impl(
+        df=df,
+        target_column=target_column,
+        time_column=time_column,
+        input_sizes=input_sizes,
+        hidden_sizes=hidden_sizes,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        random_state=42,
+        enable_diagnostics=enable_diagnostics,
+        column_label=column_label,
+        plot_title=plot_title,
+    )
+
+    return result, Image(data=image_bytes) if image_bytes else None
 
 
 if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
     app.run("sse")

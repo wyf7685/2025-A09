@@ -66,46 +66,50 @@ except ImportError as e:
 
 # 机器学习预测方法
 try:
-    from .forest import forest_try
+    from .analysis_results import RandomForestAnalysisResult
+    from .forest import forest_forecast_impl
 
     logger.info("Random Forest forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import Random Forest forecasting: {e}")
-    forest_try = None
+    forest_forecast_impl = None
 
 try:
     # from .xgboost import preprocess_data as xgb_preprocess_data
-    from .xgboost import sanitized_gwo, xgboost_forecast
+    from .analysis_results import XGBoostAnalysisResult
+    from .xgboost import xgboost_forecast_impl
 
     logger.info("XGBoost forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import XGBoost forecasting: {e}")
-    xgboost_forecast = None
-    sanitized_gwo = None
+    xgboost_forecast_impl = None
 
 # 神经网络预测方法
 try:
-    from .zero_and_bp import zero_and_bp_predict
+    from .analysis_results import BPNNAnalysisResult
+    from .zero_and_bp import bp_forecast_impl
 
     logger.info("BP neural network forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import BP neural network forecasting: {e}")
-    zero_and_bp_predict = None
+    bp_forecast_impl = None
 
 # 定义公共接口
 __all__ = [
     "ARIMAAnalysisResult",
+    "BPNNAnalysisResult",
     "CrostonAnalysisResult",
     "EMAAnalysisResult",
+    "RandomForestAnalysisResult",
     "SMAAnalysisResult",
+    "XGBoostAnalysisResult",
     "arima_forecast_impl",
+    "bp_forecast_impl",
     "croston_forecast_impl",
     "ema_forecast_impl",
-    "forest_try",
-    "sanitized_gwo",
+    "forest_forecast_impl",
     "sma_forecast_impl",
-    "xgboost_forecast",
-    "zero_and_bp_predict",
+    "xgboost_forecast_impl",
 ]
 
 # 版本信息
