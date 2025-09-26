@@ -6,7 +6,6 @@ Croston方法及其变体用于间歇性需求预测
 """
 
 import io
-import logging
 import time
 from typing import Literal, cast
 
@@ -14,9 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from ..log import logger
 from .analysis_results import CrostonAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 
 def croston_forecast_impl(

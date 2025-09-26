@@ -6,7 +6,6 @@ ARIMA预测模型
 """
 
 import io
-import logging
 import time
 from typing import Any
 
@@ -20,9 +19,8 @@ from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 
+from ..log import logger
 from .analysis_results import ARIMAAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 
 def arima_forecast_impl(

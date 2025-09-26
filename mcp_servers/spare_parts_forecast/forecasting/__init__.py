@@ -10,11 +10,12 @@
 - 模型评估和结果可视化
 """
 
-import logging
 import warnings
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+from ..log import logger
 
 # 忽略警告
 warnings.filterwarnings("ignore")
@@ -24,7 +25,6 @@ mpl.use("Agg")
 plt.rcParams["font.sans-serif"] = ["SimHei"]
 plt.rcParams["axes.unicode_minus"] = False
 
-logger = logging.getLogger(__name__)
 
 # 传统统计预测方法
 try:

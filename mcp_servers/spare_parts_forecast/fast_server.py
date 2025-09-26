@@ -6,6 +6,10 @@ Run (package mode):
 
 from typing import Any, Literal
 
+from .log import LOGGING_CONFIG, configure_logging
+
+configure_logging()
+
 import pandas as pd
 from mcp.server import FastMCP
 from mcp.server.fastmcp import Image
@@ -782,8 +786,22 @@ def bp_forecast(
     return result, Image(data=image_bytes) if image_bytes else None
 
 
-if __name__ == "__main__":
-    import logging
+def run_server_sse() -> None:
+    import anyio
+    import uvicorn
 
-    logging.basicConfig(level=logging.INFO)
-    app.run("sse")
+    starlette_app = app.sse_app()
+
+    config = uvicorn.Config(
+        starlette_app,
+        host=app.settings.host,
+        port=app.settings.port,
+        log_level=app.settings.log_level.lower(),
+        log_config=LOGGING_CONFIG,
+    )
+    server = uvicorn.Server(config)
+    anyio.run(server.serve)
+
+
+if __name__ == "__main__":
+    run_server_sse()

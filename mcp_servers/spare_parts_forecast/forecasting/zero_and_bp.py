@@ -11,7 +11,6 @@ BP神经网络预测模块
 """
 
 import io
-import logging
 import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -26,12 +25,12 @@ from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.optimizer_v1 import Adam
 
+from ..log import logger
 from .analysis_results import BPNNAnalysisResult
 
 if TYPE_CHECKING:
     from tensorflow.python.keras.callbacks import History
 
-logger = logging.getLogger(__name__)
 
 
 def bp_forecast_impl(

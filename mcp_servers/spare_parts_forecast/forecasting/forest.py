@@ -6,7 +6,6 @@
 """
 
 import io
-import logging
 import time
 from typing import cast
 
@@ -16,9 +15,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from ..log import logger
 from .analysis_results import RandomForestAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 
 def forest_forecast_impl(

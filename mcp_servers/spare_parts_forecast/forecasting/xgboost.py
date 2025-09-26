@@ -12,7 +12,6 @@ XGBoost预测模块 - 基于灰狼优化算法的XGBoost回归预测 - 重构版
 """
 
 import io
-import logging
 import time
 from collections.abc import Callable
 from typing import Any, cast
@@ -23,10 +22,8 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from ..log import logger
 from .analysis_results import XGBoostAnalysisResult
-
-# 配置日志
-logger = logging.getLogger(__name__)
 
 
 def xgboost_forecast_impl(

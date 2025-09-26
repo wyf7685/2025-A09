@@ -6,7 +6,6 @@
 """
 
 import io
-import logging
 import time
 from typing import cast
 
@@ -15,9 +14,8 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 
+from ..log import logger
 from .analysis_results import EMAAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 
 def ema_forecast_impl(

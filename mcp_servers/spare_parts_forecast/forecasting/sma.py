@@ -6,7 +6,6 @@
 """
 
 import io
-import logging
 import time
 from typing import cast
 
@@ -14,9 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from ..log import logger
 from .analysis_results import SMAAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 
 def sma_forecast_impl(

@@ -22,7 +22,8 @@
       "name": "测试用 MCP 服务器",
       "type": "debugpy",
       "request": "launch",
-      "module": "mcp_servers.spare_parts_forecast.fast_server"
+      "module": "spare_parts_forecast.fast_server",
+      "cwd": "${workspaceFolder}/mcp_servers",
     }
   ],
   "compounds": [
