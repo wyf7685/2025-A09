@@ -173,7 +173,10 @@ def read_agent_source_data(session_id: str, source_id: str) -> pd.DataFrame:
 
 
 def create_agent_source(
-    session_id: str, df: pd.DataFrame, new_id: str | None = None, description: str | None = None
+    session_id: str,
+    df: pd.DataFrame,
+    new_id: str | None = None,
+    description: str | None = None,
 ) -> str:
     """创建Agent数据源，返回数据源ID"""
     with AgentSourceClient() as client:

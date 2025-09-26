@@ -208,4 +208,3 @@ def zero_and_bp_predict(column_index: int, df: pd.DataFrame) -> tuple[list[str],
     logger.info(f"最佳隐含层: {best_yh}")
     logger.info(f"最佳MAPE: {min_mape}")
     return col.tolist(), float(min_mape)
-

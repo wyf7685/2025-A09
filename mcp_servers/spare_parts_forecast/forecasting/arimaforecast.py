@@ -5,16 +5,16 @@ ARIMA预测模型
 参数优化和预测评估等功能。
 """
 
-import itertools
+import io
 import logging
+import time
+from dataclasses import dataclass
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from sklearn.metrics import mean_squared_error
-from statsmodels.graphics.gofplots import qqplot
+from scipy import stats
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.stats.stattools import durbin_watson
@@ -24,399 +24,405 @@ from statsmodels.tsa.stattools import adfuller
 logger = logging.getLogger(__name__)
 
 
-# ARIMA预测
-# 基础 ARIMA 模型
-def arimaforecast_try(n: int, df: pd.DataFrame) -> float:
-    # 重采样
+@dataclass
+class ARIMAAnalysisResult:
+    """ARIMA分析结果的数据类"""
+
+    # 基本信息
+    target_column: str
+    arima_order: tuple[int, int, int]
+
+    # 数据信息
+    total_samples: int
+    train_samples: int
+    test_samples: int
+    train_start_date: str
+    train_end_date: str
+    test_start_date: str
+    test_end_date: str
+
+    # 平稳性检验结果
+    adf_statistic: float
+    adf_p_value: float
+    is_stationary: bool
+    critical_values: dict[str, float]
+
+    # 随机性检验结果
+    ljung_box_statistic: float | None
+    ljung_box_p_value: float | None
+    is_white_noise: bool
+
+    # 模型拟合信息
+    model_aic: float
+    model_bic: float
+    model_log_likelihood: float
+    convergence_status: bool
+
+    # 预测评估指标
+    mape: float
+    mae: float
+    mse: float
+    rmse: float
+    r_squared: float
+
+    # 残差分析
+    residual_mean: float
+    residual_std: float
+    durbin_watson_stat: float
+    residual_normality_p: float
+
+    # 预测数据
+    actual_values: list[float]
+    predicted_values: list[float]
+    prediction_intervals: dict[str, list[float]] | None
+
+    # 模型参数
+    ar_params: list[float]
+    ma_params: list[float]
+
+    # 诊断信息
+    warnings: list[str]
+    execution_time: float
+
+
+def arima_forecast_impl(
+    df: pd.DataFrame,
+    target_column: str,
+    time_column: str,
+    arima_order: tuple[int, int, int] = (2, 1, 1),
+    confidence_level: float = 0.95,
+    enable_diagnostics: bool = True,
+    column_label: str | None = None,
+    plot_title: str | None = None,
+) -> tuple[ARIMAAnalysisResult, bytes | None]:
+    """
+    ARIMA预测函数，包含详细的分析和诊断
+
+    Args:
+        df: 输入数据框
+        target_column: 目标预测列名
+        time_column: 时间列名
+        arima_order: ARIMA模型参数(p,d,q),默认为(2,1,1)
+        confidence_level: 置信水平,默认为0.95
+        enable_diagnostics: 是否启用诊断(结果附加诊断信息和图表),默认为True
+        column_label: 图表中列标签(启用诊断时生效),默认为target_column的值
+        plot_title: 图表标题(启用诊断时生效),默认为None
+
+    Returns:
+        ARIMAAnalysisResult: 详细的分析结果
+    """
+
+    start_time = time.time()
+    warnings_list = []
+
     def resampling(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """数据重采样函数"""
-        df = data
-        # df['time'] = pd.to_datetime(df['time'])
-        df = df.set_index("time")
-        train_data = df["2018 第1季度":"2022 第1季度"]
-        test_data = df["2022 第2季度":"2023 第2季度"]
-        # 以月为时间间隔取均值,重采样
-        # train_data = train_data.resample('M').mean()
-        # test_data = test.resample('M').mean()
-        # print(train_data, test_data)
-        return train_data, test_data  # pyright: ignore[reportReturnType]
+        """数据重采样"""
+        split_idx = int(len(data) * 0.8)
+        train_data = data.iloc[:split_idx]
+        test_data = data.iloc[split_idx:]
+        return train_data, test_data
 
-    #### Step 3  差分转平稳
-    def stationarity(
-        timeseries: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:  # 平稳性处理（timeseries 时间序列）
-        ## 差分法,保存成新的列
-        diff1 = timeseries.diff(1).dropna()  # 1阶差分 dropna() 删除缺失值
-        diff2 = diff1.diff(1).dropna()  # 在一阶差分基础上再做一次一阶差分，即二阶查分
-        ## 画图
-        # diff1.plot(color='red', title='diff 1', figsize=(10, 4))
-        # diff2.plot(color='black', title='diff 2', figsize=(10, 4))
-        ## 平滑法
-        rollmean = (
-            timeseries.rolling(window=4, center=False).mean()  ## 滚动平均
-        ).dropna()  # pyright: ignore[reportAttributeAccessIssue]
-        rollstd = timeseries.rolling(window=4, center=False).std().dropna()  ## 滚动标准差
-        ## 画图
-        # rollmean.plot(color='yellow', title='Rolling Mean', figsize=(10, 4))
-        # rollstd.plot(color='blue', title='Rolling Std', figsize=(10, 4))
-        return diff1, diff2, rollmean, rollstd  # pyright: ignore[reportReturnType]
-
-    # 平稳性检验
-    #### Step 4  平稳性检验
-    def adf_test(timeseries: pd.DataFrame) -> bool:  ## 用于检测序列是否平稳
-        """ADF平稳性检验"""
+    def stationarity_test(timeseries: pd.DataFrame) -> dict[str, Any]:
+        """平稳性检验"""
         column_name = timeseries.columns[0]
         x = np.array(timeseries[column_name])
-        adftest = adfuller(x, autolag="AIC")
-        logger.debug("ADF test results: %s", adftest)
 
-        # adftest返回的是一个元组，第4个元素是临界值字典，第1个元素是p值
+        # ADF检验
+        adftest = adfuller(x, autolag="AIC")
+
         critical_values = adftest[4] if len(adftest) > 4 else {}
         p_value = adftest[1]
 
+        is_stationary = False
         if isinstance(critical_values, dict) and "1%" in critical_values:
             is_stationary = adftest[0] < critical_values["1%"] and p_value < 1e-8
         else:
-            is_stationary = p_value < 0.05  # 简化判断
+            is_stationary = p_value < 0.05
 
-        if is_stationary:
-            logger.info("序列平稳")
-            return True
-        logger.info("非平稳序列")
-        return False
+        return {
+            "adf_statistic": adftest[0],
+            "adf_p_value": p_value,
+            "critical_values": critical_values,
+            "is_stationary": is_stationary,
+        }
 
-    # 随机性检验（白噪声检验）
-    def random_test(timeseries: pd.DataFrame) -> bool:
-        """随机性检验（白噪声检验）"""
+    def white_noise_test(timeseries: pd.DataFrame) -> dict[str, Any]:
+        """白噪声检验"""
         try:
-            p_value = acorr_ljungbox(timeseries, lags=1)  # p_value 返回二维数组，第二维为P值
-            logger.debug("Ljung-Box test results: %s", p_value)
+            lb_result = acorr_ljungbox(timeseries, lags=min(10, len(timeseries) // 4))
 
-            if "lb_pvalue" in p_value.columns and p_value["lb_pvalue"].iloc[0] < 0.05:
-                logger.info("非随机性序列")
-                return True
-            logger.info("随机性序列,即白噪声序列")
-            return False
+            if "lb_stat" in lb_result.columns and "lb_pvalue" in lb_result.columns:
+                lb_stat = lb_result["lb_stat"].iloc[-1]  # 取最后一个lag的统计量
+                lb_pvalue = lb_result["lb_pvalue"].iloc[-1]  # 取最后一个lag的p值
+                is_white_noise = lb_pvalue > 0.05  # p值大于0.05表示是白噪声
+            else:
+                lb_stat = None
+                lb_pvalue = None
+                is_white_noise = False
+
+            return {"ljung_box_statistic": lb_stat, "ljung_box_p_value": lb_pvalue, "is_white_noise": is_white_noise}
         except Exception as e:
-            logger.warning("随机性检验失败: %s", e)
-            return False
+            warnings_list.append(f"白噪声检验失败: {e}")
+            return {"ljung_box_statistic": None, "ljung_box_p_value": None, "is_white_noise": False}
 
-    # 利用ACF和PACF判断模型阶数
-    def determinate_order_acf(timeseries: pd.DataFrame) -> None:
-        plot_acf(timeseries, lags=16)  # 延迟数
-        plot_pacf(timeseries, lags=7)
-        plt.show()
+    def arima_model(train_data: pd.DataFrame, order: tuple[int, int, int]) -> dict[str, Any]:
+        """ARIMA模型"""
+        try:
+            model = ARIMA(train_data, order=order)
+            fitted_model = model.fit()
 
-    # ARMA模型
-    def arma_model(train_data: pd.DataFrame, order: tuple[int, int, int]) -> tuple[Any, Any, Any]:
-        """ARMA模型训练和预测"""
-        arma_model = ARIMA(train_data, order=order)
-        arma = arma_model.fit()
-        # 样本内预测
-        in_sample_pred = arma.predict()
-        # 样本外预测
-        out_sample_pred = arma.predict(start=len(train_data) - 1, end=len(train_data) + 11, dynamic=True)
-        return arma, in_sample_pred, out_sample_pred
+            # 样本内预测
+            in_sample_pred = fitted_model.fittedvalues
 
-    # ARIMA模型
-    def arima_model(train_data: pd.DataFrame, order: tuple[int, int, int]) -> tuple[Any, Any, Any]:
-        """ARIMA模型训练和预测"""
-        arima_model = ARIMA(train_data, order=order)
-        arima = arima_model.fit()
-        # 样本内预测
-        in_sample_pred = arima.predict()
-        # 样本外预测
-        out_sample_pred = arima.predict(start=len(train_data) - 1, end=len(train_data) + 4, dynamic=True)
-        return arima, in_sample_pred, out_sample_pred
+            # 样本外预测
+            forecast_result = fitted_model.get_forecast(steps=len(test_data))
+            out_sample_pred = forecast_result.predicted_mean
 
-    # 模型评估
-    def evaluate_model(model: Any, train_data: pd.DataFrame, predict_data: pd.Series) -> None:
-        # （1）利用QQ图检验残差是否满足正态分布
-        resid = model.resid  # 求解模型残差
-        plt.figure(figsize=(12, 8))
-        qqplot(resid, line="q", fit=True)
-        plt.xlabel("理论分位数")
-        plt.ylabel("样本分位数")
-        plt.legend(["残差"], loc="upper left")
-        plt.show()
-        plt.close()
-        # （2）利用D-W检验,检验残差的自相关性
-        logger.debug("D-W检验值为%f", durbin_watson(resid.values))
-        # （3）利用预测值和真实值的误差检测，这里用的是标准差
-        logger.debug(
-            "标准差为%f",
-            mean_squared_error(train_data, predict_data, sample_weight=None, multioutput="uniform_average"),
-        )  # 标准差（均方差）
+            # 置信区间
+            conf_int = forecast_result.conf_int(alpha=1 - confidence_level)
 
-    def draw_picture(row_train_data: pd.DataFrame, out_sample_pred_arima: pd.Series, test_data: pd.DataFrame) -> float:
-        # print(out_sample_pred)
-        # 样本外预测传入 test_data,out_sample_pred
-        # 由于预测都是由差分后的平稳序列得出,因此需要对差分后的数据进行还原
-        # 还原后绘制同一起点的曲线
-        # 将差分后的序列还原,re_out_sample_pred为还原之后
-        base_series = pd.Series(np.array(row_train_data)[-2][0], index=[row_train_data.index[-2]])
-        re_out_sample_pred_arima = pd.concat([base_series, out_sample_pred_arima[1:]]).cumsum()  # pyright: ignore[reportCallIssue, reportArgumentType]
+            return {
+                "model": fitted_model,
+                "in_sample_pred": in_sample_pred,
+                "out_sample_pred": out_sample_pred,
+                "confidence_intervals": {"lower": conf_int.iloc[:, 0].tolist(), "upper": conf_int.iloc[:, 1].tolist()},
+                "aic": fitted_model.aic,
+                "bic": fitted_model.bic,
+                "log_likelihood": fitted_model.llf,
+                "convergence": fitted_model.mle_retvals["converged"] if hasattr(fitted_model, "mle_retvals") else True,
+                "ar_params": fitted_model.arparams.tolist() if len(fitted_model.arparams) > 0 else [],
+                "ma_params": fitted_model.maparams.tolist() if len(fitted_model.maparams) > 0 else [],
+            }
+        except Exception as e:
+            raise RuntimeError(f"ARIMA模型拟合失败: {e}") from e
 
-        # # 横坐标
-        # x = []
-        # start_value = 45  # 设置起始值为44
-        # for i in range(24):
-        #     x.append(start_value + i)
-        # x = np.array(x)
-        # x_1 = []
-        # for i in range(44):
-        #     x_1.append(i + 1)
-        # x_1 = np.array(x_1)
-        # df_all = preprocess_try()
-        # print(x)
-        # 使用between方法来切片时间列
-        # x_train_time = x[x['time'].between('2018 第1季度', '2022 第2季度')]
-        # x_test_time = x[x['time'].between('2022 第3季度', '2023 第2季度')]
+    def residual_analysis(model: Any) -> dict[str, float]:
+        """残差分析"""
+        residuals = model.resid
 
-        # 纵坐标
-        y1 = np.array(row_train_data)
-        y2 = np.array(test_data)
-        # y3 = np.array(re_out_sample_pred_arma[1:])
+        # 基本统计量
+        resid_mean = float(np.mean(residuals))
+        resid_std = float(np.std(residuals))
 
-        y4 = np.array(re_out_sample_pred_arima[1:])
-        logger.debug("y4 values: %s", y4)
-        mape = np.mean(np.abs((y4 - y2) / y2))
+        # Durbin-Watson检验
+        dw_stat = durbin_watson(residuals.values)
 
-        # 画图
-        plt.plot(train_data.index, y1, label="Training Data")
-        plt.plot(test_data.index, y2, color="b", label="Test Data")
-        # plt.plot(x_test_time, y3, color='r', label='ARMA Prediction')
-        logger.debug("测试数据索引: %s", test_data.index)
-        plt.plot(test_data.index, y4, color="r", label="ARIMA Prediction")
-        plt.title(f"{df_all.columns[n]},MAPE_ARIMA:{round(mape, 2)}")
-        # 添加图例
-        plt.legend()
-        plt.xticks(rotation=90)
-        # plt.show()
-        # plt.close()
-        return float(mape)
+        # 正态性检验 (Shapiro-Wilk)
+        try:
+            if len(residuals) <= 5000:  # Shapiro-Wilk测试对样本量有限制
+                _, normality_p = stats.shapiro(residuals)
+            else:
+                # 对于大样本，使用Kolmogorov-Smirnov测试
+                _, normality_p = stats.kstest(residuals, "norm")
+        except Exception:
+            normality_p = np.nan
+            warnings_list.append("正态性检验失败")
 
-    # 参数
+        return {
+            "residual_mean": resid_mean,
+            "residual_std": resid_std,
+            "durbin_watson_stat": float(dw_stat),
+            "residual_normality_p": float(normality_p) if not np.isnan(normality_p) else 0.0,
+        }
 
-    # n = 6                        # 读取的列索引序号
+    def calc_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
+        """计算评估指标"""
+        # 处理长度不匹配
+        min_len = min(len(actual), len(predicted))
+        actual = actual[:min_len]
+        predicted = predicted[:min_len]
 
-    # 数据预处理
-    df_all = df.copy()
-    df = df.iloc[:, [0, n]]  # 选择第0列和第n列，这将保留时间列和第n列
+        # 避免除零错误
+        actual_nonzero = np.where(actual != 0, actual, 1e-10)
 
-    # # 重采样,划分训练测试
-    train_data, test_data = resampling(df)
-    train_data = train_data.astype(float)
-    row_train_data = train_data  # 保存差分前的序列,为了后面做评估
-    logger.debug("原始训练数据: %s", row_train_data)
-    # 差分转平稳
-    smooth_data = stationarity(train_data)
-    logger.debug("平稳处理后的数据: %s", smooth_data)
+        # 计算各种指标
+        mape = float(np.mean(np.abs((actual - predicted) / actual_nonzero)) * 100)
+        mae = float(np.mean(np.abs(actual - predicted)))
+        mse = float(np.mean((actual - predicted) ** 2))
+        rmse = float(np.sqrt(mse))
 
-    # for data in zip(Smooth_data, range(4)):
-    # range(4) 用于判断哪种方法 满足平稳性和白噪声 diff1 diff2 rollmean,rollstd
-    #     # print(data[0])
-    #     if ADF_test(data[0]) and random_test(data[0]):  # 平稳性和白噪声检测
-    #         train_data = data[0]                        # 先用差分，再用平滑,分别对应4个序列
-    #         method = data[1]
-    #         print(method)                               # 如果是差分做的,那么后面ARIMA模型中要使用这个参数
-    #         break
-    # print(train_data)
+        # R-squared
+        ss_res = np.sum((actual - predicted) ** 2)
+        ss_tot = np.sum((actual - np.mean(actual)) ** 2)
+        r_squared = float(1 - (ss_res / ss_tot)) if ss_tot != 0 else 0.0
 
-    # determinate_order_acf(train_data)  # ACF定阶
+        return {"mape": mape, "mae": mae, "mse": mse, "rmse": rmse, "r_squared": r_squared}
 
-    # 参数
-    # order_arma = (1, 0, 1)  # ARMA      p,q其中d=0
-    order_arima = (2, 1, 1)  # ARIMA     p,d,q
+    def create_plots(
+        train_data: pd.DataFrame,
+        test_data: pd.DataFrame,
+        predicted: np.ndarray,
+        conf_intervals: dict[str, list[float]] | None,
+        residuals: pd.Series,
+    ) -> bytes:
+        """创建分析图表"""
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+        fig.suptitle(plot_title or f"{column_label or target_column} - ARIMA分析结果", fontsize=16)
 
-    # print(order_arma.dtypes)
-    # 调用模型
-    # arma, in_sample_pred_arma, out_sample_pred_arma = arma_model(train_data, order_arma)
-    _, _, out_sample_pred_arima = arima_model(train_data, order_arima)
+        # 1. 主预测图
+        axes[0, 0].plot(train_data.index, train_data.values, label="训练数据", color="blue")
+        axes[0, 0].plot(test_data.index, test_data.values, label="实际值", color="green")
+        axes[0, 0].plot(test_data.index, predicted[: len(test_data)], label="预测值", color="red")
 
-    # #
-    # 模型评价
-    # evaluate_model(arma, train_data, in_sample_pred_arma)
-    # evaluate_model(arima, train_data, in_sample_pred_arima)
-    # #
-    # # 可视化
-    draw_picture(row_train_data, out_sample_pred_arima, test_data)
+        # 添加置信区间
+        if conf_intervals:
+            axes[0, 0].fill_between(
+                test_data.index,
+                conf_intervals["lower"][: len(test_data)],
+                conf_intervals["upper"][: len(test_data)],
+                alpha=0.3,
+                color="red",
+                label=f"{confidence_level * 100:.0f}%置信区间",
+            )
 
-    # 返回ARIMA模型的MAPE值作为示例
-    return 0.0  # 临时返回值，实际应返回计算的MAPE
+        axes[0, 0].set_title("预测结果")
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
 
+        # 2. 残差图
+        axes[0, 1].plot(residuals.index, residuals.values, "o-", markersize=3)
+        axes[0, 1].axhline(y=0, color="red", linestyle="--")
+        axes[0, 1].set_title("残差序列")
+        axes[0, 1].grid(True, alpha=0.3)
 
-# SARIMA模型（考虑季节性）
-def arima_try(n: int, data: pd.DataFrame) -> tuple[float, pd.Index]:
-    # Load the data
-    col = data.columns
-    data = data.iloc[:, [0, n]]
-    # A bit of pre-processing to make it nicer
-    data = data.set_index(["time"])
+        # 3. 残差QQ图
+        stats.probplot(residuals.values, dist="norm", plot=axes[0, 2])
+        axes[0, 2].set_title("残差QQ图")
+        axes[0, 2].grid(True, alpha=0.3)
 
-    #
-    def convert_to_first_month(quarter_str: str) -> str:
-        """将季度字符串转换为该季度第一个月的日期字符串"""
-        year, quarter = quarter_str.split(" 第")
-        year = int(year)
-        quarter = int(quarter[0])
+        # 4. ACF图
+        plot_acf(residuals.dropna(), ax=axes[1, 0], lags=min(20, len(residuals) // 4))
+        axes[1, 0].set_title("残差ACF")
 
-        if quarter == 1:
-            month = 1
-        elif quarter == 2:
-            month = 4
-        elif quarter == 3:
-            month = 7
-        else:  # quarter == 4
-            month = 10
+        # 5. PACF图
+        plot_pacf(residuals.dropna(), ax=axes[1, 1], lags=min(20, len(residuals) // 4))
+        axes[1, 1].set_title("残差PACF")
 
-        return f"{year}-{month}-1"
+        # 6. 残差直方图
+        axes[1, 2].hist(residuals.values, bins=30, density=True, alpha=0.7, color="skyblue")
+        # 添加正态分布曲线
+        x = np.linspace(residuals.min(), residuals.max(), 100)
+        axes[1, 2].plot(x, stats.norm.pdf(x, residuals.mean(), residuals.std()), "r-", label="正态分布")
+        axes[1, 2].set_title("残差分布")
+        axes[1, 2].legend()
+        axes[1, 2].grid(True, alpha=0.3)
 
-    #
-    # 将data中"time"列的值根据convert_to_first_month函数进行转换
-    data.index = data.index.map(convert_to_first_month)
-    # 将索引转换为日期时间类型
-    data.index = pd.to_datetime(data.index)
-    #
-    # # 显示更改后的数据
-    logger.debug("训练数据: %s", data)
-    #
-    # 划分训练测试
-    train_data = data["2018-4-1":"2022-4-1"]
-    test_data = data["2022-7-1":"2023-7-1"]
-    train_data = train_data.astype(float)  # 将数据转换为浮点数类型
-    test_data = test_data.astype(float)  # 将数据转换为浮点数类型
-    logger.debug("测试数据: %s", test_data)
+        plt.tight_layout()
 
-    # 定义 d 和 q 参数，它们的取值范围在 0 到 1 之间
-    q = range(3)
-    d = range(2)
-    # 要定义 p 参数，其取值范围在 0 到 3 之间
-    p = range(4)
+        with io.BytesIO() as buf:
+            plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+            buf.seek(0)
+            return buf.read()
 
-    # 生成所有不同的 p、d 和 q 参数的组合。
-    pdq = list(itertools.product(p, d, q))
-
-    # 生成所有不同的季节性 p、d 和 q 参数的组合
-    seasonal_pdq = [(x[0], x[1], x[2], 4) for x in list(itertools.product(p, d, q))]
-
-    logger.debug("Examples of parameter combinations for Seasonal ARIMA...")
-    logger.debug("SARIMAX: %s x %s", pdq[1], seasonal_pdq[1])
-    logger.debug("SARIMAX: %s x %s", pdq[1], seasonal_pdq[2])
-    logger.debug("SARIMAX: %s x %s", pdq[2], seasonal_pdq[3])
-    logger.debug("SARIMAX: %s x %s", pdq[2], seasonal_pdq[4])
-
-    AIC = []
-    SARIMAX_model = []
-    for param in pdq:
-        for param_seasonal in seasonal_pdq:
-            try:
-                mod = sm.tsa.statespace.SARIMAX(
-                    train_data,
-                    order=param,
-                    seasonal_order=param_seasonal,
-                    enforce_stationarity=False,
-                    enforce_invertibility=False,
-                )
-
-                results = mod.fit(disp=False)
-
-                # 使用getattr获取AIC值，提供默认值以防类型检查问题
-                aic_value = getattr(results, "aic", float("inf"))
-                logger.debug("SARIMAX%sx%s - AIC:%s", param, param_seasonal, aic_value)
-                AIC.append(aic_value)
-                SARIMAX_model.append([param, param_seasonal])
-            except Exception as e:
-                logger.warning("SARIMAX模型拟合失败 %sx%s: %s", param, param_seasonal, e)
-                continue
-
-    logger.info(
-        "The smallest AIC is %s for model SARIMAX%sx%s",
-        min(AIC),
-        SARIMAX_model[AIC.index(min(AIC))][0],
-        SARIMAX_model[AIC.index(min(AIC))][1],
-    )
-
-    # 重新拟合最佳模型
-    mod = sm.tsa.statespace.SARIMAX(
-        train_data,
-        order=SARIMAX_model[AIC.index(min(AIC))][0],
-        seasonal_order=SARIMAX_model[AIC.index(min(AIC))][1],
-        enforce_stationarity=False,
-        enforce_invertibility=False,
-    )
-
-    results = mod.fit(disp=False)
-    plt.show()
-
-    # 样本外预测 - 使用通用方法
+    # 主执行逻辑
     try:
-        # 使用简单的预测方法，避免复杂的类型检查问题
-        forecast_steps = len(test_data)
-
-        # 尝试多种预测方法
-        prediction = None
-        if hasattr(results, "forecast"):
+        # 数据验证
+        if target_column not in df.columns:
+            raise ValueError(f"目标列 '{target_column}' 不存在")
+        if time_column not in df.columns:
+            raise ValueError(f"时间列 '{time_column}' 不存在")
+        # 时间列处理
+        if not np.issubdtype(df[time_column].dtype, np.datetime64):  # pyright: ignore[reportArgumentType]
             try:
-                prediction = results.forecast(steps=forecast_steps)  # type: ignore
+                df[time_column] = pd.to_datetime(df[time_column])
             except Exception as e:
-                logger.debug("forecast方法失败: %s", e)
+                raise ValueError(f"时间列转换失败: {e}") from e
 
-        if prediction is None and hasattr(results, "get_forecast"):
-            try:
-                pred_result = results.get_forecast(steps=forecast_steps)  # type: ignore
-                if hasattr(pred_result, "predicted_mean"):
-                    prediction = pred_result.predicted_mean
-            except Exception as e:
-                logger.debug("get_forecast方法失败: %s", e)
+        # 数据准备
+        df_work = df[[time_column, target_column]].copy().dropna()
+        df_work = df_work.set_index(time_column)
 
-        # 如果仍然没有预测结果，使用默认值
-        if prediction is None:
-            prediction = np.full(forecast_steps, test_data.iloc[0, 0])
-            logger.warning("无法获取预测结果，使用默认值")
+        # 数据划分
+        train_data, test_data = resampling(df_work)
+        train_data = train_data.astype(float)
 
-        # 确保预测结果是numpy数组
-        if not isinstance(prediction, np.ndarray):
-            prediction = np.array(prediction)
+        # 平稳性检验
+        stationarity_result = stationarity_test(train_data)
 
-        # 获取真实值
-        truth = test_data.iloc[:, 0].to_numpy()
+        # 白噪声检验
+        white_noise_result = white_noise_test(train_data)
 
-        # 确保长度匹配
-        min_len = min(len(prediction), len(truth))
-        if min_len > 0:
-            prediction = prediction[:min_len]
-            truth = truth[:min_len]
+        # 模型拟合
+        model_result = arima_model(train_data, arima_order)
+        fitted_model = model_result["model"]
 
-            # 避免除零错误
-            truth_nonzero = np.where(truth != 0, truth, 1e-10)
-            mape = float(np.mean(np.abs((truth - prediction) / truth_nonzero)))
-            logger.info("MAPE: %f", mape)
+        # 残差分析
+        if enable_diagnostics:
+            residual_result = residual_analysis(fitted_model)
         else:
-            mape = float("inf")
-            logger.warning("无法计算MAPE，数据长度为0")
+            residual_result = {
+                "residual_mean": 0.0,
+                "residual_std": 0.0,
+                "durbin_watson_stat": 0.0,
+                "residual_normality_p": 0.0,
+            }
 
-    except Exception:
-        logger.exception("预测过程出错")
-        mape = float("inf")
-        prediction = np.array([])
+        # 预测评估
+        actual = test_data.iloc[:, 0].to_numpy()
+        predicted = model_result["out_sample_pred"].to_numpy()
 
-    # 绘图
-    plt.figure(figsize=(10, 6))
-    plt.plot(data.index, data, label="原始数据", color="black")
+        metrics = calc_metrics(actual, predicted)
 
-    # 只有当预测有效时才绘制预测线
-    if len(prediction) > 0 and len(prediction) == len(test_data):
-        plt.plot(test_data.index, prediction, label="样本外预测", color="r")
+        # 创建图表
+        image_bytes = (
+            create_plots(train_data, test_data, predicted, model_result["confidence_intervals"], fitted_model.resid)
+            if enable_diagnostics
+            else None
+        )
 
-    plt.ylabel("数量")
-    plt.xlabel("日期")
-    plt.xticks(rotation=45)
-    plt.title(f"物料号：{col[n]} \n MAPE:{round(mape, 2)}")
-    plt.legend()
+        # 构建结果对象
+        result = ARIMAAnalysisResult(
+            # 基本信息
+            target_column=target_column,
+            arima_order=arima_order,
+            # 数据信息
+            total_samples=len(df_work),
+            train_samples=len(train_data),
+            test_samples=len(test_data),
+            train_start_date=str(train_data.index[0]),
+            train_end_date=str(train_data.index[-1]),
+            test_start_date=str(test_data.index[0]),
+            test_end_date=str(test_data.index[-1]),
+            # 平稳性检验
+            adf_statistic=stationarity_result["adf_statistic"],
+            adf_p_value=stationarity_result["adf_p_value"],
+            is_stationary=stationarity_result["is_stationary"],
+            critical_values=stationarity_result["critical_values"],
+            # 白噪声检验
+            ljung_box_statistic=white_noise_result["ljung_box_statistic"],
+            ljung_box_p_value=white_noise_result["ljung_box_p_value"],
+            is_white_noise=white_noise_result["is_white_noise"],
+            # 模型信息
+            model_aic=model_result["aic"],
+            model_bic=model_result["bic"],
+            model_log_likelihood=model_result["log_likelihood"],
+            convergence_status=model_result["convergence"],
+            # 评估指标
+            mape=metrics["mape"],
+            mae=metrics["mae"],
+            mse=metrics["mse"],
+            rmse=metrics["rmse"],
+            r_squared=metrics["r_squared"],
+            # 残差分析
+            residual_mean=residual_result["residual_mean"],
+            residual_std=residual_result["residual_std"],
+            durbin_watson_stat=residual_result["durbin_watson_stat"],
+            residual_normality_p=residual_result["residual_normality_p"],
+            # 预测数据
+            actual_values=actual.tolist(),
+            predicted_values=predicted.tolist(),
+            prediction_intervals=model_result["confidence_intervals"],
+            # 模型参数
+            ar_params=model_result["ar_params"],
+            ma_params=model_result["ma_params"],
+            # 诊断信息
+            warnings=warnings_list,
+            execution_time=time.time() - start_time,
+        )
 
-    plt.grid(grid=True, linestyle="--", linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig("SARIMA")
-    plt.show()
-    return float(mape), col
+        logger.info("ARIMA分析完成，执行时间: %.2f秒", result.execution_time)
+        return result, image_bytes
+
+    except Exception as e:
+        logger.exception("ARIMA分析失败")
+        raise RuntimeError(f"ARIMA分析失败: {e}") from e

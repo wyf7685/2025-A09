@@ -4,6 +4,7 @@ from collections.abc import AsyncIterable, Iterable
 from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AIMessage, ToolMessage
+from mcp.types import ImageContent
 from pydantic import BaseModel, Field, Tag
 
 from .tools._registry import TOOL_NAMES
@@ -85,6 +86,9 @@ def process_stream_event(event: Any) -> Iterable[StreamEvent]:
                 if not success:
                     yield ToolErrorEvent(id=tool_call_id, error=(str(content) or "Unknown error"))
                     return
+            if isinstance(artifact, list):  # from MCP
+                image = next((item for item in artifact if isinstance(item, ImageContent)), None)
+                artifact = {"type": "image", "base64_data": image.data} if image else None
             yield ToolResultEvent(id=tool_call_id, result=content, artifact=artifact)
         case ToolMessage(status="error", content=content, tool_call_id=tool_call_id):
             yield ToolErrorEvent(id=tool_call_id, error=str(content))

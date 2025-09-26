@@ -203,4 +203,3 @@ def ema_forecast_try(
         best_gamma_t,
         best_season_periods,
     )
-

@@ -32,12 +32,12 @@ except ImportError as e:
     ema_forecast_try = None
 
 try:
-    from .arimaforecast import arimaforecast_try
+    from .arimaforecast import arima_forecast_impl
 
     logger.info("ARIMA forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import ARIMA forecasting: {e}")
-    arimaforecast_try = None
+    arima_forecast_impl = None
 
 # 间歇需求预测方法
 try:
@@ -78,7 +78,7 @@ except ImportError as e:
 
 # 定义公共接口
 __all__ = [
-    "arimaforecast_try",
+    "arima_forecast_impl",
     "croston_forecast_try",
     "ema_forecast_try",
     "forest_try",
