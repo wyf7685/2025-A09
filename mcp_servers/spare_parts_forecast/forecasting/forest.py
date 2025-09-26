@@ -20,8 +20,6 @@ def forest_try(n: int, df: pd.DataFrame) -> tuple[float, pd.Index]:
     # df = preprocess_try()
 
     col = df.columns
-
-    # %%
     df = df.iloc[:, [0, n]]
     df.columns = ["time", "values"]
 

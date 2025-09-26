@@ -11,9 +11,7 @@ XGBoost预测模块 - 基于灰狼优化算法的XGBoost回归预测
 
 import logging
 import math
-import warnings
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.random as rd
@@ -21,17 +19,8 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import r2_score
 
-# 配置matplotlib
-mpl.use("TkAgg")
-plt.rcParams["font.sans-serif"] = ["SimHei"]
-plt.rcParams["axes.unicode_minus"] = False
-
 # 配置日志
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# 忽略警告
-warnings.filterwarnings("ignore")
 
 
 # 定义灰狼优化算法实现函数

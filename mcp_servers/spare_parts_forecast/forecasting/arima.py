@@ -8,7 +8,6 @@ ARIMA预测模型
 import io
 import logging
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -21,68 +20,9 @@ from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 
+from .analysis_results import ARIMAAnalysisResult
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ARIMAAnalysisResult:
-    """ARIMA分析结果的数据类"""
-
-    # 基本信息
-    target_column: str
-    arima_order: tuple[int, int, int]
-
-    # 数据信息
-    total_samples: int
-    train_samples: int
-    test_samples: int
-    train_start_date: str
-    train_end_date: str
-    test_start_date: str
-    test_end_date: str
-
-    # 平稳性检验结果
-    adf_statistic: float
-    adf_p_value: float
-    is_stationary: bool
-    critical_values: dict[str, float]
-
-    # 随机性检验结果
-    ljung_box_statistic: float | None
-    ljung_box_p_value: float | None
-    is_white_noise: bool
-
-    # 模型拟合信息
-    model_aic: float
-    model_bic: float
-    model_log_likelihood: float
-    convergence_status: bool
-
-    # 预测评估指标
-    mape: float
-    mae: float
-    mse: float
-    rmse: float
-    r_squared: float
-
-    # 残差分析
-    residual_mean: float
-    residual_std: float
-    durbin_watson_stat: float
-    residual_normality_p: float
-
-    # 预测数据
-    actual_values: list[float]
-    predicted_values: list[float]
-    prediction_intervals: dict[str, list[float]] | None
-
-    # 模型参数
-    ar_params: list[float]
-    ma_params: list[float]
-
-    # 诊断信息
-    warnings: list[str]
-    execution_time: float
 
 
 def arima_forecast_impl(
@@ -373,6 +313,7 @@ def arima_forecast_impl(
         # 构建结果对象
         result = ARIMAAnalysisResult(
             # 基本信息
+            algorithm_name="ARIMA",
             target_column=target_column,
             arima_order=arima_order,
             # 数据信息

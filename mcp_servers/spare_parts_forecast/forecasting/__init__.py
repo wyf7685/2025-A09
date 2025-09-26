@@ -11,28 +11,43 @@
 """
 
 import logging
+import warnings
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+# 忽略警告
+warnings.filterwarnings("ignore")
+
+# 配置matplotlib
+mpl.use("Agg")
+plt.rcParams["font.sans-serif"] = ["SimHei"]
+plt.rcParams["axes.unicode_minus"] = False
 
 logger = logging.getLogger(__name__)
 
 # 传统统计预测方法
 try:
-    from .sma import sma_forecast_try
+    from .analysis_results import SMAAnalysisResult
+    from .sma import sma_forecast_impl
 
     logger.info("SMA forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import SMA forecasting: {e}")
-    sma_forecast_try = None
+    sma_forecast_impl = None
 
 try:
-    from .exponential_smoothing import ema_forecast_try
+    from .analysis_results import EMAAnalysisResult
+    from .ema import ema_forecast_impl
 
     logger.info("Exponential smoothing module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import exponential smoothing: {e}")
-    ema_forecast_try = None
+    ema_forecast_impl = None
 
 try:
-    from .arimaforecast import arima_forecast_impl
+    from .analysis_results import ARIMAAnalysisResult
+    from .arima import arima_forecast_impl
 
     logger.info("ARIMA forecasting module loaded successfully")
 except ImportError as e:
@@ -41,12 +56,13 @@ except ImportError as e:
 
 # 间歇需求预测方法
 try:
-    from .croston import croston_forecast_try
+    from .analysis_results import CrostonAnalysisResult
+    from .croston import croston_forecast_impl
 
     logger.info("Croston forecasting module loaded successfully")
 except ImportError as e:
     logger.warning(f"Could not import Croston forecasting: {e}")
-    croston_forecast_try = None
+    croston_forecast_impl = None
 
 # 机器学习预测方法
 try:
@@ -78,12 +94,16 @@ except ImportError as e:
 
 # 定义公共接口
 __all__ = [
+    "ARIMAAnalysisResult",
+    "CrostonAnalysisResult",
+    "EMAAnalysisResult",
+    "SMAAnalysisResult",
     "arima_forecast_impl",
-    "croston_forecast_try",
-    "ema_forecast_try",
+    "croston_forecast_impl",
+    "ema_forecast_impl",
     "forest_try",
     "sanitized_gwo",
-    "sma_forecast_try",
+    "sma_forecast_impl",
     "xgboost_forecast",
     "zero_and_bp_predict",
 ]

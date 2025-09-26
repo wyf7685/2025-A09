@@ -23,7 +23,7 @@ from sklearn.preprocessing import MinMaxScaler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 可选导入 TensorFlow：在 Python 3.13 下官方发行版可能暂不支持，避免直接 ImportError 影响整个包
+# 可选导入 TensorFlow：避免直接 ImportError 影响整个包
 try:
     import tensorflow as tf  # type: ignore
     from tensorflow.keras.layers import Dense  # type: ignore
@@ -40,11 +40,6 @@ except Exception as _e:  # 捕获所有异常（包含可能的硬件 / DLL 兼�
 
 # 忽略警告
 warnings.filterwarnings("ignore")
-
-# 配置matplotlib
-plt.rcParams["font.sans-serif"] = ["SimHei"]
-plt.rcParams["axes.unicode_minus"] = False
-
 
 # def preprocess_data() -> pd.DataFrame:
 #     """
