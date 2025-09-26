@@ -4,19 +4,29 @@ Run (package mode):
     python -m mcp_servers.spare_parts_forecast.fast_server
 """
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+import pandas as pd
 from mcp.server import FastMCP
 from mcp.server.fastmcp import Image
 
 from .data_source import read_agent_source_data
-
-if TYPE_CHECKING:
-    import pandas as pd
-
+from .forecasting import (
+    ARIMAAnalysisResult,
+    CrostonAnalysisResult,
+    EMAAnalysisResult,
+    SMAAnalysisResult,
+    arima_forecast_impl,
+    croston_forecast_impl,
+    ema_forecast_impl,
+    forest_try,
+    get_available_algorithms,
+    list_algorithms,
+    sma_forecast_impl,
+    xgboost_forecast,
+    zero_and_bp_predict,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -44,41 +54,6 @@ instructions = """\
 app = FastMCP(
     name="spare-parts-forecast-fast",
     instructions=instructions,
-)
-
-
-def create_fast_server() -> FastMCP:
-    """Factory returning FastMCP app (for embedding)."""
-    return app
-
-
-__all__ = [
-    "algorithm_categories",
-    "algorithms",
-    "arima_forecast",
-    "bp_forecast",
-    "create_fast_server",
-    "croston_forecast",
-    "ema_forecast",
-    "forest_forecast",
-    "sma_forecast",
-    "xgb_forecast",
-]
-
-from .forecasting import (
-    ARIMAAnalysisResult,
-    CrostonAnalysisResult,
-    EMAAnalysisResult,
-    SMAAnalysisResult,
-    arima_forecast_impl,
-    croston_forecast_impl,
-    ema_forecast_impl,
-    forest_try,
-    get_available_algorithms,
-    list_algorithms,
-    sma_forecast_impl,
-    xgboost_forecast,
-    zero_and_bp_predict,
 )
 
 
@@ -114,7 +89,7 @@ def sma_forecast(
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
-) -> tuple[SMAAnalysisResult, Image | None]:
+) -> tuple[SMAAnalysisResult, Any | None]:
     """
     SMA简单移动平均时间序列预测分析
 
@@ -204,7 +179,7 @@ def ema_forecast(
     smoothing_methods: list[str] | None = None,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
-) -> tuple[EMAAnalysisResult, Image | None]:
+) -> tuple[EMAAnalysisResult, Any | None]:
     """
     EMA指数平滑时间序列预测分析
 
@@ -296,7 +271,7 @@ def croston_forecast(
     methods: list[Literal["croston", "sba", "tsb"]] | None = None,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
-) -> tuple[CrostonAnalysisResult, Image | None]:
+) -> tuple[CrostonAnalysisResult, Any | None]:
     """
     Croston间歇性需求预测分析
 
@@ -381,7 +356,7 @@ def croston_forecast(
     return result, Image(data=image_bytes) if image_bytes else None
 
 
-@app.tool(structured_output=False)
+@app.tool()
 def arima_forecast(
     source_id: str,
     target_column: str,
@@ -393,7 +368,7 @@ def arima_forecast(
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
-) -> tuple[ARIMAAnalysisResult, Image | None]:
+) -> tuple[ARIMAAnalysisResult, Any | None]:
     """
     ARIMA时间序列预测分析
 
@@ -505,5 +480,5 @@ def bp_forecast(source_id: str, column_index: int = 16) -> Any:
     return zero_and_bp_predict(column_index, df)
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     app.run("sse")
