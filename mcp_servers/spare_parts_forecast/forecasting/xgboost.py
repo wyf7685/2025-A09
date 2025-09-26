@@ -95,7 +95,7 @@ def xgboost_forecast_impl(
 
         # 特征工程
         # 检查时间列是否包含季度信息（"第x季度"）
-        if df_work[time_column].iloc[0].find("季度") > -1:
+        if pd.api.types.is_string_dtype(df_work[time_column]) and df_work[time_column].iloc[0].find("季度") > -1:
             # 解析季度数据为年份和季度
             df_work["year"] = df_work[time_column].str.split(" 第").str[0].astype(int)
             df_work["quarter"] = df_work[time_column].str.split("第").str[1].str.replace("季度", "").astype(int)

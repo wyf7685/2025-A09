@@ -112,7 +112,7 @@ def sma_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         window_size: 移动平均窗口大小，默认为3
         optimize_weights: 是否自动优化权重组合，默认为True
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
@@ -202,7 +202,7 @@ def ema_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         smoothing_methods: 要使用的平滑方法列表，可选值为"single", "double", "triple"，默认使用所有方法
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
@@ -295,7 +295,7 @@ def croston_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         methods: 要使用的方法列表，可选值为"croston", "sba", "tsb"，默认使用所有方法
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
@@ -391,7 +391,7 @@ def arima_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         arima_order_p: ARIMA模型的自回归阶数(p)，默认为2
         arima_order_d: ARIMA模型的差分阶数(d)，默认为1
         arima_order_q: ARIMA模型的移动平均阶数(q)，默认为1
@@ -493,7 +493,7 @@ def forest_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         feature_columns: 特征列名列表，默认为None（自动生成时间特征）
         n_estimators_range: 随机森林树数量范围，默认为[5, 10, ..., 95, 100]
         max_depth_range: 决策树最大深度范围，默认为[5, 10, ..., 95, 100]
@@ -593,7 +593,7 @@ def xgb_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         feature_columns: 特征列名列表，默认为None（自动生成时间特征）
         learning_rate_range: 学习率范围，默认为[0.01, 0.05, 0.1, 0.2]
         max_depth_range: 最大深度范围，默认为[3, 5, 7, 9]
@@ -704,7 +704,7 @@ def bp_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"
+        time_column: 时间列名，默认为"time"，该列值类型应为datetime
         input_sizes: 输入层尺寸范围，默认为[2,3,4,5,6]
         hidden_sizes: 隐含层尺寸范围，默认为[2,4,6,8,10,12]
         epochs: 训练轮数，默认为100
