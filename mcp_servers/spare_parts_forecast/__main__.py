@@ -4,12 +4,15 @@ Run (package mode):
     python -m mcp_servers.spare_parts_forecast.fast_server
 """
 
+import functools
+from collections.abc import Callable
 from typing import Any, Literal
 
 from .log import LOGGING_CONFIG, configure_logging
 
 configure_logging()
 
+import anyio.to_thread
 import pandas as pd
 from mcp.server import FastMCP
 from mcp.server.fastmcp import Image
@@ -60,14 +63,23 @@ app = FastMCP(
 )
 
 
-def read_source(source_id: str) -> pd.DataFrame:
+async def read_source(source_id: str) -> pd.DataFrame:
     # See app/core/agent/agents/data_analyzer/context.py
     ctx = app.get_context()
     params = ctx.request_context.session.client_params
     client_name = params and params.clientInfo.name
     assert client_name is not None, "Session ID is required"
 
-    return read_agent_source_data(client_name, source_id)
+    return await read_agent_source_data(client_name, source_id)
+
+
+def wrap_image(image: bytes | None) -> Image | None:
+    return Image(data=image) if image else None
+
+
+async def run_sync[**P, R](_fn_: Callable[P, R], /, *args: P.args, **kwargs: P.kwargs) -> R:
+    fn = functools.partial(_fn_, *args, **kwargs)
+    return await anyio.to_thread.run_sync(fn, abandon_on_cancel=True)
 
 
 @app.tool()
@@ -93,12 +105,14 @@ def algorithm_categories() -> dict[str, list[str]]:
 
 
 @app.tool()
-def sma_forecast(
+async def sma_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
     window_size: int = 3,
+    test_size: float = 0.2,
     optimize_weights: bool = True,
+    weight_combinations: list[list[float]] | None = None,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
@@ -114,7 +128,9 @@ def sma_forecast(
         target_column: 目标预测列名，指定要预测的数据列
         time_column: 时间列名，默认为"time"，该列值类型应为datetime
         window_size: 移动平均窗口大小，默认为3
+        test_size: 测试集比例，取值范围0-1，默认为0.2(20%测试集)
         optimize_weights: 是否自动优化权重组合，默认为True
+        weight_combinations: 自定义权重组合列表，默认为None(使用预设组合)
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
         plot_title: 图表标题，默认为None(自动生成)
@@ -167,29 +183,37 @@ def sma_forecast(
         - 启用权重优化可以提高预测准确性，特别是对于趋势型数据
         - 对于季节性或非线性趋势数据，可能不如其他预测方法准确
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用SMA预测函数
-    result, image_bytes = sma_forecast_impl(
+    result, image = await run_sync(
+        sma_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
         window_size=window_size,
+        test_size=test_size,
         optimize_weights=optimize_weights,
+        weight_combinations=weight_combinations,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
         plot_title=plot_title,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def ema_forecast(
+async def ema_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
+    test_size: float = 0.2,
     smoothing_methods: list[str] | None = None,
+    alphas: list[float] | None = None,
+    betas: list[float] | None = None,
+    gammas: list[float] | None = None,
+    season_periods: list[int] | None = None,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
 ) -> tuple[EMAAnalysisResult, Any | None]:
@@ -202,9 +226,14 @@ def ema_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"，该列值类型应为datetime
-        smoothing_methods: 要使用的平滑方法列表，可选值为"single", "double", "triple"，默认使用所有方法
-        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        time_column: 时间列名，默认为"time"
+        test_size: 测试集比例，默认为0.2
+        smoothing_methods: 要使用的平滑方法列表，可选值为"single", "double", "triple"
+        alphas: alpha参数候选值列表，默认为0.1到0.9，步长0.1
+        betas: beta参数候选值列表，默认为0.1到0.9，步长0.1
+        gammas: gamma参数候选值列表，默认为0.1到0.9，步长0.1
+        season_periods: 季节性周期候选值列表，默认为2到6
+        enable_diagnostics: 是否启用诊断，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
 
     Returns:
@@ -258,30 +287,40 @@ def ema_forecast(
         - 三次指数平滑适用于同时具有趋势和季节性的数据
         - 系统会自动优化各模型参数并选择最佳模型
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     if smoothing_methods is None:
         smoothing_methods = ["single", "double", "triple"]
 
     # 调用EMA预测函数
-    result, image_bytes = ema_forecast_impl(
+    result, image = await run_sync(
+        ema_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
+        test_size=test_size,
         smoothing_methods=smoothing_methods,
+        alphas=alphas,
+        betas=betas,
+        gammas=gammas,
+        season_periods=season_periods,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def croston_forecast(
+async def croston_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
+    test_size: float = 0.2,
     methods: list[Literal["croston", "sba", "tsb"]] | None = None,
+    alpha_range: list[float] | None = None,
+    beta_range: list[float] | None = None,
+    extra_periods: int = 0,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
 ) -> tuple[CrostonAnalysisResult, Any | None]:
@@ -295,9 +334,13 @@ def croston_forecast(
     Args:
         source_id: 数据源ID，用于获取预测数据
         target_column: 目标预测列名，指定要预测的数据列
-        time_column: 时间列名，默认为"time"，该列值类型应为datetime
-        methods: 要使用的方法列表，可选值为"croston", "sba", "tsb"，默认使用所有方法
-        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        time_column: 时间列名，默认为"time"
+        test_size: 测试集比例，默认为0.2
+        methods: 要使用的方法列表，可选值为"croston", "sba", "tsb"
+        alpha_range: alpha参数候选值列表，默认为0.1到0.9，步长0.1
+        beta_range: beta参数候选值列表(TSB方法)，默认为0.1到0.9，步长0.1
+        extra_periods: 额外预测的期数，默认为0
+        enable_diagnostics: 是否启用诊断，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
 
     Returns:
@@ -354,23 +397,28 @@ def croston_forecast(
         - TSB(Teunter-Syntetos-Babai)方法可能在某些情况下表现更好
         - 系统会自动选择表现最佳的方法作为最终预测
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用Croston预测函数
-    result, image_bytes = croston_forecast_impl(
+    result, image = await run_sync(
+        croston_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
+        test_size=test_size,
         methods=methods,
+        alpha_range=alpha_range,
+        beta_range=beta_range,
+        extra_periods=extra_periods,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def arima_forecast(
+async def arima_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
@@ -455,10 +503,11 @@ def arima_forecast(
         - 预测结果包含置信区间，用于评估预测的不确定性
         - 执行时间取决于数据量大小和模型复杂度
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用ARIMA预测函数
-    result, image_bytes = arima_forecast_impl(
+    result, image = await run_sync(
+        arima_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
@@ -469,17 +518,20 @@ def arima_forecast(
         plot_title=plot_title,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def forest_forecast(
+async def forest_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
     feature_columns: list[str] | None = None,
+    test_size: float = 0.2,
     n_estimators_range: list[int] | None = None,
     max_depth_range: list[int] | None = None,
+    random_state: int = 42,
+    extra_periods: int = 0,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
@@ -495,9 +547,12 @@ def forest_forecast(
         target_column: 目标预测列名，指定要预测的数据列
         time_column: 时间列名，默认为"time"，该列值类型应为datetime
         feature_columns: 特征列名列表，默认为None（自动生成时间特征）
+        test_size: 测试集比例，默认为0.2
         n_estimators_range: 随机森林树数量范围，默认为[5, 10, ..., 95, 100]
         max_depth_range: 决策树最大深度范围，默认为[5, 10, ..., 95, 100]
-        enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
+        random_state: 随机种子，默认为42
+        extra_periods: 额外预测的期数，默认为0
+        enable_diagnostics: 是否启用诊断，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
         plot_title: 图表标题，默认为None(自动生成)
 
@@ -551,35 +606,42 @@ def forest_forecast(
         - 如需自定义特征，可通过feature_columns参数指定
         - 模型会计算特征重要性，帮助理解影响因素
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用随机森林预测函数
-    result, image_bytes = forest_forecast_impl(
+    result, image = await run_sync(
+        forest_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
         feature_columns=feature_columns,
+        test_size=test_size,
         n_estimators_range=n_estimators_range,
         max_depth_range=max_depth_range,
+        random_state=random_state,
+        extra_periods=extra_periods,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
         plot_title=plot_title,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def xgb_forecast(
+async def xgb_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
     feature_columns: list[str] | None = None,
+    test_size: float = 0.2,
     learning_rate_range: list[float] | None = None,
     max_depth_range: list[int] | None = None,
     n_estimators_range: list[int] | None = None,
     gwo_agents: int = 10,
     gwo_iterations: int = 2,
+    random_state: int = 42,
+    extra_periods: int = 0,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
@@ -595,11 +657,14 @@ def xgb_forecast(
         target_column: 目标预测列名，指定要预测的数据列
         time_column: 时间列名，默认为"time"，该列值类型应为datetime
         feature_columns: 特征列名列表，默认为None（自动生成时间特征）
+        test_size: 测试集比例，默认为0.2
         learning_rate_range: 学习率范围，默认为[0.01, 0.05, 0.1, 0.2]
         max_depth_range: 最大深度范围，默认为[3, 5, 7, 9]
         n_estimators_range: 估计器数量范围，默认为[50, 100, 200, 300]
         gwo_agents: 灰狼优化算法搜索代理数量，默认为10
         gwo_iterations: 灰狼优化算法最大迭代次数，默认为2
+        random_state: 随机种子，默认为42
+        extra_periods: 额外预测的期数，默认为0
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
         plot_title: 图表标题，默认为None(自动生成)
@@ -658,31 +723,33 @@ def xgb_forecast(
         - 可查看特征重要性，了解影响预测的关键因素
         - 增加gwo_iterations可提高参数优化质量，但会增加计算时间
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用XGBoost预测函数
-    result, image_bytes = xgboost_forecast_impl(
+    result, image = await run_sync(
+        xgboost_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
         feature_columns=feature_columns,
+        test_size=test_size,
         learning_rate_range=learning_rate_range,
         max_depth_range=max_depth_range,
         n_estimators_range=n_estimators_range,
         gwo_agents=gwo_agents,
         gwo_iterations=gwo_iterations,
-        random_state=42,
-        extra_periods=0,
+        random_state=random_state,
+        extra_periods=extra_periods,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
         plot_title=plot_title,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
 @app.tool()
-def bp_forecast(
+async def bp_forecast(
     source_id: str,
     target_column: str,
     time_column: str = "time",
@@ -691,6 +758,8 @@ def bp_forecast(
     epochs: int = 100,
     batch_size: int = 16,
     learning_rate: float = 0.001,
+    test_size: float = 0.2,
+    random_state: int = 42,
     enable_diagnostics: bool = True,
     column_label: str | None = None,
     plot_title: str | None = None,
@@ -710,6 +779,8 @@ def bp_forecast(
         epochs: 训练轮数，默认为100
         batch_size: 批次大小，默认为16
         learning_rate: 学习率，默认为0.001
+        test_size: 测试集比例，默认为0.2
+        random_state: 随机种子，默认为42
         enable_diagnostics: 是否启用详细诊断分析和图表生成，默认为True
         column_label: 图表中显示的列标签，默认使用target_column值
         plot_title: 图表标题，默认为None(自动生成)
@@ -765,10 +836,11 @@ def bp_forecast(
         - 此函数依赖TensorFlow库，若未安装将返回错误
         - 对于小样本或高噪声数据，可能需要调整学习率和网络结构
     """
-    df = read_source(source_id)
+    df = await read_source(source_id)
 
     # 调用BP神经网络预测函数
-    result, image_bytes = bp_forecast_impl(
+    result, image = await run_sync(
+        bp_forecast_impl,
         df=df,
         target_column=target_column,
         time_column=time_column,
@@ -777,26 +849,25 @@ def bp_forecast(
         epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
-        random_state=42,
+        test_size=test_size,
+        random_state=random_state,
         enable_diagnostics=enable_diagnostics,
         column_label=column_label,
         plot_title=plot_title,
     )
 
-    return result, Image(data=image_bytes) if image_bytes else None
+    return result, wrap_image(image)
 
 
-def run_server_sse() -> None:
+def run_server_sse(host: str = "127.0.0.1", port: int = 8000) -> None:
     import anyio
     import uvicorn
 
-    starlette_app = app.sse_app()
-
     config = uvicorn.Config(
-        starlette_app,
-        host=app.settings.host,
-        port=app.settings.port,
-        log_level=app.settings.log_level.lower(),
+        app.sse_app(),
+        host=host,
+        port=port,
+        log_level="info",
         log_config=LOGGING_CONFIG,
     )
     server = uvicorn.Server(config)

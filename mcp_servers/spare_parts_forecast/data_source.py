@@ -3,8 +3,8 @@ import types
 from dataclasses import dataclass
 from typing import Any, Self
 
+import httpx
 import pandas as pd
-import requests
 
 API_BASE_URL = "http://localhost:8081/api"
 
@@ -36,29 +36,29 @@ class DataSourceInfo:
         )
 
 
-class AgentSourceClient:
-    """Agent 数据源客户端"""
+class AsyncAgentSourceClient:
+    """Agent 数据源异步客户端"""
 
     def __init__(self, base_url: str = API_BASE_URL) -> None:
         self.base_url = base_url
-        self.session = requests.Session()
+        self.client = httpx.AsyncClient()
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """关闭客户端连接"""
-        self.session.close()
+        await self.client.aclose()
 
-    def __enter__(self) -> Self:
+    async def __aenter__(self) -> Self:
         return self
 
-    def __exit__(
+    async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: types.TracebackType | None,
     ) -> None:
-        self.close()
+        await self.close()
 
-    def list_sources(self, session_id: str) -> list[DataSourceInfo]:
+    async def list_sources(self, session_id: str) -> list[DataSourceInfo]:
         """列出指定会话Agent中的所有可用数据源
 
         Args:
@@ -70,13 +70,13 @@ class AgentSourceClient:
         url = f"{self.base_url}/agent_source/list"
         params = {"session_id": session_id}
 
-        response = self.session.get(url, params=params)
+        response = await self.client.get(url, params=params)
         response.raise_for_status()
 
         data = response.json()
         return [DataSourceInfo.from_dict(source) for source in data["sources"]]
 
-    def get_source_info(self, session_id: str, source_id: str) -> DataSourceInfo:
+    async def get_source_info(self, session_id: str, source_id: str) -> DataSourceInfo:
         """获取指定数据源的详细信息
 
         Args:
@@ -89,12 +89,12 @@ class AgentSourceClient:
         url = f"{self.base_url}/agent_source/info/{source_id}"
         params = {"session_id": session_id}
 
-        response = self.session.get(url, params=params)
+        response = await self.client.get(url, params=params)
         response.raise_for_status()
 
         return DataSourceInfo.from_dict(response.json())
 
-    def read_source_data(self, session_id: str, source_id: str) -> pd.DataFrame:
+    async def read_source_data(self, session_id: str, source_id: str) -> pd.DataFrame:
         """读取指定数据源的数据（以pickle文件形式返回）
 
         Args:
@@ -107,7 +107,7 @@ class AgentSourceClient:
         url = f"{self.base_url}/agent_source/data/{source_id}"
         params = {"session_id": session_id}
 
-        response = self.session.get(url, params=params)
+        response = await self.client.get(url, params=params)
         response.raise_for_status()
 
         pickle_data = response.content
@@ -115,7 +115,7 @@ class AgentSourceClient:
         assert isinstance(df, pd.DataFrame)
         return df
 
-    def create_source_from_dataframe(
+    async def create_source_from_dataframe(
         self,
         session_id: str,
         df: pd.DataFrame,
@@ -146,39 +146,39 @@ class AgentSourceClient:
         df.to_pickle(buffer)
         buffer.seek(0)
 
-        files = {"file": ("data.pkl", buffer, "application/octet-stream")}
+        files = {"file": ("data.pkl", buffer.getvalue(), "application/octet-stream")}
 
-        response = self.session.post(url, params=params, files=files)
+        response = await self.client.post(url, params=params, files=files)
         response.raise_for_status()
 
         return response.json()
 
 
-def list_agent_sources(session_id: str) -> list[DataSourceInfo]:
+async def list_agent_sources(session_id: str) -> list[DataSourceInfo]:
     """列出Agent数据源"""
-    with AgentSourceClient() as client:
-        return client.list_sources(session_id)
+    async with AsyncAgentSourceClient() as client:
+        return await client.list_sources(session_id)
 
 
-def get_agent_source_info(session_id: str, source_id: str) -> DataSourceInfo:
+async def get_agent_source_info(session_id: str, source_id: str) -> DataSourceInfo:
     """获取Agent数据源信息"""
-    with AgentSourceClient() as client:
-        return client.get_source_info(session_id, source_id)
+    async with AsyncAgentSourceClient() as client:
+        return await client.get_source_info(session_id, source_id)
 
 
-def read_agent_source_data(session_id: str, source_id: str) -> pd.DataFrame:
+async def read_agent_source_data(session_id: str, source_id: str) -> pd.DataFrame:
     """读取Agent数据源数据"""
-    with AgentSourceClient() as client:
-        return client.read_source_data(session_id, source_id)
+    async with AsyncAgentSourceClient() as client:
+        return await client.read_source_data(session_id, source_id)
 
 
-def create_agent_source(
+async def create_agent_source(
     session_id: str,
     df: pd.DataFrame,
     new_id: str | None = None,
     description: str | None = None,
 ) -> str:
     """创建Agent数据源，返回数据源ID"""
-    with AgentSourceClient() as client:
-        result = client.create_source_from_dataframe(session_id, df, new_id, description)
+    async with AsyncAgentSourceClient() as client:
+        result = await client.create_source_from_dataframe(session_id, df, new_id, description)
         return result["dataset_id"]
