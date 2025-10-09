@@ -3,8 +3,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-RUN --mount=type=bind,source=docker/debian.sources,target=/etc/apt/sources.list.d/debian.sources \
-    apt-get update && apt-get install -y --no-install-recommends ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
@@ -24,8 +23,7 @@ ENV TZ=Asia/Shanghai \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH"
 
-RUN --mount=type=bind,source=docker/debian.sources,target=/etc/apt/sources.list.d/debian.sources \
-    --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt.sh \
+RUN --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt.sh \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig && \
     bash /setup-docker-apt.sh && \

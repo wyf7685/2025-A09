@@ -1,7 +1,6 @@
 FROM python:3.12-slim-bookworm AS app
 
-RUN --mount=type=bind,source=docker/debian.sources,target=/etc/apt/sources.list.d/debian.sources \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
