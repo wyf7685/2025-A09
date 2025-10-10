@@ -18,9 +18,12 @@ class AgentModelConfig(BaseModel):
 
     @classmethod
     def default_config(cls) -> Self:
-        from app.core.config import settings
+        from app.services.custom_model import custom_model_manager
 
-        return cls(default=settings.TEST_MODEL_NAME)
+        first_model_id = custom_model_manager.select_first_model_id()
+        if first_model_id is None:
+            raise ValueError("没有可用的模型，请先添加自定义模型")
+        return cls(default=first_model_id)
 
     @property
     def hash(self) -> int:

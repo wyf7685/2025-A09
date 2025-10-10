@@ -86,6 +86,10 @@ class CustomModelManager:
         logger.info(f"更新自定义模型: {model_id}")
         return True
 
+    def select_first_model_id(self) -> str | None:
+        """选择第一个可用的模型ID"""
+        return next(iter(self._models), None)
+
 
 # 全局自定义模型管理器实例
 custom_model_manager = CustomModelManager()

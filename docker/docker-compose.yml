@@ -1,7 +1,7 @@
 services:
   # 后端服务
   backend:
-    image: ghcr.io/wyf7685/2025-A09/backend:latest
+    image: ghcr.io/wyf7685/2025-a09/backend:latest
     restart: unless-stopped
     tty: true
     volumes:
@@ -17,7 +17,8 @@ services:
       - DREMIO_PASSWORD=password123
       - DREMIO_EXTERNAL_DIR=/external
       - DREMIO_EXTERNAL_NAME=external
-      - DOCKER_RUNNER_IMAGE=ghcr.io/wyf7685/2025-A09/executor:latest
+      - DOCKER_RUNNER_IMAGE=ghcr.io/wyf7685/2025-a09/executor:latest
+      - CORS_ALLOW_ORIGINS=["*"]
       - REDIS_HOST=redis
     depends_on:
       dremio:
@@ -34,7 +35,7 @@ services:
 
   # 前端服务 (Nginx)
   frontend:
-    image: ghcr.io/wyf7685/2025-A09/frontend:latest
+    image: ghcr.io/wyf7685/2025-a09/frontend:latest
     restart: unless-stopped
     ports:
       - '80:80'

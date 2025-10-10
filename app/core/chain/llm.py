@@ -10,7 +10,6 @@ from langchain_core.messages import BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import SecretStr
 
-from app.core.config import settings
 from app.log import logger
 from app.schemas.custom_model import CustomModelConfig, LLModelID
 from app.services.custom_model import custom_model_manager
@@ -143,19 +142,24 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
 
 
 @overload
-def _select_model(model_id: LLModelID, type: Literal["LLM"]) -> LLM: ...
+def _select_model(model_id: LLModelID | None, type: Literal["LLM"]) -> LLM: ...
 @overload
-def _select_model(model_id: LLModelID, type: Literal["ChatModel"]) -> BaseChatModel: ...
+def _select_model(model_id: LLModelID | None, type: Literal["ChatModel"]) -> BaseChatModel: ...
 @overload
-def _select_model(model_id: LLModelID, type: Literal["ALL"]) -> tuple[LLM, BaseChatModel]: ...
+def _select_model(model_id: LLModelID | None, type: Literal["ALL"]) -> tuple[LLM, BaseChatModel]: ...
 
 
 def _select_model(
-    model_id: LLModelID,
+    model_id: LLModelID | None,
     type: Literal["LLM", "ChatModel", "ALL"],  # noqa: A002
 ) -> LLM | BaseChatModel | tuple[LLM, BaseChatModel]:
     logger.opt(colors=True).debug(f"选择模型: model_id=<c>{escape_tag(model_id)}</> type=<y>{escape_tag(type)}</>")
-    model_name = model_id or settings.TEST_MODEL_NAME
+    if model_id is None:
+        model_id = custom_model_manager.select_first_model_id()
+    if model_id is None:
+        raise ValueError("未提供模型ID，且没有可用的自定义模型")
+
+    model_name = model_id
 
     # 优先检查是否是自定义模型
     if custom_model_manager.is_custom_model(model_name):
@@ -196,74 +200,11 @@ def _select_model(
         except Exception as e:
             logger.error(f"使用自定义配置创建模型失败: {e}")
 
-    # 如果没有找到自定义配置，记录警告并回退到环境变量
-    logger.warning(f"未找到模型 '{model_name}' 的自定义配置，使用环境变量回退")
-
-    # 原有的环境变量回退逻辑
-    if model_name.startswith("gemini"):
-        if settings.GOOGLE_API_KEY:
-            from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
-
-            logger.info(f"使用环境变量配置的 Google Generative AI 模型: {model_name}")
-            return _convert_model(
-                type,
-                lambda: GoogleGenerativeAI(model=model_name, transport="rest"),
-                lambda: ChatGoogleGenerativeAI(model=model_name, transport="rest"),
-            )
-
-        logger.warning("未配置 Google API Key，尝试其他回退选项")
-
-    elif model_name.startswith(("gpt-", "claude-")):
-        if settings.OPENAI_API_KEY and not settings.OPENAI_API_BASE:
-            from langchain_openai import ChatOpenAI
-
-            logger.info(f"使用环境变量配置的 OpenAI 模型: {model_name}")
-            chat_model = ChatOpenAI(model=model_name)
-            return _convert_model(type, None, chat_model)
-
-        logger.warning("GPT/Claude模型需要真正的OpenAI API，当前环境变量配置不支持")
-
-    elif model_name.startswith("deepseek"):
-        if settings.OPENAI_API_KEY:
-            from langchain_openai import ChatOpenAI
-
-            logger.info(f"使用环境变量配置的 DeepSeek 模型: {model_name}")
-            chat_model = ChatOpenAI(model=model_name, base_url="https://api.deepseek.com/v1")
-            return _convert_model(type, None, chat_model)
-
-        logger.warning("未配置 DeepSeek API Key (OPENAI_API_KEY)")
-
-    # 最终回退到环境变量通用配置
-    if settings.GOOGLE_API_KEY:
-        from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
-
-        logger.info("使用环境变量配置的 Google Generative AI 作为最终回退")
-        return _convert_model(
-            type,
-            lambda: GoogleGenerativeAI(model=model_name, transport="rest"),
-            lambda: ChatGoogleGenerativeAI(model=model_name, transport="rest"),
-        )
-
-    if settings.OPENAI_API_KEY:
-        from langchain_openai import ChatOpenAI
-
-        logger.info("使用环境变量配置的 OpenAI 作为最终回退")
-        chat_model = ChatOpenAI(model=model_name)
-        return _convert_model(type, None, chat_model)
-
-    # 最后的本地回退
-    from langchain_ollama import ChatOllama, OllamaLLM
-
-    logger.info("所有配置均未找到，尝试使用本地部署 Ollama 模型")
-    return _convert_model(
-        type,
-        lambda: OllamaLLM(model=model_name),
-        lambda: ChatOllama(model=model_name),
-    )
+    raise ValueError(f"未找到模型 '{model_name}' 的自定义配置，请先添加自定义模型")
 
 
 def get_llm(model_id: LLModelID | None = None) -> LLM:
-    return _select_model(model_id or settings.TEST_MODEL_NAME, "LLM")
+    return _select_model(model_id, "LLM")
 
 
 async def get_llm_async(model_id: LLModelID | None = None) -> LLM:
@@ -271,7 +212,7 @@ async def get_llm_async(model_id: LLModelID | None = None) -> LLM:
 
 
 def get_chat_model(model_id: LLModelID | None = None) -> BaseChatModel:
-    return _select_model(model_id or settings.TEST_MODEL_NAME, "ChatModel")
+    return _select_model(model_id, "ChatModel")
 
 
 async def get_chat_model_async(model_id: LLModelID | None = None) -> BaseChatModel:
@@ -279,7 +220,7 @@ async def get_chat_model_async(model_id: LLModelID | None = None) -> BaseChatMod
 
 
 def get_models(model_id: LLModelID | None = None) -> tuple[LLM, BaseChatModel]:
-    return _select_model(model_id or settings.TEST_MODEL_NAME, "ALL")
+    return _select_model(model_id, "ALL")
 
 
 async def get_models_async(model_id: LLModelID | None = None) -> tuple[LLM, BaseChatModel]:
