@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=mcp_servers/uv.lock,target=mcp_servers/uv.lock \
+    --mount=type=bind,source=mcp_servers/pyproject.toml,target=mcp_servers/pyproject.toml \
     uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
     uv sync --locked --active --no-dev --link-mode copy
