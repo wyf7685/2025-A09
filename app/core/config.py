@@ -58,5 +58,5 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str | None = None
 
 
-load_dotenv()
+load_dotenv(".env")
 settings = Settings()  # pyright: ignore[reportCallIssue]

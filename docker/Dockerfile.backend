@@ -12,6 +12,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     . /opt/venv/bin/activate && \
     uv sync --locked --active --no-dev --link-mode copy
 
+FROM python:3.13-slim-bookworm AS compiler
+
+WORKDIR /
+RUN --mount=type=bind,source=docker/compile_pyc.py,target=/compile_pyc.py \
+    --mount=type=bind,source=app,target=/app \
+    python /compile_pyc.py /app /out
+
 FROM python:3.13-slim-bookworm AS app
 
 WORKDIR /app
@@ -33,6 +40,6 @@ RUN --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt
 
 COPY docker/gunicorn_conf.py /gunicorn_conf.py
 COPY --from=builder /opt/venv /opt/venv
-COPY app/ /app/app
+COPY --from=compiler /out /app/app
 
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-c", "/gunicorn_conf.py", "app.__main__:app"]
