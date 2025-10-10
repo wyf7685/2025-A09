@@ -24,46 +24,24 @@ dependencies = [
   "pyarrow>=19.0.1",
   "pydremio>=0.4.0",
   "requests>=2.32.0",
-  # "torch>=2.7.0",
   "scikit-learn>=1.7.0",
   "scipy>=1.16.0",
   "statsmodels>=0.14.4",
-  "tensorflow>=2.20.0",
   "xgboost>=3.0.2",
   "yarl>=1.20.1",
 ]
 
 [dependency-groups]
-dev = ["pyarrow-stubs>=19.4"]
+dev = ["pyarrow-stubs>=19.4", "tensorflow>=2.20.0"]
 
-[[tool.uv.index]]
-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
-default = true
-
-# [tool.uv.sources]
-# torch = [
-#     { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-# ]
-# torchvision = [
-#     { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
-# ]
-
-# [[tool.uv.index]]
-# name = "pytorch-cu126"
-# url = "https://download.pytorch.org/whl/cu126"
-# explicit = true
+[tool.uv.workspace]
+members = ["mcp_servers"]
 
 [tool.pyright]
 pythonVersion = "3.13"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
-ignore = [
-  ".venv",
-  "data",       # nbp-orm migration scripts
-  "**/build",
-  "**/scripts",
-]
-reportShadowedImports = false
+ignore = [".venv", "data", "**/build"]
 disableBytesTypePromotions = true
 
 [tool.ruff]
