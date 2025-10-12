@@ -3,6 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "license": "Apache-2.0",
+  "author": "wyf7685",
+  "contributors": [
+    "Cccccwd",
+    "klli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wyf7685/2025-A09.git"
+  },
   "scripts": {
     "dev": "vite --open",
     "build": "run-p type-check \"build-only {@}\" --",

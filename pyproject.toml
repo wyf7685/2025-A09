@@ -1,7 +1,15 @@
 [project]
 name = "analysis-agent"
 version = "0.1.0"
+description = "AI-powered data analysis platform with intelligent agents"
+readme = "README.md"
 requires-python = ">=3.13"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "wyf7685", email = "wyf7685@163.com" },
+  { name = "Cccccwd", email = "1838935684@qq.com" },
+  { name = "klli", email = "1613679054@qq.com" },
+]
 dependencies = [
   "aiocache[redis]>=0.12.3",
   "anyio>=4.9.0",
