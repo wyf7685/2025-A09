@@ -19,8 +19,12 @@
       "name": "测试用 MCP 服务器",
       "type": "debugpy",
       "request": "launch",
-      "module": "spare_parts_forecast",
-      "cwd": "${workspaceFolder}/mcp_servers",
+      "module": "app",
+      "cwd": "${workspaceFolder}/mcp_servers/spare_parts_forecast",
+      "env": {
+        "APP_HOST": "127.0.0.1",
+        "APP_PORT": "8000"
+      }
     }
   ],
   "compounds": [

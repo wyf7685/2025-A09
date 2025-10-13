@@ -70,6 +70,14 @@ services:
     image: redis:alpine
     restart: unless-stopped
 
+  # [可选] 备件预测MCP服务
+  # spare_parts_forecast:
+  #   image: ghcr.io/wyf7685/2025-a09/spare-parts-forecast:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - APP_HOST=0.0.0.0
+  #     - APP_PORT=8000
+
 volumes:
   backend_data:
   dremio_data:

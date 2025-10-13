@@ -43,7 +43,7 @@ dependencies = [
 dev = ["pyarrow-stubs>=19.4", "tensorflow>=2.20.0"]
 
 [tool.uv.workspace]
-members = ["mcp_servers"]
+members = ["mcp_servers/*"]
 
 [tool.pyright]
 pythonVersion = "3.13"

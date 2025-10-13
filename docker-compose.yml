@@ -1,68 +1,18 @@
 services:
-  # 后端服务
-  backend:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.backend
-    restart: unless-stopped
-    tty: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - backend_data:/app/data
-      - ./external:/external # TODO: 生产环境改为挂载卷 external_data
-      - ./.env:/app/.env # 开发测试: 挂载环境变量文件
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8081 # see nginx.conf
-      - MAX_WORKERS=1
-      - DREMIO_BASE_URL=http://dremio:9047
-      - DREMIO_USERNAME=user
-      - DREMIO_PASSWORD=password123
-      - DREMIO_EXTERNAL_DIR=/external
-      - DREMIO_EXTERNAL_NAME=external
-      - DOCKER_RUNNER_IMAGE=analyzer-executor
-      - REDIS_HOST=redis
-    depends_on:
-      dremio:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - curl -fsSL -o /dev/null --max-time 5 http://localhost:8081/api/health || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # 前端服务 (Nginx)
-  frontend:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.frontend
-    restart: unless-stopped
-    ports:
-      - '8081:80'  # TODO: 生产环境修改 8081 为对应端口
-    depends_on:
-      backend:
-        condition: service_healthy
-
   # Dremio 服务
   dremio:
     image: dremio/dremio-oss:latest
     restart: unless-stopped
     ports:
       - '9047:9047' # UI 端口
-      - '32010:32010' # Arrow Flight 端口  # TODO: 生产环境不对外暴露
+      - '32010:32010' # Arrow Flight 端口
     volumes:
       - dremio_data:/opt/dremio/data # 持久化数据
       - dremio_conf:/opt/dremio/conf # 持久化配置
-      - ./external:/external # 挂载外部目录  # TODO: 生产环境改为挂载卷 external_data
+      - ./external:/external # 挂载外部目录
     environment:
       - DREMIO_HEAP_SIZE_MB=4096 # 设置堆内存大小
       - DREMIO_MAX_DIRECT_MEMORY_MB=8192 # 设置直接内存大小
-    # depends_on:
-    #   - postgres
     healthcheck:
       test:
         - CMD-SHELL
@@ -77,23 +27,9 @@ services:
     image: redis:alpine
     restart: unless-stopped
     ports:
-      - '6379:6379'  # TODO: 生产环境不对外暴露
-
-  # [调试用] PostgreSQL 服务
-  # postgres:
-  #   image: postgres:latest
-  #   ports:
-  #     - '5432:5432'  # TODO: 生产环境不对外暴露
-  #   environment:
-  #     - POSTGRES_DB=database
-  #     - POSTGRES_USER=user
-  #     - POSTGRES_PASSWORD=password
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data # 持久化数据库
+      - '6379:6379'
 
 volumes:
   backend_data:
   dremio_data:
   dremio_conf:
-  # external_data:  # TODO: 生产环境取消注释卷 external_data
-  # postgres_data:

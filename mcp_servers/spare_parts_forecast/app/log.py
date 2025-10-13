@@ -51,6 +51,14 @@ logger_id_console = logger.add(
     enqueue=True,
     format=log_format,
 )
+logger_id_file = logger.add(
+    "./logs/{time:YYYY-MM-DD}.log",
+    rotation="00:00",
+    level="DEBUG",
+    diagnose=True,
+    enqueue=True,
+    format=log_format,
+)
 
 def configure_logging() -> None:
     """配置日志记录器。"""

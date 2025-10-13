@@ -859,9 +859,14 @@ async def bp_forecast(
     return result, wrap_image(image)
 
 
-def run_server_sse(host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_server_sse() -> None:
+    import os
+
     import anyio
     import uvicorn
+
+    host = os.getenv("APP_HOST", "127.0.0.1")
+    port = int(os.getenv("APP_PORT", "8000"))
 
     config = uvicorn.Config(
         app.sse_app(),

@@ -1,7 +1,11 @@
 [project]
-name = "agent-mcp-servers"
+name = "spare-parts-forecast"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
+authors = [
+    { name = "wyf7685", email = "wyf7685@163.com" },
+    { name = "Cccccwd", email = "1838935684@qq.com" },
+]
 dependencies = [
     "anyio>=4.11.0",
     "httpx>=0.28.1",
