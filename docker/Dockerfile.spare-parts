@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=mcp_servers/spare_parts_forecast/pyproject.toml,target=pyproject.toml \
     uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
-    uv sync --locked --active --no-dev --link-mode copy
+    uv sync --locked --active --no-dev --link-mode copy --all-extras
 
 FROM python:3.12-slim-bookworm AS compiler
 
