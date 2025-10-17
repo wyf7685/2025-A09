@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -51,5 +52,8 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str | None = None
 
 
-load_dotenv(".env")
+if os.getenv("APP_SKIP_DOTENV", "false").lower() != "true" and Path(".env").exists():
+    load_dotenv(".env")
 settings = Settings()  # pyright: ignore[reportCallIssue]
+
+__all__ = ["settings"]
