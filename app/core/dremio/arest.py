@@ -276,7 +276,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             source_name: 数据源名称
             limit: 返回的行数限制
             skip: 跳过的行数，为None表示不跳过
-            max_workers: 分批查询时的最大线程数
+            max_workers: 分批查询时的最大并发数
 
         Returns:
             pandas.DataFrame: 数据源数据
@@ -284,7 +284,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         source_name = path_to_dotted(source_name)
         skip = skip or 0
 
-        if limit is not None and limit <= 100:
+        if limit is not None and limit <= DREMIO_REST_FETCH_LIMIT:
             sql_query = f"SELECT * FROM {source_name} OFFSET {skip} ROWS FETCH NEXT {limit} ROWS ONLY"
             return await self.execute_sql_to_dataframe(sql_query)
 
@@ -293,7 +293,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             count_query = f"SELECT COUNT(*) as row_count FROM {source_name}"
             count_df = await self.execute_sql_to_dataframe(count_query)
             total_rows = int(count_df.iloc[0]["row_count"])
-            logger.info(f"表 {source_name} 中共有 {total_rows} 条数据")
+            logger.opt(colors=True).info(f"数据源 <c>{source_name}</> 中共有 <y>{total_rows}</> 条数据")
 
             total_rows = total_rows if limit is None else min(total_rows, limit)
             batch_ranges = (
@@ -301,11 +301,13 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
                 for offset in range(0, total_rows, DREMIO_REST_FETCH_LIMIT)
             )
             all_data: dict[int, pd.DataFrame] = {}
+            semaphore = anyio.Semaphore(max_workers)
 
             async def fetch(idx: int, offset: int, size: int) -> None:
-                logger.info(f"正在获取第 {offset + 1}-{offset + size} 条数据...")
                 batch_query = f"SELECT * FROM {source_name} OFFSET {offset} ROWS FETCH NEXT {size} ROWS ONLY"
-                data = await self.execute_sql_to_dataframe(batch_query)
+                async with semaphore:
+                    logger.opt(colors=True).info(f"正在获取第 <y>{offset + 1}</>-<y>{offset + size}</> 条数据...")
+                    data = await self.execute_sql_to_dataframe(batch_query)
                 all_data[idx] = data
 
             async with anyio.create_task_group() as tg:
@@ -318,7 +320,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
                     if len(dfs) > 1
                     else dfs[0]
                 )
-                logger.info(f"通过分批查询共获取 {len(result)} 条数据")
+                logger.opt(colors=True).info(f"通过分批查询共获取 <y>{len(result)}</> 条数据")
                 return result
 
             return pd.DataFrame()
@@ -327,7 +329,9 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             logger.exception("分批查询失败")
 
         logger.warning("警告: 无法获取全部数据，返回最多可获取的数据")
-        return await self.execute_sql_to_dataframe(f"SELECT * FROM {source_name} FETCH FIRST 1000 ROWS ONLY")
+        return await self.execute_sql_to_dataframe(
+            f"SELECT * FROM {source_name} FETCH FIRST {DREMIO_REST_FETCH_LIMIT} ROWS ONLY"
+        )
 
     @override
     async def shape(self, source_name: str | list[str]) -> tuple[int, int]:

@@ -1,3 +1,4 @@
+from app.log import logger
 from app.utils import with_semaphore
 
 from .abstract import AbstractAsyncDremioClient as AbstractAsyncDremioClient
@@ -9,8 +10,6 @@ _async_client: AbstractAsyncDremioClient | None = None
 
 @with_semaphore(1)
 def get_dremio_client() -> AbstractDremioClient:
-    from app.log import logger
-
     global _sync_client
 
     if _sync_client is None:
@@ -19,8 +18,8 @@ def get_dremio_client() -> AbstractDremioClient:
 
             _sync_client = DremioFlightClient()
 
-        except Exception:
-            logger.warning("使用Flight客户端连接Dremio失败，尝试使用REST客户端")
+        except Exception as e:
+            logger.warning(f"使用 Flight 客户端连接 Dremio 失败，尝试使用 REST 客户端 - {e!r}")
             from .rest import DremioRestClient
 
             _sync_client = DremioRestClient()
@@ -32,8 +31,6 @@ def get_dremio_client() -> AbstractDremioClient:
 
 @with_semaphore(1)
 def get_async_dremio_client() -> AbstractAsyncDremioClient:
-    from app.log import logger
-
     global _async_client
 
     if _async_client is None:
@@ -42,8 +39,8 @@ def get_async_dremio_client() -> AbstractAsyncDremioClient:
 
             _async_client = AsyncDremioFlightClient()
 
-        except Exception:
-            logger.warning("使用Flight客户端连接Dremio失败，尝试使用REST客户端")
+        except Exception as e:
+            logger.warning(f"使用 Flight 客户端连接 Dremio 失败，尝试使用 REST 客户端 - {e!r}")
             from .arest import AsyncDremioRestClient
 
             _async_client = AsyncDremioRestClient()
