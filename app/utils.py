@@ -113,7 +113,6 @@ def with_semaphore[T: Callable](initial_value: int) -> Callable[[T], T]:
         if inspect.iscoroutinefunction(func):
             sem = anyio.Semaphore(initial_value)
 
-            @functools.wraps(func)
             async def wrapper_async(*args: Any, **kwargs: Any) -> Any:
                 async with sem:
                     return await func(*args, **kwargs)
@@ -122,7 +121,6 @@ def with_semaphore[T: Callable](initial_value: int) -> Callable[[T], T]:
         else:
             sem = threading.Semaphore(initial_value)
 
-            @functools.wraps(func)
             def wrapper_sync(*args: Any, **kwargs: Any) -> Any:
                 with sem:
                     return func(*args, **kwargs)
