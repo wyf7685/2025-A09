@@ -59,6 +59,15 @@ class Lifespan:
         self.task_group.start_soon(self._run, wrapper, "后台任务执行失败", False, name=name)
 
     def from_thread[*Ts, R](self, func: Callable[[*Ts], Awaitable[R]], /, *args: *Ts) -> R:
+        from anyio._core._eventloop import get_async_backend
+
+        backend = get_async_backend()
+        try:
+            token = backend.current_token()
+        except BaseException:
+            token = None
+        assert token is None, f"Cannot call from_thread() from within an async context: {token!r}"
+
         event = threading.Event()
         _unset = object()
         result: Any = _unset
