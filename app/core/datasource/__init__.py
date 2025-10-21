@@ -3,6 +3,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.core.config import settings
 from app.core.dremio.rest import DremioSource
 
 from .dremio import DremioDataSource
@@ -12,7 +13,7 @@ from .source import DataSource as DataSource
 from .source import DataSourceMetadata
 
 
-def create_file_source(file_path: Path, name: str | None = None, **pandas_kwargs: Any) -> FileDataSource:
+def create_file_source(file_path: Path, name: str | None = None, **pandas_kwargs: Any) -> DataSource:
     """
     创建 CSV/Excel 数据源
 
@@ -37,7 +38,7 @@ def create_dremio_source(
     dremio_source: DremioSource,
     name: str | None = None,
     description: str | None = None,
-) -> DremioDataSource:
+) -> DataSource:
     """
     创建 Dremio 数据源
 
@@ -49,8 +50,15 @@ def create_dremio_source(
     Returns:
         DremioDataSource: Dremio 数据源
     """
-    source_path = dremio_source.path
-    source_name = ".".join(source_path) if isinstance(source_path, list) else source_path
+    if (
+        len(dremio_source.path) == 2
+        and dremio_source.path[0] == settings.DREMIO_EXTERNAL_NAME
+        and dremio_source.path[1].endswith((".csv", ".xls", ".xlsx"))
+    ):
+        file_path = settings.DREMIO_EXTERNAL_DIR / Path(*dremio_source.path[1:])
+        return create_file_source(file_path, name=name)
+
+    source_name = ".".join(dremio_source.path)
 
     metadata = DataSourceMetadata(
         id=f"dremio_{source_name.replace('.', '_')}",
