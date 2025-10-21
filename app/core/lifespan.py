@@ -1,12 +1,14 @@
 import contextlib
 import enum
 import functools
-import threading
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
-from typing import Any, cast
+from typing import cast
 
 import anyio
+import anyio.from_thread
+import anyio.lowlevel
+import sniffio
 from anyio.abc import TaskGroup
 
 from app.log import logger
@@ -59,35 +61,7 @@ class Lifespan:
         self.task_group.start_soon(self._run, wrapper, "后台任务执行失败", False, name=name)
 
     def from_thread[*Ts, R](self, func: Callable[[*Ts], Awaitable[R]], /, *args: *Ts) -> R:
-        from anyio._core._eventloop import get_async_backend
-
-        backend = get_async_backend()
-        try:
-            token = backend.current_token()
-        except BaseException:
-            token = None
-        assert token is None, f"Cannot call from_thread() from within an async context: {token!r}"
-
-        event = threading.Event()
-        _unset = object()
-        result: Any = _unset
-
-        async def _wrapper() -> None:
-            nonlocal result
-            try:
-                result = await func(*args)
-            except Exception as e:
-                result = e
-            finally:
-                event.set()
-
-        self.start_soon(_wrapper)
-        event.wait()
-
-        if isinstance(result, Exception):
-            raise result
-        assert result is not _unset
-        return result
+        return anyio.from_thread.run(func, *args, token=self._token)
 
     def on_startup[F: LifespanFunc](self, func: F) -> F:
         f = _ensure_async(func)
@@ -126,6 +100,9 @@ class Lifespan:
         logger.opt(colors=True).debug(f"<m>{self._name}</> | {msg}")
 
     async def startup(self) -> None:
+        self._token = anyio.lowlevel.current_token()
+        self._asynclib_name = sniffio.current_async_library()
+
         if self._state != LifespanState.INITIAL:
             raise RuntimeError("Lifespan already started or starting")
 
