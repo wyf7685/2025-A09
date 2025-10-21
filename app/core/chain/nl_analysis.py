@@ -1,3 +1,4 @@
+import ast
 import re
 
 import pandas as pd
@@ -11,21 +12,36 @@ from ._base import BaseLLMRunnable
 from .llm import LLM
 
 
+def code_filter(text: str) -> str:
+    # 过滤 plt.rcParams[] 设置中文字体的代码
+    patterns = [
+        r"plt\.rcParams\[.font\.family.\]\s*=\s*\[.*?\]",  # plt.rcParams["font.family"] = [...]
+        r"plt\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*",  # plt.rcParams["axes.unicode_minus"] = ...
+    ]
+    for pattern in patterns:
+        text = re.sub(pattern, "", text)
+    return text
+
+
 def code_parser(text: str) -> str:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     if match := re.search(r"```(.*?)```", text, re.DOTALL):
         text = match.group(1).strip()
-    return text.removeprefix("python").strip()
+    return code_filter(text.removeprefix("python").strip())
 
 
 PROMPT_GENERATE_CODE = """\
 你是一位数据分析专家，需要根据用户的自然语言分析需求生成Python代码。
 
 示例数据:
+<overview>
 {overview}
+</overview>
 
 用户的分析需求:
+<query>
 {query}
+</query>
 
 请生成高质量的Python代码，对名为'df'的DataFrame进行操作，满足以下要求：
 
@@ -193,14 +209,23 @@ class NL2DataAnalysis(
             self.executor = CodeExecutor(source)
 
         overview = source.format_overview()
-        code = NL2Code(self.llm).invoke((overview, query))
+
+        try:
+            ast.parse(query)
+        except BaseException:
+            code = NL2Code(self.llm).invoke((overview, query))
+        else:
+            code = query
+
         result = self.executor.execute(code)
+        logger.info(f"初始分析执行结果: success={result['success']}")
 
         if result["success"]:
             return result
 
         fix = FixCode(self.llm)
-        for _ in range(1, self.max_retry):
+        for attempt in range(1, self.max_retry + 1):
+            logger.info(f"尝试修复分析代码并重新执行: {attempt}/{self.max_retry}")
             error = result["error"] + "\n\n" + result["output"]
             code = fix.invoke((query, overview, code, error))
             result = self.executor.execute(code)
