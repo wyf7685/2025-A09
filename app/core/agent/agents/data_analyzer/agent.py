@@ -1,10 +1,10 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import anyio
 import anyio.to_thread
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage
 from langchain_core.runnables import Runnable
 
 from app.core.agent.events import StreamEvent, process_stream_event
@@ -120,6 +120,9 @@ class DataAnalyzerAgent:
             self.ctx.runnable_config,
             stream_mode="messages",
         ):
+            event = cast("tuple[AnyMessage, dict[str, Any]]", event)
+            if isinstance(event[0], AIMessage) and event[1].get("langgraph_node") != "agent":
+                continue
             for evt in process_stream_event(event):
                 yield evt
 

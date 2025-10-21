@@ -23,7 +23,7 @@ from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import format_sources_overview
 from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
-from app.core.chain.llm import get_chat_model_async, get_llm_async
+from app.core.chain import get_chat_model_async, get_llm
 from app.core.lifespan import Lifespan
 from app.log import logger
 from app.schemas.mcp import Connection
@@ -166,7 +166,7 @@ class AgentContext:
 
         # Builtin Tools
         model_config = await self.get_model_config()
-        analyzer = analyzer_tool(self.sources, await get_llm_async(model_config.code_generation))
+        analyzer = analyzer_tool(self.sources, lambda: get_llm(model_config.code_generation))
         df_tools = dataframe_tools(self.sources)
         sk_tools, self._saved_models = scikit_tools(self.sources, self.session_id)
         await self._load_saved_models()
