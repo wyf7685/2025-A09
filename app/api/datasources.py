@@ -252,7 +252,7 @@ async def get_datasource(source_id: str) -> DataSourceMetadata:
 
 
 class GetDataSourceDataResponse(BaseModel):
-    data: list[dict[str, Any]]
+    data: list[dict[Any, Any]]
     total: int
     skip: int
     limit: int
