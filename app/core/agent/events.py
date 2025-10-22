@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncIterable, Iterable
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from mcp.types import ImageContent
 from pydantic import BaseModel, Field, Tag
 
@@ -61,16 +61,11 @@ def fix_message_content(content: str | list[Any]) -> str:
     return str(content) if content else ""
 
 
-def process_stream_event(event: Any) -> Iterable[StreamEvent]:
+def process_stream_event(message: BaseMessage) -> Iterable[StreamEvent]:
     """处理从 stream/astream 方法返回的事件，将其转换为 StreamEvent 对象"""
-    if not isinstance(event, tuple) or len(event) != 2:
-        return
-
-    message, metadata = event
-
     match message:
         case AIMessage(content=content, tool_calls=tool_calls):
-            yield LlmTokenEvent(content=fix_message_content(content), metadata=metadata or {})
+            yield LlmTokenEvent(content=fix_message_content(content))
             for tool_call in tool_calls:
                 if tool_call["id"] is None:
                     continue

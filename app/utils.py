@@ -5,7 +5,7 @@ import inspect
 import platform
 import re
 import threading
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterable, Callable, Coroutine
 from typing import Any, cast
 
 import anyio.to_thread
@@ -206,3 +206,18 @@ def copy_signature[**P, R](_: Callable[P, R], /) -> Callable[[Callable[..., obje
         return cast("Callable[P, R]", fn)
 
     return decorator
+
+
+async def buffered_stream[T](aiterable: AsyncIterable[T], max_buffer_size: float = 0) -> AsyncIterable[T]:
+    send, recv = anyio.create_memory_object_stream[T](max_buffer_size)
+
+    async def producer() -> None:
+        async with send:
+            async for item in aiterable:
+                await send.send(item)
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(producer)
+        async with recv:
+            async for item in recv:
+                yield item

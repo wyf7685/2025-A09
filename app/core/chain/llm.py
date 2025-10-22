@@ -73,6 +73,11 @@ def _convert_model(
 
 
 def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, Callable[[], BaseChatModel]]:
+    logger.opt(colors=True).info(
+        f"使用自定义模型: <c>{escape_tag(config.name)}</> (<g>{escape_tag(config.provider)}</>)"
+        f" - <y>{escape_tag(config.api_model_name)}</>",
+    )
+
     # 根据提供商选择正确的模型类
     if config.provider.lower() == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
@@ -165,8 +170,6 @@ def _select_model(
     if custom_model_manager.is_custom_model(model_name):
         try:
             if config := custom_model_manager.get_model(model_name):
-                logger.info(f"使用自定义模型: {config.name} ({config.provider})")
-
                 return _convert_model(type, *_from_config(config))
         except Exception as e:
             logger.error(f"创建自定义模型失败: {e}")

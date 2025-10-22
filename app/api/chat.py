@@ -20,7 +20,7 @@ from app.schemas.chat import ChatEntry, UserChatMessage
 from app.schemas.session import SessionID
 from app.services.agent import daa_service
 from app.services.session import session_service
-from app.utils import escape_tag
+from app.utils import buffered_stream, escape_tag
 
 router = APIRouter(prefix="/chat")
 
@@ -50,7 +50,7 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
         async with daa_service.use_agent(session) as agent:
-            async for event in agent.stream(request.message):
+            async for event in buffered_stream(agent.stream(request.message), max_buffer_size=10):
                 try:
                     msg = event.model_dump_json() + "\n"
                 except Exception:

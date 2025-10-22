@@ -4,7 +4,7 @@ from typing import Any, Self, cast
 
 import anyio
 import anyio.to_thread
-from langchain_core.messages import AIMessage, AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
 from app.core.agent.events import StreamEvent, process_stream_event
@@ -91,7 +91,13 @@ class DataAnalyzerAgent:
             return
 
         try:
-            state = DataAnalyzerAgentState.model_validate_json(await path.read_bytes())
+            data = await path.read_bytes()
+        except Exception as e:
+            logger.warning(f"无法加载 agent 状态: 读取状态文件时出错: {e}")
+            return
+
+        try:
+            state = DataAnalyzerAgentState.model_validate_json(data)
         except ValueError:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
@@ -101,7 +107,8 @@ class DataAnalyzerAgent:
     async def save_state(self, state_file: Path) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
         state = await self.get_state()
-        await anyio.Path(state_file).write_bytes(state.model_dump_json().encode("utf-8"))
+        data = state.model_dump_json().encode("utf-8")
+        await anyio.Path(state_file).write_bytes(data)
         logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
 
     async def destroy(self) -> None:
@@ -120,10 +127,12 @@ class DataAnalyzerAgent:
             self.ctx.runnable_config,
             stream_mode="messages",
         ):
-            event = cast("tuple[AnyMessage, dict[str, Any]]", event)
-            if isinstance(event[0], AIMessage) and event[1].get("langgraph_node") != "agent":
+            if not isinstance(event, tuple) or len(event) != 2:
                 continue
-            for evt in process_stream_event(event):
+            message, metadata = cast("tuple[BaseMessage, dict[str, Any]]", event)
+            if isinstance(message, AIMessage) and metadata.get("langgraph_node") != "agent":
+                continue
+            for evt in process_stream_event(message):
                 yield evt
 
         logger.opt(colors=True).success(f"<c>{self.ctx.session_id}</> | 处理完成")
