@@ -11,15 +11,18 @@ from app.log import logger
 from ._base import BaseLLMRunnable
 from .llm import LLM
 
+_filter_patterns = [
+    re.compile(r"plt\.rcParams\[.font\.family.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.family"] = [...]
+    re.compile(r"plt\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*"),  # plt.rcParams["axes.unicode_minus"] = ...
+    re.compile(r"plt\.rcParams\[.font\.sans-serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.sans-serif"] = [...]
+    re.compile(r"plt\.rcParams\[.font\.serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.serif"] = [...]
+]
+
 
 def code_filter(text: str) -> str:
     # 过滤 plt.rcParams[] 设置中文字体的代码
-    patterns = [
-        r"plt\.rcParams\[.font\.family.\]\s*=\s*\[.*?\]",  # plt.rcParams["font.family"] = [...]
-        r"plt\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*",  # plt.rcParams["axes.unicode_minus"] = ...
-    ]
-    for pattern in patterns:
-        text = re.sub(pattern, "", text)
+    for pattern in _filter_patterns:
+        text = pattern.sub("", text)
     return text
 
 
@@ -225,10 +228,11 @@ class NL2DataAnalysis(
 
         fix = FixCode(self.llm)
         for attempt in range(1, self.max_retry + 1):
-            logger.info(f"尝试修复分析代码并重新执行: {attempt}/{self.max_retry}")
             error = result["error"] + "\n\n" + result["output"]
+            logger.info(f"尝试修复分析代码并重新执行: {attempt}/{self.max_retry}\n{error}")
             code = fix.invoke((query, overview, code, error))
             result = self.executor.execute(code)
+            logger.info(f"修复后分析执行结果: success={result['success']}")
             if result["success"]:
                 return result
 
