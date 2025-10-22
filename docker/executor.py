@@ -19,7 +19,6 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns  # noqa: F401
 from matplotlib.font_manager import FontProperties
 
 
