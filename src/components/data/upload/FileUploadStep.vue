@@ -73,10 +73,16 @@ const startAnalysis = () => withLoading(isAnalyzing, async () => {
     return;
   }
 
+  if (!selectedModel.value) {
+    ElMessage.warning('请选择一个模型');
+    return;
+  }
+
   // 调用 API 获取数据质量报告
   const result = await cleaningAPI.analyzeDataQuality(
     selectedFile.value,
     userRequirements.value,
+    selectedModel.value || undefined,
   );
 
   analysisResult.value = result as AnalyzeDataQualityState;

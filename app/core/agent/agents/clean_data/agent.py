@@ -66,11 +66,7 @@ def _create_graph() -> CompiledStateGraph[CleaningState, None, CleaningState, Cl
 
 
 class SmartCleanDataAgent:
-    """基于LangChain和LangGraph的智能数据清洗Agent"""
-
-    def __init__(self) -> None:
-        self._graph = _create_graph()
-
+    _graph: CompiledStateGraph[CleaningState, None, CleaningState, CleaningState] = _create_graph()
     @staticmethod
     @copy_param_annotations(apply_cleaning_actions)
     async def apply_cleaning_actions(*args: Any, **kwargs: Any) -> ApplyCleaningResult | OperationFailedModel:
@@ -92,6 +88,7 @@ class SmartCleanDataAgent:
 
     async def process_and_clean_file(
         self,
+        model_id: str,
         file_path: Path,
         user_requirements: str | None = None,
         selected_suggestions: list[dict[str, Any]] | None = None,
@@ -109,7 +106,7 @@ class SmartCleanDataAgent:
         """
         try:
             # 1. 先进行标准的数据质量分析
-            analysis_result = await self.process_file(file_path, user_requirements)
+            analysis_result = await self.process_file(model_id, file_path, user_requirements)
 
             if is_failed(analysis_result):
                 return analysis_result
@@ -123,11 +120,13 @@ class SmartCleanDataAgent:
                     if suggestion.get("auto_apply", False)
                 ]
 
-            # 3. 应用用户选择的清洗操作
+            # 3. 应用用户选择的清洗操作（传递所选模型）
             cleaning_result = await self.apply_user_selected_cleaning(
                 file_path=file_path,
                 selected_suggestions=selected_suggestions,
                 field_mappings=analysis_result.field_mappings,
+                user_requirements=user_requirements,
+                model_id=model_id,
             )
 
             if is_failed(cleaning_result):
@@ -154,6 +153,7 @@ class SmartCleanDataAgent:
 
     async def process_file(
         self,
+        model_id: str,
         file_path: Path,
         user_requirements: str | None = None,
     ) -> ProcessFileResult | OperationFailedModel:
@@ -169,6 +169,7 @@ class SmartCleanDataAgent:
             cleaned_source_id=None,
             cleaning_summary="",
             error_message=None,
+            model_id=model_id,
         )
         result = None
 

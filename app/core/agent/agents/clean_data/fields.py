@@ -70,8 +70,12 @@ def guess_field_names(state: CleaningState) -> CleaningState:
     """使用LLM猜测数据源字段名"""
     try:
         logger.info("开始猜测字段名")
-        chain = create_field_mapping_prompt | get_llm() | parse_field_mappings
-        field_mappings = chain.invoke(state)
+        # 显式使用用户选择的模型ID
+        model_id = state.get("model_id")
+        prompt = create_field_mapping_prompt(state)
+        llm = get_llm(model_id)
+        response = llm.invoke(prompt)
+        field_mappings = parse_field_mappings(response)
         state["field_mappings"] = field_mappings
         logger.info(f"字段名猜测完成，处理了 {len(field_mappings)} 个字段")
         return state

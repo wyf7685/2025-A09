@@ -14,7 +14,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 // 创建 axios 实例
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60秒超时
+  timeout: 180000, // 60秒超时
   headers: {
     'Content-Type': 'application/json',
   },
@@ -94,15 +94,15 @@ export const cleaningAPI = {
   analyzeDataQuality: async (
     file: File,
     userRequirements?: string,
-    modelName?: string,
+    modelId?: string,
   ): Promise<AnalyzeDataQualitySuccess> => {
     const formData = new FormData();
     formData.append('file', file);
     if (userRequirements) {
       formData.append('user_requirements', userRequirements);
     }
-    if (modelName) {
-      formData.append('model_name', modelName);
+    if (modelId) {
+      formData.append('model_id', modelId);
     }
     const response = await api.post<AnalyzeDataQualityResponse>('/clean/analyze', formData, {
       headers: {
@@ -159,7 +159,7 @@ export const cleaningAPI = {
     selectedSuggestions: CleaningSuggestion[],
     fieldMappings?: Record<string, string>,
     userRequirements?: string,
-    modelName?: string,
+    modelId?: string,
   ): Promise<{
     success: boolean;
     file_info: any;
@@ -179,10 +179,13 @@ export const cleaningAPI = {
       selected_suggestions: selectedSuggestions,
       field_mappings: fieldMappings || {},
       user_requirements: userRequirements,
-      model_name: modelName,
     };
 
     formData.append('cleaning_data', JSON.stringify(cleaningData));
+
+    if (modelId) {
+      formData.append('model_id', modelId);
+    }
 
     const response = await api.post('/clean/analyze-and-clean', formData, {
       headers: {
@@ -196,11 +199,15 @@ export const cleaningAPI = {
   getCleaningSuggestions: async (
     file: File,
     userRequirements?: string,
+    modelId?: string,
   ): Promise<CleaningSuggestion[]> => {
     const formData = new FormData();
     formData.append('file', file);
     if (userRequirements) {
       formData.append('user_requirements', userRequirements);
+    }
+    if (modelId) {
+      formData.append('model_id', modelId);
     }
     const response = await api.post('/clean/suggestions', formData, {
       headers: {
@@ -211,11 +218,14 @@ export const cleaningAPI = {
   },
 
   // 获取详细的质量报告（支持用户自定义要求）
-  getQualityReport: async (file: File, userRequirements?: string): Promise<DataQualityReport> => {
+  getQualityReport: async (file: File, userRequirements?: string, modelId?: string): Promise<DataQualityReport> => {
     const formData = new FormData();
     formData.append('file', file);
     if (userRequirements) {
       formData.append('user_requirements', userRequirements);
+    }
+    if (modelId) {
+      formData.append('model_id', modelId);
     }
     const response = await api.post('/clean/quality-report', formData, {
       headers: {
@@ -361,79 +371,44 @@ export const dataSourceAPI = {
   },
 };
 
-// 报告生成API
+// 报告相关 API
 export const reportAPI = {
-  // 获取报告模板列表
   getTemplates: async () => {
-    try {
-      const response = await api.get<ReportTemplate[]>('/chat/templates');
-      return response.data;
-    } catch (error) {
-      console.error('获取模板列表失败:', error);
-      throw error;
-    }
+    const response = await api.get<ReportTemplate[]>('/report/templates');
+    return response.data;
   },
 
-  // 上传自定义模板
   uploadTemplate: async (templateName: string, templateDescription: string, templateFile: File) => {
-    try {
-      const formData = new FormData();
-      formData.append('template_name', templateName);
-      formData.append('template_description', templateDescription);
-      formData.append('template_file', templateFile);
+    const formData = new FormData();
+    formData.append('template_name', templateName);
+    formData.append('template_description', templateDescription);
+    formData.append('template_file', templateFile);
 
-      const response = await api.post<{
-        id: string;
-        name: string;
-        description: string;
-      }>('/chat/templates/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return response.data;
-    } catch (error) {
-      console.error('上传模板失败:', error);
-      throw error;
-    }
+    const response = await api.post('/report/templates/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   },
 
-  // 删除模板
   deleteTemplate: async (templateId: string) => {
-    try {
-      const response = await api.delete<void>(`/chat/templates/${templateId}`);
-      return response.data;
-    } catch (error) {
-      console.error('删除模板失败:', error);
-      throw error;
-    }
+    const response = await api.delete(`/report/templates/${templateId}`);
+    return response.data;
   },
 
-  // 生成报告（基于现有的summary功能）
   generateReport: async (sessionId: string, templateId?: string, modelId?: string) => {
-    try {
-      const response = await api.post<{
-        session_id: string;
-        report: string;
-        figures: string[];
-        template_used: string;
-      }>('/chat/generate-report', {
-        session_id: sessionId,
-        template_id: templateId,
-        model_id: modelId,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('生成报告失败:', error);
-      throw error;
-    }
+    const payload: Record<string, string> = { session_id: sessionId };
+    if (templateId) payload.template_id = templateId;
+    if (modelId) payload.model_id = modelId;
+    const response = await api.post('/report/generate', payload);
+    return response.data;
   },
 
-  // 下载报告为Markdown文件
   downloadReport: (content: string, filename: string = '分析报告.md'): void => {
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
     const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);

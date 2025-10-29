@@ -32,7 +32,7 @@ async def analyze_data_quality(
     file: UploadFile = File(...),
     user_requirements: str | None = Form(None),
     # TODO: implement model selection
-    # model_name: str | None = Form(None),
+    model_id: str = Form(),
 ) -> dict[str, Any]:
     """
     使用智能Agent分析数据质量并生成清洗建议
@@ -69,7 +69,9 @@ async def analyze_data_quality(
                 buffer.write(content)
 
             # 使用智能Agent处理文件
-            result = await smart_clean_agent.process_file(file_path=temp_path, user_requirements=user_requirements)
+            result = await smart_clean_agent.process_file(
+                model_id, file_path=temp_path, user_requirements=user_requirements
+            )
             resp_data = {}
             if is_success(result):
                 # 如果有字段映射，准备应用到数据（但不立即上传）
@@ -208,6 +210,7 @@ async def execute_cleaning(
                 selected_suggestions,
                 field_mappings,
                 user_requirements,  # 添加用户要求参数
+                model_id=cleaning_request_data.model_name,
             )
 
             if is_failed(result):
@@ -314,6 +317,7 @@ class CleaningData(BaseModel):
 async def analyze_and_clean(
     file: UploadFile = File(...),
     cleaning_data: str = Form(...),  # JSON格式的清洗请求数据
+    model_id: str = Form(),
 ) -> dict[str, Any]:
     """
     完整的数据分析和清洗流程
@@ -356,7 +360,9 @@ async def analyze_and_clean(
                 buffer.write(content)
 
             # 使用智能Agent进行完整的分析和清洗流程
-            result = await smart_clean_agent.process_and_clean_file(temp_path, user_requirements, selected_suggestions)
+            result = await smart_clean_agent.process_and_clean_file(
+                model_id, temp_path, user_requirements, selected_suggestions
+            )
 
             if is_failed(result):
                 raise HTTPException(status_code=500, detail=result.message)
@@ -430,8 +436,7 @@ async def analyze_and_clean(
 
 @router.post("/suggestions")
 async def get_cleaning_suggestions(
-    file: UploadFile = File(...),
-    user_requirements: str | None = Form(None),
+    file: UploadFile = File(...), user_requirements: str | None = Form(None), model_id: str = Form()
 ) -> dict[str, Any]:
     """
     获取数据清洗建议（支持用户自定义要求）
@@ -465,7 +470,9 @@ async def get_cleaning_suggestions(
                 buffer.write(content)
 
             # 使用智能Agent获取建议
-            result = await smart_clean_agent.process_file(file_path=temp_path, user_requirements=user_requirements)
+            result = await smart_clean_agent.process_file(
+                model_id, file_path=temp_path, user_requirements=user_requirements
+            )
 
             if is_success(result):
                 return {
@@ -491,7 +498,9 @@ async def get_cleaning_suggestions(
 
 @router.post("/quality-report")
 async def get_quality_report(
-    file: UploadFile = File(...), user_requirements: str | None = Form(None)
+    file: UploadFile = File(...),
+    user_requirements: str | None = Form(None),
+    model_id: str = Form(),
 ) -> dict[str, Any]:
     """
     获取详细的数据质量报告
@@ -528,7 +537,9 @@ async def get_quality_report(
                 buffer.write(content)
 
             # 使用智能Agent获取质量报告
-            result = await smart_clean_agent.process_file(file_path=temp_path, user_requirements=user_requirements)
+            result = await smart_clean_agent.process_file(
+                model_id, file_path=temp_path, user_requirements=user_requirements
+            )
 
             if is_success(result):
                 return {
