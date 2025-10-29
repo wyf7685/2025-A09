@@ -89,7 +89,7 @@ PROMPT_GENERATE_CODE = """\
 6. 绘图字体应使用系统提供的字体，如'WenQuanYi Micro Hei'，而不是'SimHei'
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
-允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
+允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
 """
 
@@ -161,7 +161,7 @@ PROMPT_FIX_CODE = """\
 8. 绘图字体必须使用Docker环境中可用的字体，如'WenQuanYi Micro Hei'，不要使用'SimHei'、'SimSun'或'Microsoft YaHei'
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
-允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
+允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
 """
 
