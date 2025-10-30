@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { ToolCall } from '@/types';
-import { base64ToBlob, parsePossibleJsonString } from '@/utils/tools';
-import { ArrowDown, ArrowRight, Check, Loading, WarningFilled, View, Close } from '@element-plus/icons-vue';
-import { ElIcon, ElButton, ElDialog, ElTabPane, ElTabs } from 'element-plus';
+import { parsePossibleJsonString } from '@/utils/tools';
+import { Check, Loading, View, WarningFilled } from '@element-plus/icons-vue';
+import { ElButton, ElDialog, ElIcon, ElTabPane, ElTabs } from 'element-plus';
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
-import AssistantText from './AssistantText.vue';
 
 const props = defineProps<{
   data: ToolCall;
@@ -39,7 +38,7 @@ const error = computed(() => props.data.error || null);
 // 获取工具的描述信息
 const getToolDescription = (toolName: string) => {
   const descriptions: Record<string, string> = {
-    'correlationAnalysis': '生成数据相关性分析热力图。我会生成一个交互式的相关性热力图，这个组件包含以下特性：\n\n主要功能：\n1. 随机数据生成 - 模拟了6个业务指标的数据（销售额、广告投入、客户满意度、员工数量、市场份额、研发投入）\n2. 相关性计算 - 自动计算尔逊相关系数矩阵\n3. 热力图可视化 - 用颜色深浅表示相关性强度\n4. 交互式功能 - 鼠标悬停显示详细数值，可重新生成数据\n\n视觉设计：\n• 颜色编码：红色系表示正相关，蓝色系表示负相关\n• 强度表示：颜色越深表示相关性越强\n• 清晰标签：包含变量名称和数值显示',
+    'correlationAnalysis': '生成数据相关性分析热力图',
     'dataAnalysis': '执行数据分析任务，包括统计计算、数据清洗和基础分析',
     'chartGeneration': '生成各种类型的数据可视化图表',
     'default': '执行数据处理工具'
@@ -135,7 +134,6 @@ onUnmounted(() => removeCurrentUrl());
           <component :is="statusIcon" :class="{ rotating: status === 'running' }" />
         </el-icon>
         <span class="tool-name">{{ name }}</span>
-        <span class="tool-status">Interactive artifact</span>
         <el-button
           class="detail-button"
           size="small"
@@ -147,66 +145,60 @@ onUnmounted(() => removeCurrentUrl());
         </el-button>
       </div>
 
-      <!-- 工具描述 -->
-      <div class="tool-description">
-        <p>{{ getToolDescription(name) }}</p>
-      </div>
-
-      <!-- 生成的内容预览 -->
-      <div v-if="artifact && artifact.type === 'image'" class="artifact-preview">
-        <div v-if="!imageLoadError && artifactImageUrl" class="image-container">
-          <img
-            :src="artifactImageUrl"
-            :alt="artifact.caption || 'Generated chart'"
-            @error="onImageError"
-            @load="onImageLoad" />
+      <div class="tool-body">
+        <!-- 生成的内容预览 -->
+        <div v-if="artifact && artifact.type === 'image'" class="artifact-preview">
+          <div v-if="!imageLoadError && artifactImageUrl" class="image-container">
+            <img
+              :src="artifactImageUrl"
+              :alt="artifact.caption || 'Generated chart'"
+              @error="onImageError"
+              @load="onImageLoad" />
+          </div>
+          <div v-else-if="imageLoadError" class="image-error">
+            <el-icon>
+              <WarningFilled />
+            </el-icon>
+            <span>图片加载失败</span>
+            <div class="error-details">
+              <p>可能的原因：</p>
+              <ul>
+                <li>Base64 数据格式错误</li>
+                <li>图片数据损坏</li>
+                <li>浏览器不支持该图片格式</li>
+              </ul>
+            </div>
+          </div>
+          <div v-else class="image-loading">
+            <el-icon>
+              <Loading class="rotating" />
+            </el-icon>
+            <span>正在加载图片...</span>
+          </div>
+          <div v-if="artifact.caption" class="artifact-caption">
+            {{ artifact.caption }}
+          </div>
         </div>
-        <div v-else-if="imageLoadError" class="image-error">
+
+        <!-- 结果预览（文本形式） -->
+        <div v-else-if="result && status === 'success'" class="result-preview">
+          <div class="result-summary">
+            工具执行完成，点击右上角按钮查看详细信息
+          </div>
+        </div>
+
+        <!-- 错误信息 -->
+        <div v-if="error" class="error-preview">
           <el-icon>
             <WarningFilled />
           </el-icon>
-          <span>图片加载失败</span>
-          <div class="error-details">
-            <p>可能的原因：</p>
-            <ul>
-              <li>Base64 数据格式错误</li>
-              <li>图片数据损坏</li>
-              <li>浏览器不支持该图片格式</li>
-            </ul>
-          </div>
+          <span>工具执行出错，点击查看详细信息</span>
         </div>
-        <div v-else class="image-loading">
-          <el-icon>
-            <Loading class="rotating" />
-          </el-icon>
-          <span>正在加载图片...</span>
-        </div>
-        <div v-if="artifact.caption" class="artifact-caption">
-          {{ artifact.caption }}
-        </div>
-      </div>
 
-      <!-- 结果预览（文本形式） -->
-      <div v-else-if="result && status === 'success'" class="result-preview">
-        <div class="result-summary">
-          工具执行完成，点击右上角按钮查看详细信息
+        <!-- 运行状态 -->
+        <div v-if="status === 'running'" class="running-status">
+          <span>正在执行工具...</span>
         </div>
-      </div>
-
-      <!-- 错误信息 -->
-      <div v-if="error" class="error-preview">
-        <el-icon>
-          <WarningFilled />
-        </el-icon>
-        <span>工具执行出错，点击查看详细信息</span>
-      </div>
-
-      <!-- 运行状态 -->
-      <div v-if="status === 'running'" class="running-status">
-        <el-icon>
-          <Loading class="rotating" />
-        </el-icon>
-        <span>正在执行工具...</span>
       </div>
     </div>
 
@@ -333,15 +325,15 @@ onUnmounted(() => removeCurrentUrl());
 }
 
 .tool-main-content {
-  padding: 20px;
+  padding: 16px;
 }
 
 .tool-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
   border-bottom: 1px solid #f1f5f9;
 
   .el-icon {
@@ -353,15 +345,6 @@ onUnmounted(() => removeCurrentUrl());
     font-weight: 600;
     color: #111827;
     font-size: 16px;
-  }
-
-  .tool-status {
-    color: #6b7280;
-    font-size: 14px;
-    background: #f1f5f9;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-weight: 500;
   }
 
   .detail-button {
@@ -387,8 +370,12 @@ onUnmounted(() => removeCurrentUrl());
   }
 }
 
+.tool-body {
+  margin-top: 12px;
+  margin-left: 8px;
+}
+
 .artifact-preview {
-  margin-top: 16px;
   text-align: center;
   background: #f9fafb;
   border-radius: 8px;
@@ -486,10 +473,9 @@ onUnmounted(() => removeCurrentUrl());
 }
 
 .result-preview {
-  margin-top: 16px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   background: #f0fdf4;
-  border-radius: 8px;
+  border-radius: 2px;
   border-left: 4px solid #10b981;
 
   .result-summary {
@@ -500,8 +486,7 @@ onUnmounted(() => removeCurrentUrl());
 }
 
 .error-preview {
-  margin-top: 16px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   background: #fef2f2;
   border-radius: 8px;
   border-left: 4px solid #ef4444;
@@ -522,8 +507,7 @@ onUnmounted(() => removeCurrentUrl());
 }
 
 .running-status {
-  margin-top: 16px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   background: #fffbeb;
   border-radius: 8px;
   border-left: 4px solid #f59e0b;
@@ -566,6 +550,8 @@ onUnmounted(() => removeCurrentUrl());
 }
 
 .detail-tabs {
+  margin: 4px 18px;
+
   :deep(.el-tabs__header) {
     margin: 0;
     background: #ffffff;
