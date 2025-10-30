@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Icon } from '@iconify/vue';
 import DeepseekIcon from '@/assets/icons/deepseek.ico';
+import { Icon } from '@iconify/vue';
 
 defineProps<{
   provider: string;

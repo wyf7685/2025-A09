@@ -1,14 +1,14 @@
 <script setup lang="ts">
+import LLMModelIcon from '@/components/LLMModelIcon.vue';
 import { useModelStore } from '@/stores/model';
 import type { LLMModel } from '@/types';
 import { Delete, Edit, Plus } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import {
   ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElIcon,
-  ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTag
+  ElInput, ElMessage, ElMessageBox, ElOption, ElSelect
 } from 'element-plus';
-import { onMounted, ref, watch, type CreateComponentPublicInstanceWithMixins, type DefineComponent } from 'vue';
-import LLMModelIcon from '@/components/LLMModelIcon.vue';
+import { onMounted, ref, watch } from 'vue';
 
 const modelStore = useModelStore();
 

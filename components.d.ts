@@ -26,7 +26,6 @@ declare module 'vue' {
     DataSourceSearchBar: typeof import('./src/components/data/DataSourceSearchBar.vue')['default']
     DataSourceTable: typeof import('./src/components/data/DataSourceTable.vue')['default']
     EditDataSourceDialog: typeof import('./src/components/data/EditDataSourceDialog.vue')['default']
-    ElIcon: typeof import('element-plus/es')['ElIcon']
     FieldMappingsGrid: typeof import('./src/components/data/upload/cleaning/FieldMappingsGrid.vue')['default']
     FileUploadStep: typeof import('./src/components/data/upload/FileUploadStep.vue')['default']
     FlowPanel: typeof import('./src/components/chat/FlowPanel.vue')['default']

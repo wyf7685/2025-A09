@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
-import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
-import { ElButton, ElMessage } from 'element-plus';
+import { cleaningAPI } from '@/utils/api';
+import { ArrowLeft } from '@element-plus/icons-vue';
+import { ElButton, ElIcon, ElMessage } from 'element-plus';
 import { ref } from 'vue';
-import { Icon } from '@iconify/vue';
-import UploadStepComponent from './cleaning/UploadStepComponent.vue';
 import AnalysisStepComponent from './cleaning/AnalysisStepComponent.vue';
 import CleaningStepComponent from './cleaning/CleaningStepComponent.vue';
 import CompleteStepComponent from './cleaning/CompleteStepComponent.vue';
-import { cleaningAPI } from '@/utils/api';
+import UploadStepComponent from './cleaning/UploadStepComponent.vue';
 
-import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
-import { withLoading } from '@/utils/tools';
 import type { LLMModel } from '@/types';
+import { withLoading } from '@/utils/tools';
+import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
 
 // 事件定义
 const emit = defineEmits<{

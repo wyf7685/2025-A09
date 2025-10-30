@@ -3,21 +3,14 @@ import type { ToolCall } from '@/types';
 import { parsePossibleJsonString } from '@/utils/tools';
 import { Check, Loading, View, WarningFilled } from '@element-plus/icons-vue';
 import { ElButton, ElDialog, ElIcon, ElTabPane, ElTabs } from 'element-plus';
-import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   data: ToolCall;
 }>();
 
-const isExpanded = ref(false);
 const showDetailDialog = ref(false);
 const activeTab = ref('description');
-const sectionExpanded = reactive({
-  args: false,
-  result: false,
-  artifact: false,
-  error: false,
-});
 const artifactImageUrl = ref<string>('');
 const imageLoadError = ref(false);
 

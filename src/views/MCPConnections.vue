@@ -3,11 +3,11 @@ import MCPConnectionForm from '@/components/mcp/MCPConnectionForm.vue';
 import { useMCPStore } from '@/stores/mcp';
 import type { MCPConnection } from '@/types/mcp';
 import { Delete, Edit, MoreFilled, Plus, Search } from '@element-plus/icons-vue';
+import { Icon } from '@iconify/vue';
 import {
   ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu,
   ElEmpty, ElIcon, ElInput, ElMessageBox, ElOption, ElSelect, ElTag
 } from 'element-plus';
-import { Icon } from '@iconify/vue';
 import { computed, onMounted, ref } from 'vue';
 
 // Store

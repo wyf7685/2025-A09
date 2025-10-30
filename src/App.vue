@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { checkHealth as checkHealthApi } from '@/utils/api';
-import { ChatDotRound, Collection, Connection, DataAnalysis, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
+import { ChatDotRound, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
-import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
+import { ElAside, ElIcon, ElTooltip } from 'element-plus';
 import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
 

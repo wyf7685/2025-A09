@@ -467,7 +467,7 @@ def generate_suggestions(state: CleaningState) -> CleaningState:
     dtype_groups: list[dict[str, Any]] = []
     for s in deduped:
         if s.get("type") == "data_type" and _normalize_action(s.get("suggested_action", "")) == "转换类型":
-            dtype_groups.append(s)
+            dtype_groups.append(s)  # noqa: PERF401
     if len(dtype_groups) > 1:
         # 从deduped移除这些项
         deduped = [s for s in deduped if s not in dtype_groups]
