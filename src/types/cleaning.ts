@@ -36,7 +36,9 @@ export interface CleaningSuggestion {
   priority?: string;
   impact?: string;
   reason?: string;
+  // 支持多列合并
   column: string;
+  columns?: string[];
   type: string;
 }
 

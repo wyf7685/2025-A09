@@ -3,6 +3,9 @@
 数据概览:
 {data_overview}
 
+质量问题摘要:
+{issues_summary}
+
 用户要求:
 {user_requirements}
 

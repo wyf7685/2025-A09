@@ -26,6 +26,12 @@ const emit = defineEmits<{
 
 // 检查清洗动作是否已选择
 const isCleaningActionSelected = (suggestion: CleaningSuggestion) => {
+  // 组建议：当所有列都已选择时视为选中
+  if (suggestion.columns && suggestion.columns.length > 0) {
+    return suggestion.columns.every(col =>
+      props.selectedCleaningActions.some(a => a.type === suggestion.type && a.column === col)
+    );
+  }
   return props.selectedCleaningActions.some(a =>
     a.type === suggestion.type && a.column === suggestion.column
   );
