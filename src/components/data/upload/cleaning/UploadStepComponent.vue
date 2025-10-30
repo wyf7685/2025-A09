@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { LLMModel } from '@/types';
-import { ArrowDown, ArrowRight, DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
+import { DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRow, ElSelect, ElTag, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
@@ -27,9 +27,7 @@ const emit = defineEmits<{
 
 // 文件上传相关状态
 const dragover = ref(false);
-
-// 高级选项显示状态
-const showAdvancedOptions = ref(false);
+const isHovering = ref(false);
 
 // 按提供商分组模型
 const getProviderGroups = () => {
@@ -52,6 +50,12 @@ const startAnalysis = () => emit('analyze');
 const skipAnalysisAndUpload = () => emit('skipAndUpload');
 const closeDialog = () => emit('close');
 
+// 清除已选择的文件
+const clearSelectedFile = () => {
+  selectedFile.value = null;
+  fileName.value = '';
+  fileDescription.value = '';
+};
 
 // 处理文件上传
 const handleFileUpload = (event: UploadFile) => {
@@ -103,12 +107,17 @@ const handleDragleave = () => {
         <div class="file-size">{{ selectedFile ? (selectedFile.size / 1024 / 1024).toFixed(2) : 0 }} MB</div>
         <div class="file-type">{{ selectedFile?.name.split('.').pop()?.toUpperCase() }} 文件</div>
       </div>
+      <div class="file-actions">
+        <el-button class="delete-btn" text circle @click="clearSelectedFile" :title="'删除当前文件'">
+          <Icon icon="material-symbols:close-rounded" width="20" height="20" />
+        </el-button>
+      </div>
     </div>
     <div v-else>
       <div class="upload-section">
-        <el-upload ref="uploadRef" class="upload-area" drag action="#" :auto-upload="false" :show-file-list="false"
+        <el-upload ref="uploadRef" class="upload-area" :class="{ 'hovering': isHovering }" drag action="#" :auto-upload="false" :show-file-list="false"
           :on-change="handleFileUpload" :multiple="false" @dragover="handleDragover"
-          @dragleave="handleDragleave">
+          @dragleave="handleDragleave" @mouseenter="isHovering = true" @mouseleave="isHovering = false">
           <div class="upload-content" :class="{ 'active-drag': dragover }">
             <el-icon class="upload-icon" size="60" color="#409EFF">
               <UploadFilled />
@@ -144,13 +153,6 @@ const handleDragleave = () => {
     <div class="smart-analysis-options">
       <div class="options-header">
         <h4>智能分析选项</h4>
-        <el-button type="text" @click="showAdvancedOptions = !showAdvancedOptions">
-          {{ showAdvancedOptions ? '收起高级选项' : '展开高级选项' }}
-          <el-icon>
-            <ArrowRight v-if="!showAdvancedOptions" />
-            <ArrowDown v-else />
-          </el-icon>
-        </el-button>
       </div>
 
       <div class="basic-options">
@@ -164,30 +166,29 @@ const handleDragleave = () => {
         </el-form-item>
       </div>
 
-      <el-collapse-transition>
-        <div v-show="showAdvancedOptions" class="advanced-options">
-          <el-form-item label="选择AI模型">
-            <el-select v-model="selectedModel" placeholder="请选择AI模型">
-              <!-- 按提供商分组显示模型 -->
-              <el-option-group v-for="provider in getProviderGroups()" :key="provider.name" :label="provider.name">
-                <el-option v-for="model in provider.models" :key="model.id"
-                  :label="model.name" :value="model.id">
-                  <div class="model-option">
-                    <span class="model-name">{{ model.name }}</span>
-                    <el-tag :type="model.available ? 'success' : 'danger'" size="small" class="model-tag">
-                      {{ model.available ? '已配置' : '未配置' }}
-                    </el-tag>
-                  </div>
-                </el-option>
-              </el-option-group>
-            </el-select>
-            <div class="hint-text">
-              <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
-              不同模型在字段理解和建议生成方面各有特色
-            </div>
-          </el-form-item>
-        </div>
-      </el-collapse-transition>
+      <!-- 直接展示模型选择，无需展开 -->
+      <div class="advanced-options">
+        <el-form-item label="选择AI模型">
+          <el-select v-model="selectedModel" placeholder="请选择AI模型">
+            <!-- 按提供商分组显示模型 -->
+            <el-option-group v-for="provider in getProviderGroups()" :key="provider.name" :label="provider.name">
+              <el-option v-for="model in provider.models" :key="model.id"
+                :label="model.name" :value="model.id">
+                <div class="model-option">
+                  <span class="model-name">{{ model.name }}</span>
+                  <el-tag :type="model.available ? 'success' : 'danger'" size="small" class="model-tag">
+                    {{ model.available ? '已配置' : '未配置' }}
+                  </el-tag>
+                </div>
+              </el-option>
+            </el-option-group>
+          </el-select>
+          <div class="hint-text">
+            <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
+            不同模型在字段理解和建议生成方面各有特色
+          </div>
+        </el-form-item>
+      </div>
     </div>
 
     <!-- 操作按钮 -->
@@ -195,17 +196,17 @@ const handleDragleave = () => {
       <el-button @click="closeDialog" size="large">
         取消
       </el-button>
-      <el-button type="primary" @click="skipAnalysisAndUpload" size="large">
-        <el-icon style="margin-right: 4px;">
-          <Upload />
-        </el-icon>
-        跳过分析，直接上传
-      </el-button>
-      <el-button type="success" @click="startAnalysis" :loading="isAnalyzing" size="large">
+      <el-button type="primary" :disabled="!selectedFile" :loading="isAnalyzing" size="large" @click="startAnalysis">
         <el-icon style="margin-right: 4px;">
           <DataAnalysis />
         </el-icon>
         开始智能分析
+      </el-button>
+      <el-button type="success" plain size="large" @click="skipAnalysisAndUpload">
+        <el-icon style="margin-right: 4px;">
+          <Upload />
+        </el-icon>
+        跳过分析，直接上传
       </el-button>
     </div>
   </div>
@@ -214,55 +215,60 @@ const handleDragleave = () => {
 <style lang="scss" scoped>
 .upload-info {
   .upload-section {
-    margin-bottom: 30px;
-  }
+    margin-bottom: 24px;
 
-  .upload-area {
-    width: 100%;
-
-    :deep(.el-upload) {
+    .upload-area {
       width: 100%;
-    }
+      border: none; /* 去掉外部虚线边框 */
+      border-radius: 8px;
+      padding: 0; /* 扩展到外层尺寸 */
 
-    :deep(.el-upload-dragger) {
-      width: 100%;
-      height: 200px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+      :deep(.el-upload-dragger) {
+        width: 100%;
+        min-height: 220px; /* 高度扩大 */
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 24px 28px;
+        box-sizing: border-box;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+        display: flex;               /* 居中容器 */
+        align-items: center;         /* 垂直居中 */
+        justify-content: center;     /* 水平居中 */
+        text-align: center;          /* 文本居中 */
+      }
 
-    .upload-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-
-      &.active-drag {
+      &.hovering :deep(.el-upload-dragger) {
+        border-color: #3b82f6;
         background-color: #f0f7ff;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) inset;
+      }
+
+      &.hovering .upload-icon {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      .upload-content {
+        display: flex;
+        align-items: center;
+        justify-content: center;     /* 将图标和文字整体居中 */
+        gap: 16px;
       }
 
       .upload-icon {
-        margin-bottom: 16px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        margin-right: 16px;
+        transition: transform 0.2s ease;
       }
 
       .upload-text {
-        text-align: center;
-
         h4 {
-          font-size: 16px;
-          font-weight: 500;
-          margin-bottom: 8px;
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+        }
 
-          em {
-            color: #1d4ed8;
-            font-style: normal;
-            font-weight: 600;
-          }
+        em {
+          color: #1d4ed8;
+          font-style: normal;
         }
 
         p {
@@ -271,22 +277,16 @@ const handleDragleave = () => {
         }
       }
 
-      .selected-file {
-        margin-top: 16px;
-        padding: 8px 16px;
-        background-color: #f0f7ff;
-        border-radius: 8px;
-
-        p {
-          font-size: 14px;
-          color: #1d4ed8;
-          font-weight: 500;
-        }
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.06); }
+        100% { transform: scale(1); }
       }
     }
   }
 
   .file-details {
+    position: relative; /* 让删除按钮可以定位到右上角 */
     display: flex;
     align-items: center;
     gap: 16px;
@@ -321,6 +321,16 @@ const handleDragleave = () => {
         color: #9ca3af;
       }
     }
+
+    .file-actions {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+    }
+
+    .delete-btn {
+      color: #ef4444;
+    }
   }
 
   .smart-analysis-options {
@@ -346,151 +356,35 @@ const handleDragleave = () => {
 
     .basic-options {
       margin-bottom: 16px;
-
-      .hint-text {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 4px;
-      }
     }
 
     .advanced-options {
-      .hint-text {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 4px;
-      }
+      margin-top: 8px;
+    }
 
-      :deep(.el-select) {
-        width: 100%;
-      }
+    .hint-text {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #6b7280;
+    }
 
-      :deep(.el-select__popper) {
-        .el-option-group__title {
-          font-size: 10px;
-          padding: 4px 8px;
-          color: #6b7280;
-          font-weight: 600;
-        }
-      }
+    .model-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
 
-      .model-option {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-
-        .model-name {
-          font-size: 11px;
-          color: #374151;
-          flex: 1;
-        }
-
-        .model-tag {
-          font-size: 9px;
-          margin-left: 8px;
-          height: 18px;
-          line-height: 16px;
-          padding: 0 6px;
-          
-          &.el-tag--success {
-            background-color: #f0f9ff;
-            border-color: #60a5fa;
-            color: #1e40af;
-          }
-          
-          &.el-tag--danger {
-            background-color: #fef2f2;
-            border-color: #fca5a5;
-            color: #dc2626;
-          }
-        }
+      .model-name {
+        margin-right: 8px;
       }
     }
   }
 
   .file-actions {
     display: flex;
-    gap: 12px;
     justify-content: flex-end;
-    margin-top: 24px;
-
-    .el-button {
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-weight: 500;
-    }
-  }
-}
-
-.file-metadata {
-  margin: 16px 0;
-  padding: 16px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-
-  .el-form-item {
-    margin-bottom: 16px;
-
-    :deep(.el-form-item__label) {
-      font-weight: 500;
-      color: #374151;
-    }
-
-    :deep(.el-input__wrapper) {
-      border-radius: 6px;
-      transition: all 0.3s ease;
-
-      &.is-focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-      }
-    }
-
-    :deep(.el-textarea__inner) {
-      border-radius: 6px;
-      transition: all 0.3s ease;
-
-      &:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-      }
-    }
-  }
-}
-
-// 响应式设计
-@media (max-width: 768px) {
-  .upload-info {
-    .file-details {
-      margin-bottom: 12px;
-
-      .file-name {
-        font-size: 16px;
-      }
-
-      .file-size {
-        font-size: 12px;
-      }
-    }
-
-    .file-actions {
-      flex-direction: column;
-      gap: 8px;
-
-      .el-button {
-        width: 100%;
-        padding: 10px;
-        font-size: 14px;
-      }
-    }
+    margin-top: 12px;
+    gap: 12px;
   }
 }
 </style>
