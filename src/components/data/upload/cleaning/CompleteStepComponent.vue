@@ -90,7 +90,7 @@ const viewGeneratedCode = async () => {
           </el-button>
 
           <el-button type="primary" @click="skipAnalysisAndUpload" size="large" v-if="!analysisResult?.data_uploaded">
-            <Icon icon="material-symbols:cloud-upload-outline-rounded" width="18" height="18"
+            <Icon icon="material-symbols:upload" width="18" height="18"
               style="margin-right: 4px;" />
             立即上传数据
           </el-button>

@@ -1,37 +1,35 @@
 <script setup lang="ts">
+import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
+import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue';
+import { ElButton, ElMessage } from 'element-plus';
+import { ref } from 'vue';
+import { Icon } from '@iconify/vue';
+import UploadStepComponent from './cleaning/UploadStepComponent.vue';
 import AnalysisStepComponent from './cleaning/AnalysisStepComponent.vue';
 import CleaningStepComponent from './cleaning/CleaningStepComponent.vue';
-import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
 import CompleteStepComponent from './cleaning/CompleteStepComponent.vue';
-import UploadStepComponent from './cleaning/UploadStepComponent.vue';
-import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
 import { cleaningAPI } from '@/utils/api';
+
+import CleaningStepIndicator from './cleaning/CleaningStepIndicator.vue';
 import { withLoading } from '@/utils/tools';
-import { ArrowLeft } from '@element-plus/icons-vue';
-import { ElButton, ElIcon, ElMessage } from 'element-plus';
 import type { LLMModel } from '@/types';
-import { nextTick, ref } from 'vue';
 
-// 文件元数据模型
-const fileName = defineModel<string>('fileName', { required: true });
-const fileDescription = defineModel<string>('fileDescription', { default: '' });
-const userRequirements = defineModel<string>('userRequirements', { default: '' });
-const selectedModel = defineModel<string>('selectedModel', { default: '' });
-const selectedFile = defineModel<File | null>('selectedFile', { required: true });
-
-// 定义属性
-defineProps<{
-  availableModels: LLMModel[];
-}>();
-
-// 定义事件
+// 事件定义
 const emit = defineEmits<{
   goBack: [];
   proceed: [cleanedFileId?: string];
 }>();
 
+// v-model 双向绑定定义（从父视图 DataUpload.vue 传入）
+const fileName = defineModel<string>('fileName', { required: true });
+const fileDescription = defineModel<string>('fileDescription', { required: true });
+const userRequirements = defineModel<string>('userRequirements', { required: true });
+const selectedModel = defineModel<string>('selectedModel', { required: true });
+const selectedFile = defineModel<File | null>('selectedFile', { required: true });
 
-// 清洗流程相关状态
+// 组件属性（可用模型列表）
+const { availableModels } = defineProps<{ availableModels: LLMModel[] }>();
+
 const currentStep = ref<CleaningStep>('upload');
 const dataQualityReport = ref<DataQualityReport | null>(null);
 const cleaningSuggestions = ref<CleaningSuggestion[]>([]);
@@ -78,6 +76,13 @@ const startAnalysis = () => withLoading(isAnalyzing, async () => {
     return;
   }
 
+  // 先切换到分析视图，显示加载状态
+  currentStep.value = 'analysis';
+  analysisResult.value = null;
+  dataQualityReport.value = null;
+  cleaningSuggestions.value = [];
+  fieldMappings.value = {};
+
   // 调用 API 获取数据质量报告
   const result = await cleaningAPI.analyzeDataQuality(
     selectedFile.value,
@@ -90,9 +95,6 @@ const startAnalysis = () => withLoading(isAnalyzing, async () => {
   cleaningSuggestions.value = result.cleaning_suggestions;
   fieldMappings.value = result.field_mappings;
   cleanedFileId.value = result.cleaned_file_id || undefined;
-
-  // 进入下一步
-  currentStep.value = 'analysis';
 }, '数据分析失败');
 
 // 跳过清洗直接上传
@@ -104,29 +106,64 @@ const skipAndUpload = () => {
 const applyCleaningActions = () => withLoading(isCleaning, async () => {
   if (!selectedFile.value) return;
 
+  // 将组建议展开为逐列建议以便后端执行
+  const expandedSuggestions: CleaningSuggestion[] = cleaningSuggestions.value.flatMap(s => {
+    if (s.columns && s.columns.length > 0) {
+      return s.columns.map(col => ({ ...s, column: col, columns: undefined }));
+    }
+    return [s];
+  });
+
+  // 根据选中项执行清洗逻辑，仅执行用户选择的动作
+  const actionsToApply: CleaningAction[] = selectedCleaningActions.value.map(a => ({ ...a }));
+
+  // 如果没有用户选择，则默认执行所有建议
+  const suggestionsToApply = actionsToApply.length > 0
+    ? expandedSuggestions.filter(s => actionsToApply.some(a => a.type === s.type && a.column === s.column))
+    : expandedSuggestions;
+
   const result = await cleaningAPI.executeCleaning(
     selectedFile.value,
-    cleaningSuggestions.value.filter(s =>
-      selectedCleaningActions.value.some(a => a.column === s.column && a.type === s.type)
-    ),
+    suggestionsToApply,
     fieldMappings.value,
     userRequirements.value,
-    selectedModel.value || undefined
+    selectedModel.value || undefined,
   );
 
   if (result.success) {
-    // 保存清洗后文件ID
-    cleanedFileId.value = result.cleaned_file_id;
-
-    // 进入完成步骤
+    cleanedFileId.value = result.cleaned_file_id || cleanedFileId.value;
     currentStep.value = 'complete';
   } else {
     ElMessage.error(result.error || '数据清洗失败');
   }
-}, '数据清洗失败');
+}, '执行清洗操作失败');
 
-// 切换清洗操作
+// 切换清洗动作选择
 const toggleCleaningAction = (suggestion: CleaningSuggestion) => {
+  // 组建议：批量勾选/取消所有列
+  if (suggestion.columns && suggestion.columns.length > 0) {
+    const allSelected = suggestion.columns.every(col =>
+      selectedCleaningActions.value.some(a => a.type === suggestion.type && a.column === col)
+    );
+
+    if (allSelected) {
+      // 取消所有列
+      suggestion.columns.forEach(col => {
+        const idx = selectedCleaningActions.value.findIndex(a => a.type === suggestion.type && a.column === col);
+        if (idx >= 0) selectedCleaningActions.value.splice(idx, 1);
+      });
+    } else {
+      // 勾选所有列（去重）
+      suggestion.columns.forEach(col => {
+        const exists = selectedCleaningActions.value.some(a => a.type === suggestion.type && a.column === col);
+        if (!exists) {
+          selectedCleaningActions.value.push({ type: suggestion.type, column: col });
+        }
+      });
+    }
+    return;
+  }
+
   const existingIndex = selectedCleaningActions.value.findIndex(
     action => action.column === suggestion.column && action.type === suggestion.type
   );

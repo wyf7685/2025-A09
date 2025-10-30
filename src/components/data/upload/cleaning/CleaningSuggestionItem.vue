@@ -87,9 +87,7 @@ const toggleSelection = () => {
     <div class="item-checkbox">
       <el-checkbox :checked="isSelected" @change="toggleSelection" size="large" />
     </div>
-    <div class="item-icon" :class="`icon-${getIssueTypeColor(suggestion.type)}`">
-      <el-icon :component="getIssueTypeIcon(suggestion.type)" />
-    </div>
+    <!-- 移除图标块，避免空方块显示 -->
     <div class="item-content">
       <div class="item-header">
         <div class="item-title">{{ suggestion.description }}</div>
@@ -105,7 +103,14 @@ const toggleSelection = () => {
       <div class="item-details">
         <div class="detail-row">
           <span class="detail-label">影响列:</span>
-          <el-tag type="info" size="small">{{ suggestion.column }}</el-tag>
+          <template v-if="suggestion.columns && suggestion.columns.length > 0">
+            <div class="columns-list">
+              <el-tag v-for="col in suggestion.columns" :key="col" type="info" size="small">{{ col }}</el-tag>
+            </div>
+          </template>
+          <template v-else>
+            <el-tag type="info" size="small">{{ suggestion.column }}</el-tag>
+          </template>
         </div>
         <div class="detail-row" v-if="suggestion.impact">
           <span class="detail-label">影响程度:</span>
@@ -145,41 +150,7 @@ const toggleSelection = () => {
     margin-top: 4px;
   }
 
-  .item-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    margin-top: 4px;
-
-    &.icon-success {
-      background: #f0fdf4;
-      color: #22c55e;
-    }
-
-    &.icon-warning {
-      background: #fef3c7;
-      color: #f59e0b;
-    }
-
-    &.icon-danger {
-      background: #fef2f2;
-      color: #ef4444;
-    }
-
-    &.icon-info {
-      background: #eff6ff;
-      color: #3b82f6;
-    }
-
-    &.icon-primary {
-      background: #f3f4f6;
-      color: #6366f1;
-    }
-  }
+  /* 移除 .item-icon 样式块 */
 
   .item-content {
     flex: 1;
@@ -221,6 +192,12 @@ const toggleSelection = () => {
         .detail-value {
           font-size: 14px;
           color: #374151;
+        }
+
+        .columns-list {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
         }
       }
     }
