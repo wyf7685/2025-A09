@@ -23,12 +23,17 @@ def create_file_source(file_path: Path, name: str | None = None, **pandas_kwargs
         **pandas_kwargs: 传递给 read_csv/read_excel 的参数
 
     Returns:
-        CSVDataSource: CSV 数据源
+        FileDataSource: 文件数据源
     """
+    file_type = file_path.suffix.lower().removeprefix(".")
+    if file_type not in {"csv", "xlsx", "xls"}:
+        raise ValueError(f"不支持的文件类型: {file_type}. 仅支持 csv, xlsx, xls 文件")
+    source_type = "csv" if file_type == "csv" else "excel"
+
     metadata = DataSourceMetadata(
-        id=f"csv_{file_path.stem}",
+        id=f"{source_type}_{file_path.stem}",
         name=name or file_path.name,
-        source_type="csv",
+        source_type=source_type,
     )
 
     return FileDataSource(file_path, metadata, **pandas_kwargs)
@@ -53,10 +58,15 @@ def create_dremio_source(
     if (
         len(dremio_source.path) == 2
         and dremio_source.path[0] == settings.DREMIO_EXTERNAL_NAME
-        and dremio_source.path[1].endswith((".csv", ".xls", ".xlsx"))
+        and dremio_source.path[1].endswith(".csv")
     ):
         file_path = settings.DREMIO_EXTERNAL_DIR / Path(*dremio_source.path[1:])
-        return create_file_source(file_path, name=name)
+        metadata = DataSourceMetadata(
+            id=f"csv_{file_path.stem}",
+            name=name or file_path.name,
+            source_type="csv",
+        )
+        return FileDataSource(file_path, metadata)
 
     source_name = ".".join(dremio_source.path)
 

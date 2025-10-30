@@ -8,6 +8,7 @@ from app.const import DATASOURCE_DIR, TEMP_DIR
 from app.core.config import settings
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
 from app.core.datasource.dremio import DremioDataSource
+from app.core.datasource.file import FileDataSource
 from app.core.dremio import get_async_dremio_client
 from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
@@ -127,11 +128,7 @@ class DataSourceService:
     async def sync_from_dremio(self) -> None:
         dss = await _fetch_dremio_source()
 
-        current_ds = {
-            source.unique_id: source_id
-            for source_id, source in self.sources.items()
-            if source.unique_id.startswith("dremio:")
-        }
+        current_ds = {source.unique_id: source_id for source_id, source in self.sources.items()}
 
         # 记录从Dremio获取的数据源
         dremio_unique_ids: set[str] = set()
@@ -172,6 +169,12 @@ class DataSourceService:
                                 # 文件存在但Dremio中没有，可能是缓存问题，不删除
                                 logger.warning(f"文件存在但Dremio中未找到，跳过删除: {file_name}")
                                 continue
+                    elif isinstance(source, FileDataSource):
+                        file_path = source.file_path
+                        if file_path.exists():
+                            # 文件存在但Dremio中没有，可能是缓存问题，不删除
+                            logger.warning(f"文件存在但Dremio中未找到，跳过删除: {file_path}")
+                            continue
 
                     # 如果文件不存在，删除数据源
                     await self.delete_source(source_id)

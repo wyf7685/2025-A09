@@ -46,9 +46,13 @@ class _Cache[T]:
             return None
         return [self._type(**item) for item in value]
 
-    async def aset(self, value: list[T]) -> None:
+    async def aset(self, value: list[T], ttl: int | None) -> None:
         cache = await _get_cache()
-        await cache.set(self._key, [item.__dict__ for item in value])
+        await cache.set(
+            self._key,
+            [item.__dict__ for item in value],
+            **({"ttl": ttl} if ttl is not None else {}),
+        )
 
     async def aexpire(self) -> None:
         cache = await _get_cache()
@@ -57,8 +61,8 @@ class _Cache[T]:
     def get(self) -> list[T] | None:
         return lifespan.from_thread(self.aget)
 
-    def set(self, value: list[T]) -> None:
-        return lifespan.from_thread(self.aset, value)
+    def set(self, value: list[T], ttl: int | None) -> None:
+        return lifespan.from_thread(self.aset, value, ttl)
 
     def expire(self) -> None:
         return lifespan.from_thread(self.aexpire)
