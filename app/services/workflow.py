@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import anyio
-from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCall, ToolMessage
 
 from app.const import DATA_DIR
 from app.core.agent.resume import is_resumable_tool, resume_tool_call
@@ -265,6 +265,16 @@ class WorkflowService:
                 args=json.dumps(tool_call.args) if isinstance(tool_call.args, dict) else tool_call.args,
                 status="running",
             )
+            tool_call_dict: ToolCall = {
+                "name": tool_name,
+                "args": tool_call.args,
+                "id": tool_call_id,
+                "type": "tool_call",
+            }
+            if not messages or not isinstance(messages[-1], AIMessage):
+                messages.append(AIMessage(content="", tool_calls=[tool_call_dict]))
+            else:
+                messages[-1].tool_calls.append(tool_call_dict)
 
         def tool_call_success(result: str, artifact: dict | None = None) -> None:
             entry_append_tool_call()

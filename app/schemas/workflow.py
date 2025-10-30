@@ -25,6 +25,7 @@ class WorkflowDefinition(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     tool_calls: list[WorkflowToolCall] = Field(default_factory=list)
+    # datasource id -> description
     initial_datasets: dict[str, str] = Field(default_factory=dict)
     source_rs: int
 
