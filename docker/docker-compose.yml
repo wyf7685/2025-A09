@@ -8,6 +8,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - backend_data:/app/data
       - external_data:/external
+      - executor_data:/executor
     environment:
       - HOST=0.0.0.0
       - PORT=8081 # see nginx.conf
@@ -17,7 +18,7 @@ services:
       - DREMIO_PASSWORD=password123
       - DREMIO_EXTERNAL_DIR=/external
       - DREMIO_EXTERNAL_NAME=external
-      - DOCKER_RUNNER_IMAGE=ghcr.io/wyf7685/2025-a09/executor:latest
+      - EXECUTOR_DATA_DIR=/executor
       - CORS_ALLOW_ORIGINS=["*"]
       - REDIS_HOST=redis
     depends_on:
@@ -42,6 +43,13 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  executor:
+    image: ghcr.io/wyf7685/2025-a09/executor:latest
+    restart: unless-stopped
+    volumes:
+      - executor_data:/data
+    command: ['python', '/executor.py', 'composed']
 
   # Dremio 服务
   dremio:
@@ -83,3 +91,4 @@ volumes:
   dremio_data:
   dremio_conf:
   external_data:
+  executor_data:
