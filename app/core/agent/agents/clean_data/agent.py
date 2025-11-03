@@ -67,6 +67,7 @@ def _create_graph() -> CompiledStateGraph[CleaningState, None, CleaningState, Cl
 
 class SmartCleanDataAgent:
     _graph: CompiledStateGraph[CleaningState, None, CleaningState, CleaningState] = _create_graph()
+
     @staticmethod
     @copy_param_annotations(apply_cleaning_actions)
     async def apply_cleaning_actions(*args: Any, **kwargs: Any) -> ApplyCleaningResult | OperationFailedModel:

@@ -10,11 +10,11 @@ from typing import Any, Self, TypedDict
 from weakref import finalize
 
 import anyio.to_thread
+import docker
+import docker.errors
 import numpy as np
 import pandas as pd
 
-import docker
-import docker.errors
 from app.core.config import settings
 from app.core.datasource import DataSource
 from app.log import logger

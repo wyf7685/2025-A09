@@ -60,6 +60,7 @@ logger_id_file = logger.add(
     format=log_format,
 )
 
+
 def configure_logging() -> None:
     """配置日志记录器。"""
     logging.config.dictConfig(LOGGING_CONFIG)
