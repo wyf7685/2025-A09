@@ -151,11 +151,12 @@ def execute_code(code: str) -> dict:
 
 
 def worker(path: Path) -> None:
-    context["df"] = pd.read_csv(path / "data.csv")
+    data_file = path / "data.csv"
     input_file = path / "input.py"
     output_file = path / "output.json"
-    while not input_file.exists():
+    while not data_file.exists() or not input_file.exists():
         time.sleep(1)
+    context["df"] = pd.read_csv(data_file)
     code = input_file.read_text(encoding="utf-8")
     input_file.unlink()
     configure_matplotlib()

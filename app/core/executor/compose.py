@@ -49,6 +49,7 @@ class ComposedCodeExecutor(AbstractCodeExecutor):
         data_dir = self._data_dir / uuid.uuid4().hex
         data_dir.mkdir(parents=True, exist_ok=True)
         (data_dir / "input.py").write_text(code, encoding="utf-8")
+        self.data_source.get_full().to_csv(data_dir / "data.csv", index=False)
         output_file = data_dir / "output.json"
         while not output_file.exists():
             time.sleep(0.5)
