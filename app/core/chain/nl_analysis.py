@@ -1,4 +1,3 @@
-import ast
 import re
 
 import pandas as pd
@@ -213,12 +212,7 @@ class NL2DataAnalysis(
 
         overview = source.format_overview()
 
-        try:
-            ast.parse(query)
-        except BaseException:
-            code = NL2Code(self.llm).invoke((overview, query))
-        else:
-            code = query
+        code = NL2Code(self.llm).invoke((overview, query))
 
         result = self.executor.execute(code)
         logger.info(f"初始分析执行结果: success={result['success']}")
