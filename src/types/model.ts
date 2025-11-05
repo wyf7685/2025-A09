@@ -25,15 +25,15 @@ export interface MLModel {
 }
 
 /**
- * LLM模型信息
+ * LLM模型信息（不包含敏感信息如API Key）
  */
 export interface LLMModel {
   id: string;
   name: string;
   provider: string;
-  description?: string;
   apiUrl?: string; // 自定义API URL
-  apiKey?: string; // 自定义API Key
+  model_name?: string; // 用户自定义的显示名称
+  api_model_name?: string; // API调用时使用的正确模型名称
   available?: boolean; // 是否已配置可用
 }
 
