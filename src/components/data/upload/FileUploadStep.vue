@@ -248,9 +248,8 @@ const completeCleaning = () => {
 
 <style lang="scss" scoped>
 .file-upload-step {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 20px 40px;
+  margin: -24px -24px 0 -24px;
+  padding: 24px 40px 40px;
 
   .back-button {
     margin-bottom: 20px;

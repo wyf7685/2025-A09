@@ -9,7 +9,7 @@
     }
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "[html]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
@@ -21,9 +21,7 @@
   "editor.formatOnPaste": true,
   "editor.formatOnType": true,
   "editor.formatOnSave": true,
-
   "python.envFile": "",
-
   // file nesting
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
@@ -33,7 +31,6 @@
     "package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .prettier*, prettier*, .editorconfig",
     "pyproject.toml": "pyproject.toml, poetry.lock, pdm.lock, uv.lock, requirements.txt, Pipfile, Pipfile.lock"
   },
-
   "typescript.format.semicolons": "insert",
   "html.format.wrapAttributes": "preserve"
 }

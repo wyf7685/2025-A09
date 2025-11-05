@@ -25,14 +25,16 @@ const emit = defineEmits<{
 
 <template>
   <div class="analysis-results">
-    <div v-if="isAnalyzing" class="loading-status">
-      <el-empty description="正在智能分析数据质量，请稍候...">
-        <template #image>
-          <Icon icon="line-md:loading-loop" width="60" height="60" color="#667eea" />
-        </template>
-      </el-empty>
+    <div v-if="isAnalyzing" class="loading-container">
+      <div class="loading-status">
+        <el-empty description="正在智能分析数据质量，请稍候...">
+          <template #image>
+            <Icon icon="line-md:loading-loop" width="60" height="60" color="#667eea" />
+          </template>
+        </el-empty>
+      </div>
     </div>
-    <div v-else>
+    <div v-else class="results-container">
       <!-- 智能分析结果总览 -->
       <QualitySummaryCards :data-quality-report="dataQualityReport"
         :cleaning-suggestions-count="cleaningSuggestions.length"
@@ -79,9 +81,14 @@ const emit = defineEmits<{
 
 <style lang="scss" scoped>
 .analysis-results {
-  .loading-status {
-    padding: 40px 0;
-    text-align: center;
+  
+  .loading-container {
+    min-height: 500px;
+    
+    .loading-status {
+      padding: 100px 0;
+      text-align: center;
+    }
   }
 
   .analysis-actions {
