@@ -2,10 +2,16 @@
 工作流管理API
 """
 
+import json
+from collections.abc import AsyncIterator
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Path, status
 from fastapi.responses import StreamingResponse
 
 from app.log import logger
+from app.schemas.chat import ChatEntry, UserChatMessage
+from app.schemas.session import Session
 from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, WorkflowDefinition
 from app.services.session import session_service
 from app.services.workflow import workflow_service
@@ -63,6 +69,46 @@ async def save_workflow(request: SaveWorkflowRequest) -> WorkflowDefinition:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"保存工作流失败: {e}") from e
 
 
+async def generate_workflow_execution_stream(
+    session: Session,
+    workflow: WorkflowDefinition,
+    datasource_mappings: dict[str, str],
+) -> AsyncIterator[str]:
+    """生成工作流执行的流式响应"""
+    try:
+        # 构造工作流执行消息
+        workflow_message = (
+            f"执行工作流：{workflow.name}\n"
+            f"描述：{workflow.description}\n"
+            f"将按顺序执行 {len(workflow.tool_calls)} 个工具调用"
+        )
+
+        chat_entry = ChatEntry(user_message=UserChatMessage(content=workflow_message))
+
+        # 使用 workflow_service 的流式执行
+        async for event in workflow_service.execute_workflow_stream(session, workflow, datasource_mappings):
+            try:
+                msg = event.model_dump_json().replace("/", "\\/") + "\n"
+            except Exception:
+                logger.exception("转换事件为 JSON 失败")
+            else:
+                yield msg
+
+            chat_entry.add_stream_event(event)
+
+        # 记录对话历史
+        chat_entry.merge_text()
+        session.chat_history.append(chat_entry)
+        await session_service.save_session(session)
+
+        # 发送完成信号
+        yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()}) + "\n"
+
+    except Exception as e:
+        logger.exception("工作流执行失败")
+        yield json.dumps({"error": f"工作流执行失败: {e!r}"}) + "\n"
+
+
 @router.post("/execute")
 async def execute_workflow(request: ExecuteWorkflowRequest) -> StreamingResponse:
     """执行工作流 - 通过流式接口返回执行过程"""
@@ -78,8 +124,6 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> StreamingResponse
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
         # 使用流式响应执行工作流
-        from app.api.chat import generate_workflow_execution_stream
-
         return StreamingResponse(
             generate_workflow_execution_stream(session, workflow, request.datasource_mappings),
             media_type="text/event-stream",

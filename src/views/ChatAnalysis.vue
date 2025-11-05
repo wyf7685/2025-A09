@@ -16,6 +16,7 @@ import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import { useWorkflowStore } from '@/stores/workflow';
 import type { MCPConnection, MLModel } from '@/types';
+import { API_BASE_URL } from '@/utils/api';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
@@ -190,8 +191,7 @@ const onWorkflowExecuting = async (payload: {
   workflowManagerDialogVisible.value = false;
 
   // 使用 EventSource 处理流式响应
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-  const url = `${apiBaseUrl}/workflow/execute`;
+  const url = `${API_BASE_URL}/workflow/execute`;
 
   try {
     const response = await fetch(url, {

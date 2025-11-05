@@ -7,31 +7,24 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import anyio
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCall, ToolMessage
+import anyio.to_thread
+from langchain_core.messages import AnyMessage, HumanMessage, ToolCall, ToolMessage
 
 from app.const import DATA_DIR
 from app.core.agent.agents.data_analyzer import get_agent_random_state
-from app.core.agent.events import ToolCallEvent, ToolErrorEvent, ToolResultEvent
+from app.core.agent.events import StreamEvent, ToolCallEvent, ToolErrorEvent, ToolResultEvent
 from app.core.agent.resume import get_resumable_tools, is_resumable_tool, resume_tool_call
 from app.core.agent.sources import Sources
 from app.core.agent.tools import tool_name_human_repr
 from app.core.chain.llm import get_llm_async
 from app.log import logger
-from app.schemas.chat import (
-    AssistantChatMessage,
-    AssistantChatMessageToolCall,
-    AssistantToolCall,
-    ChatEntry,
-    UserChatMessage,
-)
 from app.schemas.session import Session
 from app.schemas.workflow import WorkflowDefinition, WorkflowToolCall
 from app.services.agent import daa_service
 from app.services.datasource import datasource_service
-from app.services.session import session_service
 
 if TYPE_CHECKING:
     from app.core.datasource import DataSource
@@ -280,124 +273,12 @@ class WorkflowService:
                 agent.ctx.sources.sources[original_id or source_id] = source
 
     @classmethod
-    async def execute_workflow(
-        cls,
-        session: Session,
-        workflow: WorkflowDefinition,
-        datasource_mappings: dict[str, str],  # original dataset ID -> mapped dataset ID
-    ) -> None:
-        # 检查工作流中的工具调用
-        logger.info(f"工作流 {workflow.id} 中有 {len(workflow.tool_calls)} 个工具调用")
-        if len(workflow.tool_calls) == 0:
-            logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
-            return
-
-        # 创建聊天条目
-        chat_entry = ChatEntry(
-            user_message=UserChatMessage(content=f"执行工作流：{workflow.name}"),
-            assistant_response=(assistant_response := AssistantChatMessage()),
-        )
-
-        def entry_append_tool_call() -> None:
-            assistant_response.content.append(AssistantChatMessageToolCall(id=tool_call_id))
-            assistant_response.tool_calls[tool_call_id] = AssistantToolCall(
-                name=tool_name,
-                args=json.dumps(tool_call.args) if isinstance(tool_call.args, dict) else tool_call.args,
-                status="running",
-            )
-            tool_call_dict: ToolCall = {
-                "name": tool_name,
-                "args": tool_call.args,
-                "id": tool_call_id,
-                "type": "tool_call",
-            }
-            if not messages or not isinstance(messages[-1], AIMessage):
-                messages.append(AIMessage(content="", tool_calls=[tool_call_dict]))
-            else:
-                messages[-1].tool_calls.append(tool_call_dict)
-
-        def tool_call_success(result: str, artifact: dict | None = None) -> None:
-            entry_append_tool_call()
-
-            result_with_artifact = result
-            if artifact and isinstance(artifact, dict) and artifact.get("type") == "image":
-                image_base64 = artifact.get("base64_data", "")
-                caption = artifact.get("caption", "分析结果图表")
-                result_with_artifact = f"{result}\n\n![{caption}](data:image/png;base64,{image_base64})"
-                logger.info("工具调用返回了图像结果")
-
-            assistant_response.tool_calls[tool_call_id].status = "success"
-            assistant_response.tool_calls[tool_call_id].result = result_with_artifact
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=result, artifact=artifact, status="success"))
-
-        def tool_call_error(error_msg: str) -> None:
-            entry_append_tool_call()
-            assistant_response.tool_calls[tool_call_id].status = "error"
-            assistant_response.tool_calls[tool_call_id].error = error_msg
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
-
-        async with cls._fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
-            messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
-
-            # 直接使用工作流中保存的工具调用
-            for idx, tool_call in enumerate(workflow.tool_calls, 1):
-                logger.info(f"处理第 {idx}/{len(workflow.tool_calls)} 个工具调用: {tool_call.name}")
-                tool_call_id = tool_call.id or f"tool_{id(tool_call)}"
-                tool_name = tool_call.name or ""
-                tool_args = tool_call.args
-
-                # 执行工具调用
-                logger.info(f"执行工具调用: {tool_name} (参数: {tool_call.args})")
-
-                try:
-                    # 执行工具调用
-                    try:
-                        result = resume_tool_call(
-                            tool_call={"name": tool_name, "args": tool_args, "id": tool_call_id},
-                            extra={"sources": sources},
-                        )
-                    except Exception as tool_error:
-                        # 更新工具调用状态为错误
-                        tool_call_error(str(tool_error))
-                        logger.exception(f"工具 {tool_name} 执行过程中发生错误: {tool_error}")
-                        continue
-
-                    # 处理工具返回的结果
-                    if isinstance(result, tuple) and len(result) == 2:
-                        # 处理可能的图像结果（如analyze_data工具）
-                        text_result, artifact = result
-                        # 提取文本内容
-                        result_content = str(
-                            text_result.content if isinstance(text_result, ToolMessage) else text_result
-                        )
-                        tool_call_success(result_content, artifact)
-                    else:
-                        # 标准的文本结果处理
-                        result_content = str(result.content if isinstance(result, ToolMessage) else result)
-                        tool_call_success(result_content)
-
-                    # 截取结果的前100个字符显示在日志中
-                    result_str = str(result_content)
-                    truncated_result = result_str[:100] + "..." if len(result_str) > 100 else result_str
-                    logger.info(f"工具调用执行成功: {tool_name}, 结果: {truncated_result}")
-
-                except Exception as e:
-                    # 更新工具调用状态为错误
-                    tool_call_error(str(e))
-                    logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
-
-                logger.info(f"已执行工具调用: {tool_name}")
-
-        session.chat_history.append(chat_entry)
-        await session_service.save_session(session)
-
-    @classmethod
     async def execute_workflow_stream(
         cls,
         session: Session,
         workflow: WorkflowDefinition,
         datasource_mappings: dict[str, str],
-    ) -> AsyncGenerator[Any]:
+    ) -> AsyncGenerator[StreamEvent]:
         """流式执行工作流，生成事件供前端显示"""
 
         # 检查工作流中的工具调用
@@ -405,50 +286,6 @@ class WorkflowService:
         if len(workflow.tool_calls) == 0:
             logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
             return
-
-        # 创建聊天条目
-        chat_entry = ChatEntry(
-            user_message=UserChatMessage(content=f"执行工作流：{workflow.name}"),
-            assistant_response=(assistant_response := AssistantChatMessage()),
-        )
-
-        def entry_append_tool_call() -> None:
-            assistant_response.content.append(AssistantChatMessageToolCall(id=tool_call_id))
-            assistant_response.tool_calls[tool_call_id] = AssistantToolCall(
-                name=tool_name,
-                args=json.dumps(tool_call.args) if isinstance(tool_call.args, dict) else tool_call.args,
-                status="running",
-            )
-            tool_call_dict: ToolCall = {
-                "name": tool_name,
-                "args": tool_call.args,
-                "id": tool_call_id,
-                "type": "tool_call",
-            }
-            if not messages or not isinstance(messages[-1], AIMessage):
-                messages.append(AIMessage(content="", tool_calls=[tool_call_dict]))
-            else:
-                messages[-1].tool_calls.append(tool_call_dict)
-
-        def tool_call_success(result: str, artifact: dict | None = None) -> None:
-            entry_append_tool_call()
-
-            result_with_artifact = result
-            if artifact and isinstance(artifact, dict) and artifact.get("type") == "image":
-                image_base64 = artifact.get("base64_data", "")
-                caption = artifact.get("caption", "分析结果图表")
-                result_with_artifact = f"{result}\n\n![{caption}](data:image/png;base64,{image_base64})"
-                logger.info("工具调用返回了图像结果")
-
-            assistant_response.tool_calls[tool_call_id].status = "success"
-            assistant_response.tool_calls[tool_call_id].result = result_with_artifact
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=result, artifact=artifact, status="success"))
-
-        def tool_call_error(error_msg: str) -> None:
-            entry_append_tool_call()
-            assistant_response.tool_calls[tool_call_id].status = "error"
-            assistant_response.tool_calls[tool_call_id].error = error_msg
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
 
         async with cls._fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
             messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
@@ -468,15 +305,17 @@ class WorkflowService:
 
                 # 发送工具调用事件
                 yield ToolCallEvent(
-                    id=tool_call_id, name=tool_name, human_repr=tool_name_human_repr(tool_name), args=tool_args
+                    id=tool_call_id,
+                    name=tool_name,
+                    human_repr=tool_name_human_repr(tool_name),
+                    args=tool_args,
                 )
 
                 try:
                     # 执行工具调用
-                    result = resume_tool_call(
-                        tool_call={"name": tool_name, "args": tool_args, "id": tool_call_id},
-                        extra={"sources": sources, "codegen_llm": codegen_llm},
-                    )
+                    tc: ToolCall = {"name": tool_name, "args": tool_args, "id": tool_call_id}
+                    extra = {"sources": sources, "codegen_llm": codegen_llm}
+                    result = await anyio.to_thread.run_sync(resume_tool_call, tc, extra)
 
                     # 处理工具返回的结果
                     if isinstance(result, tuple) and len(result) == 2:
@@ -486,12 +325,10 @@ class WorkflowService:
                             text_result.content if isinstance(text_result, ToolMessage) else text_result
                         )
                         yield ToolResultEvent(id=tool_call_id, result=result_content, artifact=artifact)
-                        tool_call_success(result_content, artifact)
                     else:
                         # 标准的文本结果处理
                         result_content = str(result.content if isinstance(result, ToolMessage) else result)
                         yield ToolResultEvent(id=tool_call_id, result=result_content)
-                        tool_call_success(result_content)
 
                     logger.info(f"工具调用执行成功: {tool_name}")
 
@@ -499,11 +336,7 @@ class WorkflowService:
                     # 发送错误事件
                     error_msg = str(e)
                     yield ToolErrorEvent(id=tool_call_id, error=error_msg)
-                    tool_call_error(error_msg)
                     logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
-
-        session.chat_history.append(chat_entry)
-        await session_service.save_session(session)
 
 
 # 创建单例实例
