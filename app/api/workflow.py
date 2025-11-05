@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Path, status
+from fastapi.responses import StreamingResponse
 
 from app.log import logger
 from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, WorkflowDefinition
@@ -62,9 +63,9 @@ async def save_workflow(request: SaveWorkflowRequest) -> WorkflowDefinition:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"保存工作流失败: {e}") from e
 
 
-@router.post("/execute", response_model=dict)
-async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
-    """执行工作流"""
+@router.post("/execute")
+async def execute_workflow(request: ExecuteWorkflowRequest) -> StreamingResponse:
+    """执行工作流 - 通过流式接口返回执行过程"""
     try:
         # 获取工作流
         workflow = await workflow_service.get_workflow(request.workflow_id)
@@ -76,20 +77,13 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> dict:
         if not session:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
-        # 从工作流获取工具调用并执行
-        try:
-            await workflow_service.execute_workflow(session, workflow, request.datasource_mappings)
-        except Exception as e:
-            logger.exception(f"执行工具调用失败: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"执行工作流工具调用失败: {e}"
-            ) from e
+        # 使用流式响应执行工作流
+        from app.api.chat import generate_workflow_execution_stream
 
-        return {
-            "success": True,
-            "session_id": request.session_id,
-            "message": f"已成功执行工作流 {workflow.name}，共执行了 {len(workflow.tool_calls)} 个工具调用",
-        }
+        return StreamingResponse(
+            generate_workflow_execution_stream(session, workflow, request.datasource_mappings),
+            media_type="text/event-stream",
+        )
     except HTTPException:
         raise
     except Exception as e:

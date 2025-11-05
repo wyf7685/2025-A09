@@ -24,9 +24,18 @@ interface WorkflowExecutionResult {
   executed_tools?: number;
 }
 
+interface WorkflowExecutionPayload {
+  workflow_id: string;
+  workflow_name: string;
+  session_id: string;
+  datasource_mappings: Record<string, string>;
+  message: string;
+}
+
 // 组件事件
 const emit = defineEmits<{
   workflowExecuted: [result: WorkflowExecutionResult];
+  workflowExecuting: [payload: WorkflowExecutionPayload];
 }>();
 
 // 使用工作流存储
@@ -106,21 +115,22 @@ const executeSelectedWorkflow = async () => {
 
   executing.value = true;
   try {
-    const result = await workflowStore.executeWorkflow({
+    // 构造工作流执行的消息
+    const workflowMessage = `执行工作流：${selectedWorkflow.value.name}`;
+    
+    // 关闭对话框
+    visible.value = false;
+    
+    // 发出事件，让父组件通过聊天接口执行工作流
+    emit('workflowExecuting', {
       workflow_id: selectedWorkflow.value.id,
+      workflow_name: selectedWorkflow.value.name,
       session_id: props.sessionId,
       datasource_mappings: dataSourceMappings.value,
+      message: workflowMessage,
     });
-
-    if (result) {
-      const message = result.message
-        ? result.message
-        : `工作流执行成功，共执行了${result.executed_tools || selectedWorkflow.value.tool_calls?.length || 0}个工具调用`;
-
-      ElMessage.success(message);
-      emit('workflowExecuted', result);
-      visible.value = false;
-    }
+    
+    ElMessage.success('开始执行工作流，请查看聊天界面');
   } catch (error) {
     console.error('执行工作流失败:', error);
     ElMessage.error('执行工作流失败');

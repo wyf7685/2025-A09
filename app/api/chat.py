@@ -17,9 +17,11 @@ from app.core.agent.prompts.data_analyzer import PROMPTS as DATA_ANALYZER_PROMPT
 from app.exception import DAAServiceError
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
-from app.schemas.session import SessionID
+from app.schemas.session import Session, SessionID
+from app.schemas.workflow import WorkflowDefinition
 from app.services.agent import daa_service
 from app.services.session import session_service
+from app.services.workflow import workflow_service
 from app.utils import buffered_stream, escape_tag
 
 router = APIRouter(prefix="/chat")
@@ -317,3 +319,43 @@ async def generate_report(request: GenerateReportRequest) -> GenerateReportRespo
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"生成分析报告失败: {e}",
         ) from e
+
+
+async def generate_workflow_execution_stream(
+    session: Session,
+    workflow: WorkflowDefinition,
+    datasource_mappings: dict[str, str],
+) -> AsyncIterator[str]:
+    """生成工作流执行的流式响应"""
+    try:
+        # 构造工作流执行消息
+        workflow_message = (
+            f"执行工作流：{workflow.name}\n"
+            f"描述：{workflow.description}\n"
+            f"将按顺序执行 {len(workflow.tool_calls)} 个工具调用"
+        )
+
+        chat_entry = ChatEntry(user_message=UserChatMessage(content=workflow_message))
+
+        # 直接使用 workflow_service 的流式执行
+        async for event in workflow_service.execute_workflow_stream(session, workflow, datasource_mappings):
+            try:
+                msg = event.model_dump_json() + "\n"
+            except Exception:
+                logger.exception("转换事件为 JSON 失败")
+            else:
+                yield msg
+
+            chat_entry.add_stream_event(event)
+
+        # 记录对话历史
+        chat_entry.merge_text()
+        session.chat_history.append(chat_entry)
+        await session_service.save_session(session)
+
+        # 发送完成信号
+        yield json.dumps({"type": "done", "timestamp": datetime.now().isoformat()}) + "\n"
+
+    except Exception as e:
+        logger.exception("工作流执行失败")
+        yield json.dumps({"error": f"工作流执行失败: {e!r}"}) + "\n"

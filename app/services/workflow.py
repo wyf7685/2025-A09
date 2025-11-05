@@ -7,14 +7,16 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import anyio
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCall, ToolMessage
 
 from app.const import DATA_DIR
-from app.core.agent.resume import is_resumable_tool, resume_tool_call
+from app.core.agent.resume import get_resumable_tools, is_resumable_tool, resume_tool_call
 from app.core.agent.sources import Sources
+from app.core.chain.llm import get_llm_async
 from app.log import logger
 from app.schemas.chat import (
     AssistantChatMessage,
@@ -141,22 +143,58 @@ class WorkflowService:
 
     async def _save_workflow_file(self, file_path: anyio.Path, workflow: WorkflowDefinition) -> None:
         """保存工作流到文件"""
-        data = workflow.model_dump_json(exclude_none=True)
-        await file_path.write_text(data, encoding="utf-8")
+        try:
+            data = workflow.model_dump_json(exclude_none=True, indent=2)
+            await file_path.write_text(data, encoding="utf-8")
+
+            # 验证保存是否成功
+            saved_data = await file_path.read_text(encoding="utf-8")
+            saved_workflow = WorkflowDefinition.model_validate_json(saved_data)
+
+            logger.info(
+                f"工作流已保存到 {file_path.name}:\n"
+                f"  - 工具调用数: {len(workflow.tool_calls)}\n"
+                f"  - 文件大小: {len(data)} 字节\n"
+                f"  - 验证: 保存后读取到 {len(saved_workflow.tool_calls)} 个工具调用"
+            )
+
+            if len(saved_workflow.tool_calls) != len(workflow.tool_calls):
+                logger.error(
+                    f"⚠️ 工作流保存验证失败! "
+                    f"原始: {len(workflow.tool_calls)} vs 保存后: {len(saved_workflow.tool_calls)}"
+                )
+        except Exception as e:
+            logger.error(f"保存工作流文件失败: {e}")
+            raise
 
     @staticmethod
     async def extract_from_session(session: Session, name: str, description: str) -> WorkflowDefinition:
         # 从会话中提取所有工具调用
         tool_calls: list[WorkflowToolCall] = []
 
+        # 记录可恢复工具列表
+        resumable_tools = get_resumable_tools()
+        logger.info(f"当前已注册 {len(resumable_tools)} 个可恢复工具: {resumable_tools[:10]}...")
+
+        # 统计信息
+        total_tool_calls = 0
+        skipped_non_resumable = 0
+        failed_to_parse = 0
+
         # 从chat_history中提取工具调用
-        for chat_entry in session.chat_history:
+        for entry_idx, chat_entry in enumerate(session.chat_history):
             assistant_response = chat_entry.assistant_response
 
             # 处理assistant_response中的tool_calls
             for tool_call_id, tool_call in assistant_response.tool_calls.items():
+                total_tool_calls += 1
                 try:
+                    # 检查工具是否可恢复
                     if not is_resumable_tool(tool_call.name):
+                        logger.warning(
+                            f"跳过不可恢复的工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})"
+                        )
+                        skipped_non_resumable += 1
                         continue
 
                     # 处理参数
@@ -182,21 +220,46 @@ class WorkflowService:
 
                     # 添加到工具调用列表
                     tool_calls.append(tool_call_data)
-                    logger.info(f"添加工具调用: {tool_call.name}")
+                    logger.info(f"✓ 添加工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
 
                 except Exception as e:
-                    logger.warning(f"处理工具调用时出错: {e}")
+                    logger.warning(f"✗ 处理工具调用 [{entry_idx + 1}] 时出错 (ID: {tool_call_id}): {e}")
+                    failed_to_parse += 1
 
-        # 调试信息
-        logger.info(f"从会话 {session.id} 中提取了 {len(tool_calls)} 个工具调用")
+        # 详细的调试信息
+        logger.info(
+            f"从会话 {session.id} 提取工具调用统计:\n"
+            f"  - 总工具调用数: {total_tool_calls}\n"
+            f"  - 成功提取: {len(tool_calls)}\n"
+            f"  - 跳过(不可恢复): {skipped_non_resumable}\n"
+            f"  - 解析失败: {failed_to_parse}"
+        )
 
         datasets: dict[str, str] = {}
         for ds_id in session.dataset_ids:
             source = await datasource_service.get_source(ds_id)
             datasets[ds_id] = source.metadata.name or ds_id
 
-        async with daa_service.use_agent(session) as agent:
-            rs = agent.ctx.sources.random_state
+        # 获取 random_state，但不创建完整的 agent（避免触发工具执行）
+        # 直接从状态文件读取，避免触发 agent 的 set_state 和 resume_tool_calls
+        rs = None
+        state_file = Path("data/states") / f"{session.id}.json"
+        if state_file.exists():
+            try:
+                async with await anyio.open_file(state_file, encoding="utf-8") as f:
+                    state_data = json.loads(await f.read())
+                    rs = state_data.get("sources_random_state")
+                    if rs is not None:
+                        logger.info(f"从状态文件读取 random_state: {state_file}, rs={rs}")
+            except Exception as e:
+                logger.warning(f"读取状态文件 {state_file} 失败: {e}")
+
+        if rs is None:
+            # 如果没有保存的 random_state，使用默认值
+            import random
+
+            rs = random.randint(0, 2**31 - 1)
+            logger.warning(f"会话 {session.id} 没有保存的 random_state，使用默认值: {rs}")
 
         # 创建工作流
         return WorkflowDefinition(
@@ -350,6 +413,147 @@ class WorkflowService:
 
         session.chat_history.append(chat_entry)
         await session_service.save_session(session)
+
+    @classmethod
+    async def execute_workflow_stream(
+        cls,
+        session: Session,
+        workflow: WorkflowDefinition,
+        datasource_mappings: dict[str, str],
+    ) -> AsyncGenerator[Any]:
+        """流式执行工作流，生成事件供前端显示"""
+        from app.core.agent.events import ToolCallEvent, ToolErrorEvent, ToolResultEvent
+
+        # 检查工作流中的工具调用
+        logger.info(f"工作流 {workflow.id} 中有 {len(workflow.tool_calls)} 个工具调用")
+        if len(workflow.tool_calls) == 0:
+            logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
+            return
+
+        async with cls._fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
+            messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
+
+            # 创建数据源ID映射表：旧ID -> 新ID
+            # 用于追踪工具执行过程中创建的新数据源
+            dataset_id_mapping: dict[str, str] = {original_id: original_id for original_id in workflow.initial_datasets}
+
+            # 逐个执行工具调用并生成事件
+            for idx, tool_call in enumerate(workflow.tool_calls, 1):
+                tool_call_id = tool_call.id or f"tool_{id(tool_call)}"
+                tool_name = tool_call.name or ""
+                tool_args = tool_call.args.copy() if isinstance(tool_call.args, dict) else tool_call.args
+
+                # 记录执行前sources中的数据源
+                sources_before = set(sources.sources.keys())
+
+                # 保存原始的dataset_id (用于后续映射更新)
+                original_dataset_ids: dict[str, str] = {}
+                if isinstance(tool_args, dict):
+                    if "dataset_id" in tool_args:
+                        original_dataset_ids["dataset_id"] = tool_args["dataset_id"]
+                    if "target_dataset_id" in tool_args:
+                        original_dataset_ids["target_dataset_id"] = tool_args["target_dataset_id"]
+
+                logger.info(f"处理第 {idx}/{len(workflow.tool_calls)} 个工具调用: {tool_name}")
+                logger.info(f"工具参数(原始): {tool_args}")
+                logger.info(f"当前数据源映射表: {dataset_id_mapping}")
+                logger.info(f"当前Sources中的数据源: {list(sources.sources.keys())}")
+
+                # 替换参数中的dataset_id为映射后的ID
+                if isinstance(tool_args, dict):
+                    if "dataset_id" in tool_args:
+                        old_id = tool_args["dataset_id"]
+                        new_id = dataset_id_mapping.get(old_id, old_id)
+                        if old_id != new_id:
+                            logger.info(f"数据源ID映射: {old_id} -> {new_id}")
+                            tool_args["dataset_id"] = new_id
+
+                    # 处理可能的其他dataset相关参数
+                    if "source_datasets" in tool_args:
+                        src_type = type(tool_args["source_datasets"])
+                        logger.info(f"source_datasets 类型: {src_type}, 值: {tool_args['source_datasets']}")
+                        if isinstance(tool_args["source_datasets"], dict):
+                            mapped_sources = {}
+                            for alias, ds_id in tool_args["source_datasets"].items():
+                                mapped_sources[alias] = dataset_id_mapping.get(ds_id, ds_id)
+                            tool_args["source_datasets"] = mapped_sources
+                        elif isinstance(tool_args["source_datasets"], list):
+                            tool_args["source_datasets"] = [
+                                dataset_id_mapping.get(ds_id, ds_id) for ds_id in tool_args["source_datasets"]
+                            ]
+
+                    if "target_dataset_id" in tool_args:
+                        old_target = tool_args["target_dataset_id"]
+                        new_target = dataset_id_mapping.get(old_target, old_target)
+                        if old_target != new_target:
+                            logger.info(f"目标数据源ID映射: {old_target} -> {new_target}")
+                        tool_args["target_dataset_id"] = new_target
+
+                logger.info(f"工具参数(映射后): {tool_args}")
+
+                # 发送工具调用事件
+                from app.core.agent.tools._registry import TOOL_NAMES
+
+                human_repr = TOOL_NAMES.get(tool_name, tool_name)
+                yield ToolCallEvent(id=tool_call_id, name=tool_name, human_repr=human_repr, args=tool_args)
+
+                try:
+                    # 执行工具调用
+                    result = resume_tool_call(
+                        tool_call={"name": tool_name, "args": tool_args, "id": tool_call_id},
+                        extra={
+                            "sources": sources,
+                            "llm": await get_llm_async(
+                                session.agent_model_config.code_generation or session.agent_model_config.default
+                            ),
+                        },
+                    )
+
+                    # 检测新创建的数据源
+                    sources_after = set(sources.sources.keys())
+                    new_sources = sources_after - sources_before
+
+                    if new_sources and len(new_sources) == 1:
+                        # 如果工具创建了新数据源，更新映射
+                        new_id = next(iter(new_sources))
+
+                        # 检查是否有原始的dataset_id需要映射
+                        if "dataset_id" in original_dataset_ids:
+                            orig_id = original_dataset_ids["dataset_id"]
+                            dataset_id_mapping[orig_id] = new_id
+                            logger.info(f"检测到新数据源创建: {orig_id} 现在映射到 {new_id}")
+
+                        # 检查是否有target_dataset_id需要映射
+                        if "target_dataset_id" in original_dataset_ids:
+                            orig_target = original_dataset_ids["target_dataset_id"]
+                            dataset_id_mapping[orig_target] = new_id
+                            logger.info(f"检测到目标数据源创建: {orig_target} 现在映射到 {new_id}")
+
+                    # 处理工具返回的结果
+                    if isinstance(result, tuple) and len(result) == 2:
+                        # 处理可能的图像结果
+                        text_result, artifact = result
+                        result_content = str(
+                            text_result.content if isinstance(text_result, ToolMessage) else text_result
+                        )
+                        yield ToolResultEvent(id=tool_call_id, result=result_content, artifact=artifact)
+                        messages.append(
+                            ToolMessage(tool_call_id=tool_call_id, content=result_content, artifact=artifact)
+                        )
+                    else:
+                        # 标准的文本结果处理
+                        result_content = str(result.content if isinstance(result, ToolMessage) else result)
+                        yield ToolResultEvent(id=tool_call_id, result=result_content)
+                        messages.append(ToolMessage(tool_call_id=tool_call_id, content=result_content))
+
+                    logger.info(f"工具调用执行成功: {tool_name}")
+
+                except Exception as e:
+                    # 发送错误事件
+                    error_msg = str(e)
+                    yield ToolErrorEvent(id=tool_call_id, error=error_msg)
+                    messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
+                    logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
 
 
 # 创建单例实例

@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from langchain_core.tools import BaseTool, tool
 
+from app.core.agent.resume import resumable
 from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
@@ -75,3 +76,26 @@ def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
         return format_result(result), artifact
 
     return analyze_data
+
+
+@resumable("analyze_data")
+def analyze_data(sources: Sources, llm: LLM, dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
+    logger.info(f"执行通用数据分析工具: dataset_id={dataset_id}")
+    source = sources.get(dataset_id)
+
+    with CodeExecutor(source) as executor:
+        logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
+        result = NL2DataAnalysis(llm, executor=executor).invoke((source, query))
+
+    # 处理图片结果
+    artifact = {}
+    if (fig := result["figure"]) is not None:
+        # 创建包含图片的工具输出
+        artifact = {
+            "type": "image",
+            "base64_data": base64.b64encode(fig).decode(),
+            "caption": "分析图表输出",
+        }
+
+        return format_result(result), artifact
+    return format_result(result), artifact

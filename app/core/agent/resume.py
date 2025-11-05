@@ -59,6 +59,11 @@ def is_resumable_tool(name: str) -> bool:
     return name in _RESUME_TOOL_REGISTRY
 
 
+def get_resumable_tools() -> list[str]:
+    """获取所有已注册的可恢复工具名称"""
+    return list(_RESUME_TOOL_REGISTRY.keys())
+
+
 def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
     """
     恢复工具调用
@@ -154,6 +159,12 @@ def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
             args = {**tool_call["args"], **extra} if isinstance(tool_call, dict) else {**tool_call.args, **extra}
             return registered_tool.fn(**{k: v for k, v in args.items() if k in registered_tool.params})
 
-    # 如果无法匹配，提供更详细的诊断信息
-    logger.warning(f"工具 {name} 未找到匹配")
-    return None
+    # 如果无法匹配,提供更详细的诊断信息
+    available_tools = list(_RESUME_TOOL_REGISTRY.keys())
+    logger.error(
+        f"❌ 工具 '{name}' 未找到匹配\n"
+        f"   映射后名称: '{mapped_name}'\n"
+        f"   已注册工具数: {len(available_tools)}\n"
+        f"   已注册工具列表: {available_tools}"
+    )
+    raise ValueError(f"工具 '{name}' 未在可恢复工具注册表中找到。已注册的工具: {available_tools}")
