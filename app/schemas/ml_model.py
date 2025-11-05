@@ -18,10 +18,11 @@ class MLModelInfoOut(BaseModel):
     session_id: SessionID = ""
     session_name: str = ""
     dataset_id: str = ""
+    dataset_name: str = ""
+    dataset_description: str = ""
 
     # 模型性能指标
     accuracy: float = 0.0
-    score: float = 0.0
     metrics: dict[str, Any] = {}
 
     # 模型特征信息

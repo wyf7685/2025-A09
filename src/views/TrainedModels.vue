@@ -20,11 +20,9 @@ const selectedModel = ref<MLModel | null>(null);
 const refreshModels = async (): Promise<void> => {
   loading.value = true;
   try {
-    const sessionId = sessionStore.currentSession?.id;
-    if (sessionId) {
-      const response = await modelStore.getModels(sessionId);
-      models.value = response.models || [];
-    }
+    // 获取所有已注册的模型，而不是仅当前会话的模型
+    const response = await modelStore.getAllModels();
+    models.value = response.models || [];
   } catch (error) {
     console.error('刷新模型失败:', error);
     ElMessage.error('获取模型列表失败');
@@ -135,12 +133,6 @@ onMounted(async () => {
                 </span>
                 <span class="meta-item">
                   <el-icon>
-                    <TrendCharts />
-                  </el-icon>
-                  评分: {{ model.score.toFixed(3) }}
-                </span>
-                <span class="meta-item">
-                  <el-icon>
                     <Star />
                   </el-icon>
                   准确率: {{ (model.accuracy * 100).toFixed(1) }}%
@@ -197,13 +189,21 @@ onMounted(async () => {
             <label>模型类型:</label>
             <span>{{ selectedModel.type }}</span>
           </div>
+          <div class="detail-row" v-if="selectedModel.session_name">
+            <label>所属对话:</label>
+            <span>{{ selectedModel.session_name }}</span>
+          </div>
+          <div class="detail-row" v-if="selectedModel.dataset_name">
+            <label>数据集名称:</label>
+            <span>{{ selectedModel.dataset_name }}</span>
+          </div>
+          <div class="detail-row" v-if="selectedModel.dataset_description">
+            <label>数据集描述:</label>
+            <span>{{ selectedModel.dataset_description }}</span>
+          </div>
           <div class="detail-row">
             <label>目标变量:</label>
             <span>{{ selectedModel.target_column }}</span>
-          </div>
-          <div class="detail-row">
-            <label>模型评分:</label>
-            <span>{{ selectedModel.score.toFixed(3) }}</span>
           </div>
           <div class="detail-row">
             <label>准确率:</label>

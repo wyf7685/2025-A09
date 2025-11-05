@@ -12,12 +12,13 @@ export interface MLModel {
   features: string[];
   feature_count: number;
   dataset_id: string;
+  dataset_name?: string;
+  dataset_description?: string;
   session_id: string;
   session_name?: string;
   status: string;
   version: string;
   accuracy: number;
-  score: number;
   metrics: Record<string, number>;
   hyperparams?: Record<string, any>;
   is_registered?: boolean;

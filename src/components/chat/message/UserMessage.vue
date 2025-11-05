@@ -24,6 +24,9 @@ defineProps<{
   border-radius: 18px 18px 6px 18px;
   max-width: 70%;
   word-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
   font-size: 14px;
   line-height: 1.5;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
