@@ -35,7 +35,8 @@ TOOL_DESCRIPTION = """\
 - 异常检测(使用detect_outliers_tool代替)
 - 模型训练(使用train_model_tool代替)
 
-使用方式：提供要用于数据分析的数据集ID和具体的分析需求描述，无需自己编写代码。
+使用方式：提供要用于数据分析的数据集ID(dataset_id)和具体的分析需求描述(query)
+**禁止直接编写分析代码**
 """
 
 

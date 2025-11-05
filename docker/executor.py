@@ -1,15 +1,15 @@
-"""
-Docker容器内执行Python代码的脚本
-从/data/input.py读取代码，执行后将结果输出到/data/output.json
-"""
-
 import base64
 import contextlib
 import json
+import multiprocessing
+import shutil
+import sys
 import time
 import traceback
 from io import BytesIO, StringIO
+from multiprocessing import Process
 from pathlib import Path
+from threading import Thread
 
 import matplotlib as mpl
 
@@ -146,19 +146,58 @@ def execute_code(code: str) -> dict:
 
     result["output"] = mystdout.getvalue()
     if stderr := mystderr.getvalue():
-        result["error"] += stderr
+        result["error"] += "\n\n------ STDERR ------\n\n" + stderr
     return result
 
 
-if __name__ == "__main__":
-    context["df"] = pd.read_csv("/data/data.csv")
-    input_file = Path("/data/input.py")
-    output_file = Path("/data/output.json")
+def worker(path: Path) -> None:
+    data_file = path / "data.csv"
+    input_file = path / "input.py"
+    output_file = path / "output.json"
+    while not data_file.exists() or not input_file.exists():
+        time.sleep(1)
+    context["df"] = pd.read_csv(data_file)
+    code = input_file.read_text(encoding="utf-8")
+    input_file.unlink()
+    configure_matplotlib()
+    result = execute_code(code)
+    output_file.write_text(json.dumps(result), encoding="utf-8")
+
+
+def cleanup(path: Path) -> None:
+    time.sleep(30)
+    shutil.rmtree(path)
+
+
+def composed_main() -> None:
+    data_root = Path("/data")
+    tasks: dict[str, Process] = {}
+
     while True:
-        if not input_file.exists():
-            time.sleep(0.5)
-            continue
-        code = input_file.read_text(encoding="utf-8")
-        input_file.unlink()
-        result = execute_code(code)
-        output_file.write_text(json.dumps(result), encoding="utf-8")
+        for name in list(tasks.keys()):
+            p = tasks[name]
+            if not p.is_alive():
+                p.join()
+                del tasks[name]
+                Thread(target=cleanup, args=(data_root / name,)).start()
+
+        dirs = [d for d in data_root.iterdir() if d.is_dir() and d.name not in tasks]
+        for d in dirs:
+            if d.joinpath("input.py").exists():
+                p = Process(target=worker, args=(d,))
+                p.start()
+                tasks[d.name] = p
+
+        time.sleep(1)
+
+
+def main() -> None:
+    if "composed" in sys.argv[1:]:
+        multiprocessing.freeze_support()
+        composed_main()
+    else:
+        worker(Path("/data"))
+
+
+if __name__ == "__main__":
+    main()

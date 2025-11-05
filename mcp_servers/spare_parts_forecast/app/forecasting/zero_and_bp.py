@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from tensorflow.python.keras.callbacks import History
 
 
-
 def bp_forecast_impl(
     df: pd.DataFrame,
     target_column: str,

@@ -2,7 +2,7 @@
 import type { LLMModel } from '@/types';
 import { DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
-import { ElButton, ElCol, ElCollapseTransition, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRow, ElSelect, ElTag, ElUpload, type UploadFile } from 'element-plus';
+import { ElButton, ElCol, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRow, ElSelect, ElTag, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
 
 // 双向绑定数据
@@ -115,7 +115,8 @@ const handleDragleave = () => {
     </div>
     <div v-else>
       <div class="upload-section">
-        <el-upload ref="uploadRef" class="upload-area" :class="{ 'hovering': isHovering }" drag action="#" :auto-upload="false" :show-file-list="false"
+        <el-upload ref="uploadRef" class="upload-area" :class="{ 'hovering': isHovering }" drag action="#"
+          :auto-upload="false" :show-file-list="false"
           :on-change="handleFileUpload" :multiple="false" @dragover="handleDragover"
           @dragleave="handleDragleave" @mouseenter="isHovering = true" @mouseleave="isHovering = false">
           <div class="upload-content" :class="{ 'active-drag': dragover }">
@@ -219,22 +220,29 @@ const handleDragleave = () => {
 
     .upload-area {
       width: 100%;
-      border: none; /* 去掉外部虚线边框 */
+      border: none;
+      /* 去掉外部虚线边框 */
       border-radius: 8px;
-      padding: 0; /* 扩展到外层尺寸 */
+      padding: 0;
+      /* 扩展到外层尺寸 */
 
       :deep(.el-upload-dragger) {
         width: 100%;
-        min-height: 220px; /* 高度扩大 */
+        min-height: 220px;
+        /* 高度扩大 */
         border: 2px dashed #d1d5db;
         border-radius: 8px;
         padding: 24px 28px;
         box-sizing: border-box;
         transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-        display: flex;               /* 居中容器 */
-        align-items: center;         /* 垂直居中 */
-        justify-content: center;     /* 水平居中 */
-        text-align: center;          /* 文本居中 */
+        display: flex;
+        /* 居中容器 */
+        align-items: center;
+        /* 垂直居中 */
+        justify-content: center;
+        /* 水平居中 */
+        text-align: center;
+        /* 文本居中 */
       }
 
       &.hovering :deep(.el-upload-dragger) {
@@ -250,7 +258,8 @@ const handleDragleave = () => {
       .upload-content {
         display: flex;
         align-items: center;
-        justify-content: center;     /* 将图标和文字整体居中 */
+        justify-content: center;
+        /* 将图标和文字整体居中 */
         gap: 16px;
       }
 
@@ -278,15 +287,24 @@ const handleDragleave = () => {
       }
 
       @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.06); }
-        100% { transform: scale(1); }
+        0% {
+          transform: scale(1);
+        }
+
+        50% {
+          transform: scale(1.06);
+        }
+
+        100% {
+          transform: scale(1);
+        }
       }
     }
   }
 
   .file-details {
-    position: relative; /* 让删除按钮可以定位到右上角 */
+    position: relative;
+    /* 让删除按钮可以定位到右上角 */
     display: flex;
     align-items: center;
     gap: 16px;

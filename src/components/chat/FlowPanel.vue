@@ -3,10 +3,7 @@ import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { FlowPanel, FlowStep, LLMModel } from '@/types';
 import { CircleCheck, Clock, DArrowRight, Loading, Monitor, Setting } from '@element-plus/icons-vue';
-import {
-  ElButton, ElDialog, ElForm, ElFormItem, ElIcon, ElInput, ElMessage,
-  ElOption, ElOptionGroup, ElSelect, ElTag, ElText
-} from 'element-plus';
+import { ElButton, ElIcon, ElMessage, ElOption, ElOptionGroup, ElSelect, ElTag } from 'element-plus';
 import { computed, onMounted, ref, watch } from 'vue';
 
 // 扩展 FlowRoute 类型，支持 nextLoop 和 toolName 字段

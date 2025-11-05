@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import type { AnyMCPConnection, MCPConnection, MCPConnectionTransport } from '@/types/mcp';
-import {
-  ChatDotRound,
-  Connection,
-  Delete,
-  Link,
-  Monitor
-} from '@element-plus/icons-vue';
+import { ChatDotRound, Connection, Delete, Link, Monitor } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElButton, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMessage, ElOption, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch, ElTag } from 'element-plus';
 import { nextTick, onMounted, reactive, ref, watch } from 'vue';

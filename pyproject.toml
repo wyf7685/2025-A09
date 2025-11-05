@@ -128,7 +128,6 @@ ignore = [
   "B911",   # batched-without-explicit-strict
   "PGH004", # blanket-noqa
   "PLC",    # stupid
-  "PD901",  # pandas-df-variable-name
   "N807",   # dunder-function-name
   "N806",   # non-lowercase-variable-in-function
   "N803",   # invalid-argument-name
@@ -149,7 +148,7 @@ mark-parentheses = false
 [tool.ruff.lint.isort]
 known-first-party = ["app", "tests/*"]
 extra-standard-library = ["typing_extensions"]
-known-third-party = ["dremio"]
+known-third-party = ["dremio", "docker"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

@@ -224,6 +224,18 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         source_name = f"{uuid.uuid4()}{suffix}"
         await anyio.to_thread.run_sync(shutil.copyfile, file, self.external_dir / source_name)
 
+        # 设置 "external"."{source_name}" 的属性: 自动读取文件首行作为列名
+        payload = {
+            "extractHeader": True,
+            "hasMergedCells": True,
+            "type": "Excel",
+        }
+        await self._request(
+            "PUT",
+            f"/apiv2/source/{self.external_name}/file_format/{source_name}",
+            json=payload,
+        )
+
         await source_cache.aexpire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
@@ -419,7 +431,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
-        await container_cache.aset(containers)
+        await container_cache.aset(containers, ttl=3600)
         logger.opt(colors=True).info(f"共找到 <y>{len(containers)}</> 个容器")
         return containers
 
@@ -466,6 +478,6 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
 
         containers = await self._list_containers()
         sources = await self._query_source_children(*(c.path for c in containers))
-        await source_cache.aset(sources)
+        await source_cache.aset(sources, ttl=3600)
         logger.opt(colors=True).info(f"共找到 <y>{len(sources)}</> 个数据源")
         return sources

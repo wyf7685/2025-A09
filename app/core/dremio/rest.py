@@ -228,6 +228,18 @@ class DremioRestClient(AbstractDremioClient):
         source_name = f"{uuid.uuid4()}{suffix}"
         shutil.copyfile(file, self.external_dir / source_name)
 
+        # 设置 "external"."{source_name}" 的属性: 自动读取文件首行作为列名
+        payload = {
+            "extractHeader": True,
+            "hasMergedCells": True,
+            "type": "Excel",
+        }
+        self._request(
+            "PUT",
+            f"/apiv2/source/{self.external_name}/file_format/{source_name}",
+            json=payload,
+        )
+
         source_cache.expire()
         return DremioSource(
             id=f"{self.external_name}.{source_name}",
@@ -417,7 +429,7 @@ class DremioRestClient(AbstractDremioClient):
             for item in response.json()["data"]
             if item["type"] == "CONTAINER" and item["containerType"] == "SOURCE"
         ]
-        container_cache.set(containers)
+        container_cache.set(containers, ttl=3600)
         logger.opt(colors=True).info(f"共找到 <y>{len(containers)}</> 个容器")
         return containers
 
@@ -466,6 +478,6 @@ class DremioRestClient(AbstractDremioClient):
 
         containers = self._list_containers()
         sources = self._query_source_children(*(c.path for c in containers))
-        source_cache.set(sources)
+        source_cache.set(sources, ttl=3600)
         logger.opt(colors=True).info(f"共找到 <y>{len(sources)}</> 个数据源")
         return sources

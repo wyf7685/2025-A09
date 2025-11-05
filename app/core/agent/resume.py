@@ -33,65 +33,23 @@ def resumable(tool_name: str, fn: ResumeCall | None = None, /) -> Callable[[Resu
     """
 
     def decorator(fn: ResumeCall) -> ResumeCall:
+        def register(name: str, *alias: str) -> None:
+            tool = ResumableTool(name=name, fn=fn, params=list(inspect.signature(fn).parameters))
+            for n in (name, *alias):
+                _RESUME_TOOL_REGISTRY[n] = tool
+
         # 规范化工具名称（移除首尾空格）
         normalized_name = tool_name.strip()
 
-        # 记录注册信息
-        # logger.info(f"注册工具: {normalized_name}")
-
         # 从TOOL_NAMES中获取所有可能的工具名称
         for func_name, name in TOOL_NAMES.items():
-            if name == normalized_name or name.replace(" ", "") == normalized_name.replace(" ", ""):
-                logger.info(f"找到工具名称匹配: {func_name} -> {name}")
-                _RESUME_TOOL_REGISTRY[name] = ResumableTool(
-                    name=name,
-                    fn=fn,
-                    params=list(inspect.signature(fn).parameters),
-                )
-
-                # 同时注册函数名作为工具名称
-                if func_name not in _RESUME_TOOL_REGISTRY:
-                    logger.info(f"同时注册函数名称: {func_name}")
-                    _RESUME_TOOL_REGISTRY[func_name] = ResumableTool(
-                        name=name,
-                        fn=fn,
-                        params=list(inspect.signature(fn).parameters),
-                    )
-
-                # 注册无空格版本的工具名称
-                no_space_name = name.replace(" ", "")
-                if no_space_name != name and no_space_name not in _RESUME_TOOL_REGISTRY:
-                    logger.info(f"同时注册无空格版本工具名称: {no_space_name}")
-                    _RESUME_TOOL_REGISTRY[no_space_name] = ResumableTool(
-                        name=name,
-                        fn=fn,
-                        params=list(inspect.signature(fn).parameters),
-                    )
+            no_space_name = name.replace(" ", "")
+            if func_name == fn.__name__ or name == normalized_name or no_space_name == normalized_name.replace(" ", ""):
+                register(name, func_name, no_space_name)
 
         # 注册工具
-        _RESUME_TOOL_REGISTRY[normalized_name] = ResumableTool(
-            name=normalized_name,
-            fn=fn,
-            params=list(inspect.signature(fn).parameters),
-        )
-
-        # 注册函数名称
-        _RESUME_TOOL_REGISTRY[fn.__name__] = ResumableTool(
-            name=normalized_name,
-            fn=fn,
-            params=list(inspect.signature(fn).parameters),
-        )
-
-        # 同时注册无空格版本的工具名称，确保更好的兼容性
         no_space_name = normalized_name.replace(" ", "")
-        if no_space_name != normalized_name and no_space_name not in _RESUME_TOOL_REGISTRY:
-            logger.info(f"同时注册无空格版本工具名称: {no_space_name}")
-            _RESUME_TOOL_REGISTRY[no_space_name] = ResumableTool(
-                name=normalized_name,
-                fn=fn,
-                params=list(inspect.signature(fn).parameters),
-            )
-
+        register(normalized_name, fn.__name__, no_space_name)
         return fn
 
     return decorator if fn is None else decorator(fn)

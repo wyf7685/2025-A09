@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Docker Executor
     DOCKER_RUNNER_IMAGE: str | None = None
+    EXECUTOR_DATA_DIR: Path | None = None
 
     # Dremio REST API config
     DREMIO_BASE_URL: str = "http://localhost"

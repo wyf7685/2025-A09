@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { turncateString } from '@/utils/tools';
 import { ArrowRight, DocumentChecked, EditPen, Search } from '@element-plus/icons-vue';
-import { ElButton, ElCard, ElInput, ElMessage, ElTag, ElTooltip,ElIcon } from 'element-plus';
+import { ElButton, ElCard, ElIcon, ElInput, ElMessage, ElTag, ElTooltip } from 'element-plus';
 
 // 使用 defineModel 实现双向绑定
 const searchQuery = defineModel<string>('searchQuery', { required: true });

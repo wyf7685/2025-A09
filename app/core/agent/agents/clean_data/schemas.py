@@ -19,7 +19,8 @@ class CleaningState(TypedDict):
     cleaned_source_id: str | None
     cleaning_summary: str
     error_message: str | None
-    model_id:str
+    model_id: str
+
 
 def load_source(state: CleaningState, key: Literal["source_id", "cleaned_source_id"]) -> DataSource:
     if (source_id := state.get(key)) is None:

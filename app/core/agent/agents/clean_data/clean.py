@@ -340,9 +340,9 @@ def _summarize_quality_issues(issues: list[dict[str, Any]], max_per_type: int = 
         items = sorted(groups["missing_values"], key=lambda x: x.get("count", 0), reverse=True)[:max_per_type]
         sample = ", ".join(
             (
-                f"{i.get('column','?')}("
-                f"{i.get('count',0)}"
-                f"{';'+format(i.get('rate',0)*100,'.1f')+'%' if i.get('rate') is not None else ''}"
+                f"{i.get('column', '?')}("
+                f"{i.get('count', 0)}"
+                f"{';' + format(i.get('rate', 0) * 100, '.1f') + '%' if i.get('rate') is not None else ''}"
                 ")"
             ).rstrip(";")
             for i in items
@@ -355,21 +355,22 @@ def _summarize_quality_issues(issues: list[dict[str, Any]], max_per_type: int = 
 
     if groups["data_type"]:
         items = groups["data_type"][:max_per_type]
-        sample = ", ".join(f"{i.get('column','?')}→{i.get('suggested_type','')}" for i in items)
+        sample = ", ".join(f"{i.get('column', '?')}→{i.get('suggested_type', '')}" for i in items)
         parts.append(f"类型建议: {len(groups['data_type'])}列；示例: {sample}")
 
     if groups["column_name"]:
         items = groups["column_name"][:max_per_type]
-        sample = ", ".join(f"{i.get('column','?')}" for i in items)
+        sample = ", ".join(f"{i.get('column', '?')}" for i in items)
         parts.append(f"列名问题: {len(groups['column_name'])}列；示例: {sample}")
 
     if groups["outliers"]:
         items = sorted(groups["outliers"], key=lambda x: x.get("count", 0), reverse=True)[:max_per_type]
-        sample = ", ".join(f"{i.get('column','?')}({i.get('count',0)})" for i in items)
+        sample = ", ".join(f"{i.get('column', '?')}({i.get('count', 0)})" for i in items)
         parts.append(f"异常值: {len(groups['outliers'])}列；示例: {sample}")
 
     summary = "；".join(parts)
     return summary[:1000] if summary else "无显著质量问题"
+
 
 def _chain_parse(response: str) -> list[dict[str, Any]]:
     try:
@@ -467,7 +468,7 @@ def generate_suggestions(state: CleaningState) -> CleaningState:
     dtype_groups: list[dict[str, Any]] = []
     for s in deduped:
         if s.get("type") == "data_type" and _normalize_action(s.get("suggested_action", "")) == "转换类型":
-            dtype_groups.append(s)
+            dtype_groups.append(s)  # noqa: PERF401
     if len(dtype_groups) > 1:
         # 从deduped移除这些项
         deduped = [s for s in deduped if s not in dtype_groups]
@@ -482,9 +483,7 @@ def generate_suggestions(state: CleaningState) -> CleaningState:
             base["description"] = f"多列数据类型检查与转换（共{len(columns)}列）"
         deduped.append(base)
 
-    logger.info(
-        f"生成清洗建议完成，LLM {len(llm_suggestions)} 条，去重后 {len(deduped)} 条"
-    )
+    logger.info(f"生成清洗建议完成，LLM {len(llm_suggestions)} 条，去重后 {len(deduped)} 条")
 
     state["cleaning_suggestions"] = deduped
     return state
@@ -552,6 +551,7 @@ def apply_cleaning_actions(
         model_id=model_id,
     )
 
+
 # 新增：模糊列名匹配与参数增强
 def _similar_column(a: str | None, b: str | None) -> bool:
     na = _normalize_column_name(a)
@@ -559,6 +559,7 @@ def _similar_column(a: str | None, b: str | None) -> bool:
     if na == nb:
         return True
     import difflib
+
     return difflib.SequenceMatcher(None, na, nb).ratio() >= 0.95
 
 

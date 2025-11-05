@@ -1,11 +1,10 @@
-import ast
 import re
 
 import pandas as pd
 from langchain.prompts import PromptTemplate
 
 from app.core.datasource import DataSource
-from app.core.executor import CodeExecutor, ExecuteResult
+from app.core.executor import AbstractCodeExecutor, CodeExecutor, ExecuteResult
 from app.log import logger
 
 from ._base import BaseLLMRunnable
@@ -201,7 +200,7 @@ class NL2DataAnalysis(
         self,
         llm: LLM,
         max_retry: int = 3,
-        executor: CodeExecutor | None = None,
+        executor: AbstractCodeExecutor | None = None,
     ) -> None:
         super().__init__(llm)
         self.max_retry: int = max_retry
@@ -213,12 +212,7 @@ class NL2DataAnalysis(
 
         overview = source.format_overview()
 
-        try:
-            ast.parse(query)
-        except BaseException:
-            code = NL2Code(self.llm).invoke((overview, query))
-        else:
-            code = query
+        code = NL2Code(self.llm).invoke((overview, query))
 
         result = self.executor.execute(code)
         logger.info(f"初始分析执行结果: success={result['success']}")

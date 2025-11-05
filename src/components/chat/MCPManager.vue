@@ -2,13 +2,7 @@
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { MCPConnection } from '@/types/mcp';
-import {
-  Connection,
-  Delete,
-  Link,
-  Plus,
-  Search
-} from '@element-plus/icons-vue';
+import { Connection, Delete, Link, Plus, Search } from '@element-plus/icons-vue';
 import { ElBadge, ElButton, ElCheckbox, ElDialog, ElIcon, ElInput, ElMessage, ElTag } from 'element-plus';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';

@@ -6,9 +6,7 @@ defineProps<{
 
 <template>
   <div class="user-message-container">
-    <div class="user-message">
-      {{ content }}
-    </div>
+    <pre class="user-message">{{ content }}</pre>
   </div>
 </template>
 

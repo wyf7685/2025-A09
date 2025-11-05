@@ -374,7 +374,7 @@ export const dataSourceAPI = {
 // 报告相关 API
 export const reportAPI = {
   getTemplates: async () => {
-    const response = await api.get<ReportTemplate[]>('/report/templates');
+    const response = await api.get<ReportTemplate[]>('/chat/templates');
     return response.data;
   },
 
@@ -384,7 +384,7 @@ export const reportAPI = {
     formData.append('template_description', templateDescription);
     formData.append('template_file', templateFile);
 
-    const response = await api.post('/report/templates/upload', formData, {
+    const response = await api.post('/chat/templates/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -393,7 +393,7 @@ export const reportAPI = {
   },
 
   deleteTemplate: async (templateId: string) => {
-    const response = await api.delete(`/report/templates/${templateId}`);
+    const response = await api.delete(`/chat/templates/${templateId}`);
     return response.data;
   },
 
@@ -401,7 +401,7 @@ export const reportAPI = {
     const payload: Record<string, string> = { session_id: sessionId };
     if (templateId) payload.template_id = templateId;
     if (modelId) payload.model_id = modelId;
-    const response = await api.post('/report/generate', payload);
+    const response = await api.post('/chat/generate-report', payload);
     return response.data;
   },
 
