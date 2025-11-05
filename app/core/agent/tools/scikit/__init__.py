@@ -391,7 +391,7 @@ def scikit_tools(
             # 获取数据集的实际名称和描述
             dataset_name = datasource.metadata.name or dataset_id
             dataset_description = datasource.metadata.description or ""
-            
+
             # 如果这是一个工具生成的数据源，尝试从数据源服务获取原始信息
             if dataset_description.startswith(("[Tool Generated Source]", "[自动推断并转换自")):
                 try:
@@ -401,8 +401,12 @@ def scikit_tools(
                     if datasource_service.sources:
                         # 获取第一个有意义名称和描述的数据源
                         for source_id, source in datasource_service.sources.items():
-                            if (source.metadata.name and source.metadata.name != source_id and
-                                source.metadata.description and not source.metadata.description.startswith("[")):
+                            if (
+                                source.metadata.name
+                                and source.metadata.name != source_id
+                                and source.metadata.description
+                                and not source.metadata.description.startswith("[")
+                            ):
                                 dataset_name = source.metadata.name
                                 dataset_description = source.metadata.description
                                 logger.opt(colors=True).info(
