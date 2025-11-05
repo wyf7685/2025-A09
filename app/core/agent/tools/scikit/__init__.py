@@ -217,7 +217,15 @@ def scikit_tools(
                 f"目标: <e>{escape_tag(target)}</e>"
             )
             result = fit_model(
-                sources.read(dataset_id), features, target, model, model_type, test_size, random_state, hyperparams
+                sources.read(dataset_id),
+                features,
+                target,
+                model,
+                model_type,
+                test_size,
+                random_state,
+                hyperparams,
+                dataset_id,
             )
 
             train_model_cache[model_id] = result
@@ -362,26 +370,74 @@ def scikit_tools(
         saved_models[model_id] = file_path
 
         # 注册模型到模型管理系统
-        if session_id:
-            train_result = train_model_cache[model_id]
-            # 计算模型性能指标
-            evaluation = evaluate_model(train_result)
+        train_result = train_model_cache[model_id]
+        # 计算模型性能指标
+        evaluation = evaluate_model(train_result)
 
-            # 注册模型
-            registry_id = model_registry.register_model(
-                name=model_name,
-                model_type=train_result.model_type,
-                session_id=session_id,
-                dataset_id="TODO",
-                description=f"模型ID: {model_id}",
-                features=train_result.feature_columns,
-                target_column=train_result.target_column,
-                metrics=evaluation["metrics"],
-                model_path=file_path.with_suffix(".joblib"),
-                metadata_path=file_path.with_suffix(".metadata.json"),
+        # 获取会话名称
+        from app.services.session import session_service
+
+        session_name = ""
+        if session_id and session_id in session_service.sessions:
+            session_name = session_service.sessions[session_id].name or ""
+
+        # 获取数据集信息
+        dataset_id = train_result.dataset_id
+        dataset_name = dataset_id  # 默认使用 dataset_id
+        dataset_description = ""
+
+        if dataset_id and sources.exists(dataset_id):
+            datasource = sources.get(dataset_id)
+            # 获取数据集的实际名称和描述
+            dataset_name = datasource.metadata.name or dataset_id
+            dataset_description = datasource.metadata.description or ""
+
+            # 如果这是一个工具生成的数据源，尝试从数据源服务获取原始信息
+            if dataset_description.startswith(("[Tool Generated Source]", "[自动推断并转换自")):
+                try:
+                    from app.services.datasource import datasource_service
+
+                    # 如果有可用的数据源服务，尝试获取原始信息
+                    if datasource_service.sources:
+                        # 获取第一个有意义名称和描述的数据源
+                        for source_id, source in datasource_service.sources.items():
+                            if (
+                                source.metadata.name
+                                and source.metadata.name != source_id
+                                and source.metadata.description
+                                and not source.metadata.description.startswith("[")
+                            ):
+                                dataset_name = source.metadata.name
+                                dataset_description = source.metadata.description
+                                logger.opt(colors=True).info(
+                                    f"使用原始数据源信息: 名称=<c>{escape_tag(dataset_name)}</c>"
+                                )
+                                break
+                except Exception:
+                    logger.opt(colors=True).warning("获取原始数据源信息失败，使用当前数据源信息")
+
+            logger.opt(colors=True).info(
+                f"数据集信息: 名称=<c>{escape_tag(dataset_name)}</c>, "
+                f"描述=<c>{escape_tag(dataset_description or '无')}</c>"
             )
 
-            logger.opt(colors=True).info(f"<g>模型已注册到管理系统</>: <c>{registry_id}</>")
+        # 注册模型
+        registry_id = model_registry.register_model(
+            name=model_name,
+            model_type=train_result.model_type,
+            session_name=session_name,
+            dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            dataset_description=dataset_description,
+            description=f"模型ID: {model_id}",
+            features=train_result.feature_columns,
+            target_column=train_result.target_column,
+            metrics=evaluation["metrics"],
+            model_path=file_path.with_suffix(".joblib"),
+            metadata_path=file_path.with_suffix(".metadata.json"),
+        )
+
+        logger.opt(colors=True).info(f"<g>模型已注册到管理系统</>: <c>{registry_id}</>")
 
         logger.opt(colors=True).info(f"<g>模型已保存到</>: <c>{escape_tag(str(file_path.with_suffix('.joblib')))}</>")
         return result

@@ -210,6 +210,7 @@ class TrainModelResult:
     message: str
     feature_columns: list[str]
     target_column: str
+    dataset_id: str = ""
     label_encoder: LabelEncoder | None = dataclasses.field(default=None)
     hyperparams: dict[str, Any] | None = dataclasses.field(default=None)
 
@@ -223,6 +224,7 @@ def fit_model(
     test_size: float = 0.2,
     random_state: int = 42,
     hyperparams: dict[str, Any] | None = None,
+    dataset_id: str = "",
 ) -> TrainModelResult:
     """
     使用给定的模型实例和数据进行训练。
@@ -236,6 +238,7 @@ def fit_model(
         test_size (float): 测试集占总数据集的比例。
         random_state (int): 随机种子，用于复现结果。
         hyperparams (dict, optional): 记录模型超参数，仅用于信息记录。
+        dataset_id (str, optional): 数据集ID，用于记录模型训练的数据来源。
 
     Returns:
         TrainModelResult: 包含训练好的模型、测试集数据、模型类型及相关信息的字典。
@@ -276,6 +279,7 @@ def fit_model(
         message=f"模型训练成功。模型类型: {model_type}",
         feature_columns=features,
         target_column=target,
+        dataset_id=dataset_id,
         label_encoder=le,
         hyperparams=hyperparams,
     )

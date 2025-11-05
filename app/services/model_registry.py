@@ -64,8 +64,10 @@ class ModelRegistry:
         self,
         name: str,
         model_type: str,
-        session_id: SessionID,
+        session_name: str,
         dataset_id: str,
+        dataset_name: str,
+        dataset_description: str,
         description: str,
         features: list[str],
         target_column: str,
@@ -84,15 +86,17 @@ class ModelRegistry:
             description=description,
             created_at=now,
             last_used=now,
-            session_id=session_id,
+            session_id="",  # 移除 session_id
+            session_name=session_name,
             dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            dataset_description=dataset_description,
             features=features or [],
             target_column=target_column,
             metrics=metrics or {},
             model_path=model_path,
             metadata_path=metadata_path,
             accuracy=metrics.get("accuracy", 0.0) if metrics else 0.0,
-            score=metrics.get("score", 0.0) if metrics else 0.0,
         )
 
         self._models[model_id] = model_info
