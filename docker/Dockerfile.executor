@@ -1,12 +1,17 @@
 FROM python:3.12-slim-bookworm AS app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig \
-    && rm -rf /var/lib/apt/lists/* \
-    && fc-cache -f -v
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig && \
+    fc-cache -f -v
 
-RUN --mount=type=bind,source=docker/requirements.executor.txt,target=/requirements.txt \
-    pip install --no-cache-dir --index https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
-    -r /requirements.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-ADD ./docker/executor.py /executor.py
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=docker/requirements.executor.txt,target=/requirements.txt \
+    uv pip install --system -r /requirements.txt
+
+COPY docker/executor.py /executor.py
+
+CMD ["python", "/executor.py"]
