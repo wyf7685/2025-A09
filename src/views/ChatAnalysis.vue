@@ -15,7 +15,7 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import { useWorkflowStore } from '@/stores/workflow';
-import type { MCPConnection, MLModel } from '@/types';
+import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
@@ -225,7 +225,7 @@ const onWorkflowExecuting = async (payload: {
       tool_calls: {},
       loading: true,
       suggestions: [],
-    } as any);
+    } as AssistantChatMessage & { loading: boolean; tool_calls: NonNullable<AssistantChatMessage["tool_calls"]>; });
 
     messages.value.push(assistantMessage);
     scrollToBottom();
@@ -255,7 +255,19 @@ const onWorkflowExecuting = async (payload: {
           const event = JSON.parse(line);
 
           // 处理不同类型的事件
-          if (event.type === 'tool_call') {
+          if (event.type === 'llm_token') {
+            const content = event.content;
+            if (
+              !assistantMessage.content.length ||
+              assistantMessage.content[assistantMessage.content.length - 1].type !== 'text'
+            ) {
+              assistantMessage.content.push({ type: 'text', content });
+            }
+            const lastText = assistantMessage.content[assistantMessage.content.length - 1] as {
+              content: string;
+            };
+            lastText.content += content;
+          } else if (event.type === 'tool_call') {
             // 工具调用开始
             const toolCallId = event.id;
             assistantMessage.content.push({
@@ -354,13 +366,13 @@ const onWorkflowExecuted = async (result: {
   }
 
   // 显示提示：用户可以保存此会话为新的工作流
-  setTimeout(() => {
-    ElMessage({
-      type: 'info',
-      message: '提示: 您可以将当前对话保存为新的工作流，以便再次使用',
-      duration: 5000
-    });
-  }, 1000);
+  // setTimeout(() => {
+  //   ElMessage({
+  //     type: 'info',
+  //     message: '提示: 您可以将当前对话保存为新的工作流，以便再次使用',
+  //     duration: 5000
+  //   });
+  // }, 1000);
 };
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {

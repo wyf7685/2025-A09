@@ -9,6 +9,14 @@ from .custom_model import LLModelID
 type SessionID = str
 
 
+class AgentModelConfigFixed(BaseModel):
+    default: LLModelID
+    chat: LLModelID
+    create_title: LLModelID
+    summary: LLModelID
+    code_generation: LLModelID
+
+
 class AgentModelConfig(BaseModel):
     default: LLModelID
     chat: LLModelID | None = None
@@ -28,6 +36,16 @@ class AgentModelConfig(BaseModel):
     @property
     def hash(self) -> int:
         return hash("$".join(f"{name}:{getattr(self, name)}" for name in sorted(type(self).model_fields)))
+
+    @property
+    def fixed(self) -> AgentModelConfigFixed:
+        return AgentModelConfigFixed(
+            default=self.default,
+            chat=self.chat or self.default,
+            create_title=self.create_title or self.default,
+            summary=self.summary or self.default,
+            code_generation=self.code_generation or self.default,
+        )
 
 
 class Session(BaseModel):

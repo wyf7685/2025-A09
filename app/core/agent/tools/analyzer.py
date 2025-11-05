@@ -5,10 +5,12 @@ from langchain_core.tools import BaseTool, tool
 
 from app.core.agent.resume import resumable
 from app.core.agent.sources import Sources
+from app.core.chain import get_llm
 from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.executor import CodeExecutor, format_result
 from app.log import logger
+from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
 from ._registry import register_tool
@@ -79,13 +81,18 @@ def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
 
 
 @resumable("analyze_data")
-def analyze_data(sources: Sources, codegen_llm: LLM, dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
+def analyze_data(
+    sources: Sources,
+    model_config: AgentModelConfigFixed,
+    dataset_id: str,
+    query: str,
+) -> tuple[str, dict[str, str]]:
     logger.info(f"执行通用数据分析工具: dataset_id={dataset_id}")
     source = sources.get(dataset_id)
 
     with CodeExecutor(source) as executor:
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = NL2DataAnalysis(codegen_llm, executor=executor).invoke((source, query))
+        result = NL2DataAnalysis(get_llm(model_config.code_generation), executor=executor).invoke((source, query))
 
     # 处理图片结果
     artifact = {}

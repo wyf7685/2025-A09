@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING
 
 import anyio
 import anyio.to_thread
-from langchain_core.messages import AnyMessage, HumanMessage, ToolCall, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCall, ToolMessage
 
 from app.const import DATA_DIR
 from app.core.agent.agents.data_analyzer import get_agent_random_state
-from app.core.agent.events import StreamEvent, ToolCallEvent, ToolErrorEvent, ToolResultEvent
+from app.core.agent.agents.data_analyzer.utils import format_conversation
+from app.core.agent.events import LlmTokenEvent, StreamEvent, ToolCallEvent, ToolErrorEvent, ToolResultEvent
+from app.core.agent.prompts.data_analyzer import PROMPTS as DAAPROMPTS
 from app.core.agent.resume import get_resumable_tools, is_resumable_tool, resume_tool_call
 from app.core.agent.sources import Sources
 from app.core.agent.tools import tool_name_human_repr
@@ -287,11 +289,22 @@ class WorkflowService:
             logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
             return
 
+        def append_tool_call() -> None:
+            if not messages or not isinstance((m := messages[-1]), AIMessage):
+                messages.append(AIMessage(content="", tool_calls=[tc]))
+            else:
+                m.tool_calls.append(tc)
+
+        def tool_call_success(result: str, artifact: dict | None = None) -> None:
+            append_tool_call()
+            messages.append(ToolMessage(tool_call_id=tool_call_id, content=result, artifact=artifact, status="success"))
+
+        def tool_call_error(error_msg: str) -> None:
+            append_tool_call()
+            messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
+
         async with cls._fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
             messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
-            codegen_llm = await get_llm_async(
-                session.agent_model_config.code_generation or session.agent_model_config.default
-            )
 
             # 逐个执行工具调用并生成事件
             for idx, tool_call in enumerate(workflow.tool_calls, 1):
@@ -314,7 +327,7 @@ class WorkflowService:
                 try:
                     # 执行工具调用
                     tc: ToolCall = {"name": tool_name, "args": tool_args, "id": tool_call_id}
-                    extra = {"sources": sources, "codegen_llm": codegen_llm}
+                    extra = {"sources": sources, "model_config": session.agent_model_config.fixed}
                     result = await anyio.to_thread.run_sync(resume_tool_call, tc, extra)
 
                     # 处理工具返回的结果
@@ -325,10 +338,12 @@ class WorkflowService:
                             text_result.content if isinstance(text_result, ToolMessage) else text_result
                         )
                         yield ToolResultEvent(id=tool_call_id, result=result_content, artifact=artifact)
+                        tool_call_success(result_content, artifact)
                     else:
                         # 标准的文本结果处理
                         result_content = str(result.content if isinstance(result, ToolMessage) else result)
                         yield ToolResultEvent(id=tool_call_id, result=result_content)
+                        tool_call_success(result_content)
 
                     logger.info(f"工具调用执行成功: {tool_name}")
 
@@ -336,7 +351,23 @@ class WorkflowService:
                     # 发送错误事件
                     error_msg = str(e)
                     yield ToolErrorEvent(id=tool_call_id, error=error_msg)
+                    tool_call_error(error_msg)
                     logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
+
+            # 总结工作流执行结果
+            conversation, _ = format_conversation(messages, include_figures=False)
+            chat_llm = await get_llm_async(session.agent_model_config.fixed.chat)
+            summary_prompt = DAAPROMPTS.summarize_workflow.format(
+                workflow_name=workflow.name,
+                workflow_description=workflow.description,
+                execution_history=conversation,
+            )
+            summary_chunks = []
+            async for chunk in chat_llm.astream(summary_prompt):
+                yield LlmTokenEvent(content=chunk)
+                summary_chunks.append(chunk)
+            summary = "".join(summary_chunks)
+            messages.append(AIMessage(content=summary))
 
 
 # 创建单例实例
