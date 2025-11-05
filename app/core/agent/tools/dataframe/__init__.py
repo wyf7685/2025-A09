@@ -496,6 +496,52 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
     ]
 
 
+@resumable("correlation_analysis_tool")
+def correlation_analysis_tool(
+    sources: Sources,
+    dataset_id: DatasetID,
+    col1: str,
+    col2: str,
+    method: str = "pearson",
+) -> dict[str, Any]:
+    return corr_analys(sources.read(dataset_id), col1, col2, method)
+
+
+@resumable("lag_analysis_tool")
+def lag_analysis_tool(
+    sources: Sources,
+    dataset_id: DatasetID,
+    time_col1: str,
+    time_col2: str,
+) -> dict[str, Any]:
+    return lag_analys(sources.read(dataset_id), time_col1, time_col2)
+
+
+@resumable("detect_outliers_tool")
+def detect_outliers_tool(
+    sources: Sources,
+    dataset_id: DatasetID,
+    column: str,
+    method: str = "zscore",
+    threshold: int = 3,
+) -> pd.DataFrame:
+    return detect_outliers(sources.read(dataset_id), column, method, threshold)
+
+
+@resumable("inspect_dataframe_tool")
+def inspect_dataframe_tool(
+    sources: Sources,
+    dataset_id: DatasetID,
+    options: InspectDataframeOptions | None = None,
+) -> InspectDataframeResult:
+    return inspect_dataframe(sources.read(dataset_id), options)
+
+
+@resumable("get_missing_values_summary_tool")
+def get_missing_values_summary_tool(sources: Sources, dataset_id: DatasetID) -> MissingValuesSummary:
+    return get_missing_values_summary(sources.read(dataset_id))
+
+
 @resumable("create_column_tool")
 def _(
     sources: Sources,

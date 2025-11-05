@@ -54,7 +54,7 @@ def inspect_dataframe(
     logger.opt(colors=True).info(f"<g>检查数据当前状态</>: <y>{escape_tag(str(options))}</>")
 
     options = options or {}
-    n_rows_preview = options.get("n_rows_preview", 5)
+    n_rows_preview = int(options.get("n_rows_preview", 5))
     show_columns = options.get("show_columns", True)
     show_dtypes = options.get("show_dtypes", True)
     show_null_counts = options.get("show_null_counts", True)
