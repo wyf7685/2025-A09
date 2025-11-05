@@ -38,7 +38,9 @@ const getProviderColor = (provider: string): string => {
     'OpenAI': '#00a67e',
     'Google': '#4285f4',
     'DeepSeek': '#8b5cf6',
-    'Anthropic': '#d97706'
+    'Ollama': '#000000',
+    'ZhipuAI': '#1e88e5',
+    // 'Anthropic': '#d97706',
   };
   return colorMap[provider] || '#6b7280';
 };
@@ -59,7 +61,17 @@ const modelProviders = [
     name: 'DeepSeek',
     models: ['deepseek-chat', 'deepseek-reasoner'],
     defaultUrl: 'https://api.deepseek.com/v1'
-  }
+  },
+  {
+    name: 'Ollama',
+    models: ['llama3.2', 'llama3.1', 'qwen2.5', 'mistral', 'gemma2'],
+    defaultUrl: 'http://localhost:11434'
+  },
+  {
+    name: 'ZhipuAI',
+    models: ['glm-4.5', 'glm-4.5-air', 'glm-4.6'],
+    defaultUrl: 'https://open.bigmodel.cn/api/paas/v4'
+  },
 ];
 
 // LLM模型管理方法
@@ -111,6 +123,8 @@ const getDefaultApiUrl = (provider: string): string => {
     'Google': 'https://generativelanguage.googleapis.com/v1beta',
     'OpenAI': 'https://api.openai.com/v1',
     'DeepSeek': 'https://api.deepseek.com/v1',
+    'Ollama': 'http://localhost:11434',
+    'ZhipuAI': 'https://open.bigmodel.cn/api/paas/v4',
     'Anthropic': 'https://api.anthropic.com/v1'
   };
   return defaultUrls[provider] || '';

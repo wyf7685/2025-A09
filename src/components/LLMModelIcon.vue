@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DeepseekIcon from '@/assets/icons/deepseek.ico';
+import ZhipuAIIcon from '@/assets/icons/zhipu.svg';
 import { Icon } from '@iconify/vue';
 
 defineProps<{
@@ -11,10 +12,12 @@ const standardIcons = {
   'OpenAI': { icon: 'simple-icons:openai', color: '#00a67e' },
   'Google': { icon: 'logos:google-icon', color: '#4285f4' },
   'Anthropic': { icon: 'simple-icons:anthropic', color: '#d97706' },
+  'Ollama': { icon: 'simple-icons:ollama', color: '#000000' },
 } as Record<string, { icon: string, color: string; }>;
 
 const extraIcons = {
   'DeepSeek': DeepseekIcon,
+  'ZhipuAI': ZhipuAIIcon,
 } as Record<string, string>;
 </script>
 

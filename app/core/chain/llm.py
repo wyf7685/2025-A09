@@ -107,6 +107,34 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             timeout=30,  # 30秒超时
             max_retries=2,  # 最多重试2次
         )
+    elif config.provider.lower() == "ollama":
+        from langchain_ollama import ChatOllama, OllamaLLM
+
+        llm = lambda: OllamaLLM(
+            model=config.api_model_name,
+            base_url=config.api_url,
+        )
+        chat_model = lambda: ChatOllama(
+            model=config.api_model_name,
+            base_url=config.api_url,
+        )
+    elif config.provider.lower() == "zhipuai":
+        from langchain_openai import ChatOpenAI, OpenAI
+
+        llm = lambda: OpenAI(
+            model=config.api_model_name,
+            api_key=SecretStr(config.api_key),
+            base_url=config.api_url,
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
+        chat_model = lambda: ChatOpenAI(
+            model=config.api_model_name,
+            api_key=SecretStr(config.api_key),
+            base_url=config.api_url,
+            timeout=30,  # 30秒超时
+            max_retries=2,  # 最多重试2次
+        )
     # elif config.provider.lower() == "openai":
     #     from langchain_openai import ChatOpenAI, OpenAI
 
