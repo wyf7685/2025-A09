@@ -81,10 +81,10 @@ const emit = defineEmits<{
 
 <style lang="scss" scoped>
 .analysis-results {
-  
+
   .loading-container {
     min-height: 500px;
-    
+
     .loading-status {
       padding: 100px 0;
       text-align: center;

@@ -28,7 +28,7 @@ const selectedModel = defineModel<string>('selectedModel', { required: true });
 const selectedFile = defineModel<File | null>('selectedFile', { required: true });
 
 // 组件属性（可用模型列表）
-const { availableModels } = defineProps<{ availableModels: LLMModel[] }>();
+const { availableModels } = defineProps<{ availableModels: LLMModel[]; }>();
 
 const currentStep = ref<CleaningStep>('upload');
 const dataQualityReport = ref<DataQualityReport | null>(null);
@@ -274,7 +274,7 @@ const completeCleaning = () => {
     display: flex;
     justify-content: flex-end;
     margin-top: 30px;
-    gap: 12px;
+    gap:12px;
   }
 }
 </style>
