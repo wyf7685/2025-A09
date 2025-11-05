@@ -14,6 +14,10 @@ def register_tool[T: Callable](name: str) -> Callable[[T], T]:
     return decorator
 
 
+def tool_name_human_repr(name: str) -> str:
+    return TOOL_NAMES.get(name, name)
+
+
 @lifespan.on_startup
 def _() -> None:
     from .analyzer import analyzer_tool

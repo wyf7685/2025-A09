@@ -3,13 +3,17 @@ import itertools
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
+from app.const import STATE_DIR
 from app.core.agent.events import fix_message_content
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.resume import resume_tool_call
 from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
+from app.exception import AgentNotFound
 from app.log import logger
 from app.utils import escape_tag
+
+from .schemas import DataAnalyzerAgentState
 
 
 def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
@@ -77,3 +81,12 @@ def summary_chain(llm: LLM, messages: list[AnyMessage]) -> Runnable[str, tuple[s
 
     conversation, figures = format_conversation(messages, include_figures=True)
     return prompt | llm | (lambda s: (s, figures))
+
+
+def get_agent_random_state(session_id: str) -> int:
+    state_file = STATE_DIR / f"{session_id}.json"
+    if not state_file.exists():
+        raise AgentNotFound(session_id)
+
+    state = DataAnalyzerAgentState.model_validate_json(state_file.read_text(encoding="utf-8"))
+    return state.sources_random_state

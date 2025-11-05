@@ -79,13 +79,13 @@ def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
 
 
 @resumable("analyze_data")
-def analyze_data(sources: Sources, llm: LLM, dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
+def analyze_data(sources: Sources, codegen_llm: LLM, dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
     logger.info(f"执行通用数据分析工具: dataset_id={dataset_id}")
     source = sources.get(dataset_id)
 
     with CodeExecutor(source) as executor:
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = NL2DataAnalysis(llm, executor=executor).invoke((source, query))
+        result = NL2DataAnalysis(codegen_llm, executor=executor).invoke((source, query))
 
     # 处理图片结果
     artifact = {}

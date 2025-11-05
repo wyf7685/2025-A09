@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from mcp.types import ImageContent
 from pydantic import BaseModel, Field, Tag
 
-from .tools._registry import TOOL_NAMES
+from .tools._registry import tool_name_human_repr
 
 
 class LlmTokenEvent(BaseModel):
@@ -72,7 +72,7 @@ def process_stream_event(message: BaseMessage) -> Iterable[StreamEvent]:
                 yield ToolCallEvent(
                     id=tool_call["id"],
                     name=tool_call["name"],
-                    human_repr=TOOL_NAMES.get(tool_call["name"], tool_call["name"]),
+                    human_repr=tool_name_human_repr(tool_call["name"]),
                     args=tool_call["args"],
                 )
         case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):
