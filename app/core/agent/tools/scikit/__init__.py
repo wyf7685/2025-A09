@@ -336,13 +336,14 @@ def scikit_tools(
 
     @tool
     @register_tool("保存机器学习模型")
-    def save_model_tool(model_id: ModelID) -> SaveModelResult:
+    def save_model_tool(model_id: ModelID, model_name: str) -> SaveModelResult:
         """
         保存训练好的机器学习模型及其元数据。
         模型训练完成且效果可观时，应及时使用此工具保存模型。
 
         Args:
             model_id (str): 模型ID，由 `fit_model_tool` 返回。
+            model_name (str): 模型名称，用于描述模型。
 
         Returns:
             dict: 包含保存结果消息和模型元信息的字典。
@@ -365,9 +366,6 @@ def scikit_tools(
             train_result = train_model_cache[model_id]
             # 计算模型性能指标
             evaluation = evaluate_model(train_result)
-
-            # 生成模型名称
-            model_name = f"{train_result.model_type}_{model_id[:8]}"
 
             # 注册模型
             registry_id = model_registry.register_model(

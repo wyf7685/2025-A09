@@ -185,14 +185,14 @@ const onWorkflowExecuting = async (payload: {
   message: string;
 }) => {
   console.log('开始执行工作流:', payload);
-  
+
   // 关闭工作流管理对话框
   workflowManagerDialogVisible.value = false;
-  
+
   // 使用 EventSource 处理流式响应
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   const url = `${apiBaseUrl}/workflow/execute`;
-  
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -205,18 +205,18 @@ const onWorkflowExecuting = async (payload: {
         datasource_mappings: payload.datasource_mappings,
       }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     // 添加用户消息
     messages.value.push({
       type: 'user',
       content: payload.message,
       timestamp: new Date().toISOString(),
     });
-    
+
     // 创建助手消息用于显示执行过程
     const assistantMessage = reactive({
       type: 'assistant',
@@ -226,34 +226,34 @@ const onWorkflowExecuting = async (payload: {
       loading: true,
       suggestions: [],
     } as any);
-    
+
     messages.value.push(assistantMessage);
     scrollToBottom();
-    
+
     // 处理流式响应
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
-    
+
     if (!reader) {
       throw new Error('无法获取响应流');
     }
-    
+
     while (true) {
       const { done, value } = await reader.read();
-      
+
       if (done) {
         break;
       }
-      
+
       const chunk = decoder.decode(value, { stream: true });
       const lines = chunk.split('\n');
-      
+
       for (const line of lines) {
         if (!line.trim()) continue;
-        
+
         try {
           const event = JSON.parse(line);
-          
+
           // 处理不同类型的事件
           if (event.type === 'tool_call') {
             // 工具调用开始
@@ -263,7 +263,7 @@ const onWorkflowExecuting = async (payload: {
               id: toolCallId,
             });
             assistantMessage.tool_calls[toolCallId] = {
-              name: event.name,
+              name: event.human_repr,
               args: JSON.stringify(event.args),
               status: 'running',
             };
@@ -273,7 +273,7 @@ const onWorkflowExecuting = async (payload: {
             if (assistantMessage.tool_calls[toolCallId]) {
               assistantMessage.tool_calls[toolCallId].status = 'success';
               assistantMessage.tool_calls[toolCallId].result = event.result;
-              
+
               // 如果有图像 artifact，添加到内容中
               if (event.artifact && event.artifact.type === 'image') {
                 const imageBase64 = event.artifact.base64_data;
@@ -297,20 +297,20 @@ const onWorkflowExecuting = async (payload: {
             ElMessage.error(`工作流执行失败: ${event.error}`);
             assistantMessage.loading = false;
           }
-          
+
           scrollToBottom();
         } catch (e) {
           console.error('解析事件失败:', e, line);
         }
       }
     }
-    
+
     assistantMessage.loading = false;
     scrollToBottom();
-    
+
     // 刷新聊天历史
     await refreshChatHistory();
-    
+
     ElMessage.success('工作流执行完成');
   } catch (error) {
     console.error('执行工作流失败:', error);
