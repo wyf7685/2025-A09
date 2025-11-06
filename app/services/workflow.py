@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCal
 
 from app.const import DATA_DIR
 from app.core.agent.agents.data_analyzer import get_agent_random_state
+from app.core.agent.agents.data_analyzer.schemas import WorkflowCallMeta
 from app.core.agent.agents.data_analyzer.utils import format_conversation
 from app.core.agent.events import LlmTokenEvent, StreamEvent, ToolCallEvent, ToolErrorEvent, ToolResultEvent
 from app.core.agent.prompts.data_analyzer import PROMPTS as DAAPROMPTS
@@ -139,10 +140,18 @@ async def _fetch_sources_for_workflow(
         agent_state.values.setdefault("messages", []).extend(messages)
         agent.ctx.graph.update_state(agent.ctx.runnable_config, agent_state.values)
 
+        workflow_run_id = str(uuid.uuid4())
+        metadata = WorkflowCallMeta(random_state=workflow.source_rs, mapping=datasource_mappings)
+        agent_state.workflow_data.call_meta[workflow_run_id] = metadata
+        for message in messages:
+            if isinstance(message, ToolMessage):
+                agent_state.workflow_data.tool_calls[message.tool_call_id] = workflow_run_id
+
+        # 将执行过程中产生的数据源还原回原始ID
         reversed_mapping = {v: k for k, v in datasource_mappings.items()}
         for source_id, source in sources.items():
             original_id = reversed_mapping.get(source_id)
-            agent.ctx.sources.sources[original_id or source_id] = source
+            original_sources.sources[original_id or source_id] = source
 
 
 async def execute_workflow_stream(

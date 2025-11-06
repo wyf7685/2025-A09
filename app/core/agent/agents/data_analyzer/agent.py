@@ -17,12 +17,13 @@ from app.schemas.session import AgentModelConfigFixed, SessionID
 from app.utils import escape_tag, run_sync
 
 from .context import AgentContext
-from .schemas import AgentValues, DataAnalyzerAgentState
+from .schemas import AgentValues, DataAnalyzerAgentState, WorkflowData
 from .utils import create_title_chain, resume_tool_calls, summary_chain
 
 
 class DataAnalyzerAgent:
     ctx: AgentContext
+    _wf_data: WorkflowData
 
     def __init__(self) -> None:
         raise NotImplementedError("Use the `create` class method to instantiate this agent.")
@@ -42,6 +43,7 @@ class DataAnalyzerAgent:
             mcp_connections=mcp_connections,
             pre_model_hook=pre_model_hook,
         )
+        self._wf_data = WorkflowData()
         await self.ctx.build_graph()
         return self
 
@@ -70,6 +72,7 @@ class DataAnalyzerAgent:
             values=cast("AgentValues", self.ctx.graph.get_state(self.ctx.runnable_config).values),
             models=self.ctx.saved_models,
             sources_random_state=self.ctx.sources.random_state,
+            workflow_data=self._wf_data,
         )
 
     @run_sync
@@ -80,7 +83,8 @@ class DataAnalyzerAgent:
         self.ctx.saved_models.update(state.models)
         self.ctx.sources.random_state = state.sources_random_state
         self.ctx.sources.reset()
-        resume_tool_calls(self.ctx.sources, model_config, state.values.get("messages", []))
+        self._wf_data = state.workflow_data
+        resume_tool_calls(self.ctx.sources, model_config, state.workflow_data, state.values.get("messages", []))
         logger.opt(colors=True).info(f"已恢复 agent 状态: {state.colorize()}")
 
     async def load_state(self, state_file: Path) -> None:
