@@ -11,17 +11,18 @@ from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.exception import AgentNotFound
 from app.log import logger
+from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
 from .schemas import DataAnalyzerAgentState
 
 
-def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
+def resume_tool_calls(sources: Sources, model_config: AgentModelConfigFixed, messages: list[AnyMessage]) -> None:
     for tool_call in itertools.chain.from_iterable(
         m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls
     ):
         try:
-            resume_tool_call(tool_call, {"sources": sources})
+            resume_tool_call(tool_call, {"sources": sources, "model_config": model_config})
         except Exception as e:
             logger.opt(colors=True, exception=True).warning(
                 f"恢复工具调用时出错: <y>{escape_tag(tool_call['name'])}</> - {escape_tag(str(e))}"

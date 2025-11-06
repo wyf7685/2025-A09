@@ -80,7 +80,7 @@ def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
     return analyze_data
 
 
-@resumable("analyze_data")
+@resumable
 def analyze_data(
     sources: Sources,
     model_config: AgentModelConfigFixed,

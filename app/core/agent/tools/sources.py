@@ -58,8 +58,13 @@ def sources_tools(sources: Sources) -> list[BaseTool]:
     ]
 
 
-@resumable("rename_dataset_tool")
-def _(sources: Sources, dataset_id: str, new_dataset_id: str) -> None:
+@resumable
+def list_dataset_tool(sources: Sources) -> str:
+    return format_sources_overview(sources.sources)
+
+
+@resumable
+def rename_dataset_tool(sources: Sources, dataset_id: str, new_dataset_id: str) -> None:
     if not sources.exists(dataset_id):
         raise ValueError(f"数据集 {dataset_id} 不存在")
     sources.rename(dataset_id, new_dataset_id)
