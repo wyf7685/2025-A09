@@ -13,8 +13,11 @@ from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
 from app.schemas.session import Session
 from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, WorkflowDefinition
+from app.services.agent import daa_service
 from app.services.session import session_service
 from app.services.workflow import workflow_service
+
+from ._depends import CurrentSessionFromBody
 
 router = APIRouter(prefix="/workflow")
 
@@ -45,14 +48,9 @@ async def get_workflow(workflow_id: str = Path(description="工作流ID")) -> Wo
 
 
 @router.post("", response_model=WorkflowDefinition)
-async def save_workflow(request: SaveWorkflowRequest) -> WorkflowDefinition:
+async def save_workflow(request: SaveWorkflowRequest, session: CurrentSessionFromBody) -> WorkflowDefinition:
     """保存工作流"""
     try:
-        # 获取会话
-        session = await session_service.get(request.session_id)
-        if not session:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-
         # 从会话中提取工作流
         workflow = await workflow_service.extract_from_session(session, request.name, request.description)
 
@@ -99,6 +97,12 @@ async def generate_workflow_execution_stream(
         # 记录对话历史
         chat_entry.merge_text()
         session.chat_history.append(chat_entry)
+
+        # 生成会话标题
+        async with daa_service.use_agent(session) as agent:
+            session.name = await agent.create_title()
+            logger.info(f"设置会话 {session.id} 名称为: {session.name}")
+
         await session_service.save_session(session)
 
         # 发送完成信号
@@ -110,18 +114,13 @@ async def generate_workflow_execution_stream(
 
 
 @router.post("/execute")
-async def execute_workflow(request: ExecuteWorkflowRequest) -> StreamingResponse:
+async def execute_workflow(request: ExecuteWorkflowRequest, session: CurrentSessionFromBody) -> StreamingResponse:
     """执行工作流 - 通过流式接口返回执行过程"""
     try:
         # 获取工作流
         workflow = await workflow_service.get_workflow(request.workflow_id)
         if not workflow:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"工作流 {request.workflow_id} 不存在")
-
-        # 获取会话
-        session = await session_service.get(request.session_id)
-        if not session:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
         # 使用流式响应执行工作流
         return StreamingResponse(

@@ -675,6 +675,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
               });
           }
 
+          currentSessionId && sessionStore.refreshSessionName(currentSessionId);
           nextTick(() => scrollToBottom?.());
         },
         (error) => {

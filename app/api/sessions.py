@@ -2,9 +2,9 @@
 会话管理接口
 """
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.exception import MCPServerNotFound
@@ -12,12 +12,14 @@ from app.log import logger
 from app.schemas.custom_model import LLModelID
 from app.schemas.mcp import MCPConnection
 from app.schemas.ml_model import MLModelInfoOut
-from app.schemas.session import Session, SessionID, SessionListItem
+from app.schemas.session import Session, SessionListItem
 from app.services.agent import daa_service
 from app.services.datasource import datasource_service
 from app.services.mcp import mcp_service
 from app.services.model_registry import model_registry
 from app.services.session import session_service
+
+from ._depends import CurrentSessionFromPath
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
@@ -51,21 +53,12 @@ async def create_session(request: CreateSessionRequest) -> Session:
         raise HTTPException(status_code=500, detail=f"Failed to create session: {e}") from e
 
 
-async def _get_current_session(session_id: SessionID) -> Session:
-    if session := await session_service.get(session_id):
-        return session
-    raise HTTPException(status_code=404, detail="Session not found")
-
-
-CurrentSession = Annotated[Session, Depends(_get_current_session)]
-
-
 class UpdateSessionRequest(BaseModel):
     name: str
 
 
 @router.put("/{session_id}", response_model=Session)
-async def update_session(session: CurrentSession, request: UpdateSessionRequest) -> Session:
+async def update_session(session: CurrentSessionFromPath, request: UpdateSessionRequest) -> Session:
     """
     更新会话信息
 
@@ -90,7 +83,7 @@ class AgentModelConfigUpdate(BaseModel):
 
 
 @router.put("/{session_id}/model_config")
-async def update_session_model_config(session: CurrentSession, request: AgentModelConfigUpdate) -> None:
+async def update_session_model_config(session: CurrentSessionFromPath, request: AgentModelConfigUpdate) -> None:
     try:
         for attr, value in request.model_dump().items():
             if value is not None:
@@ -102,7 +95,7 @@ async def update_session_model_config(session: CurrentSession, request: AgentMod
 
 
 @router.get("/{session_id}")
-async def get_session(session: CurrentSession) -> Session:
+async def get_session(session: CurrentSessionFromPath) -> Session:
     """获取会话信息"""
     return session_service.tool_name_repr(session)
 
@@ -116,8 +109,18 @@ async def get_sessions() -> list[SessionListItem]:
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {e}") from e
 
 
+class SessionNameResponse(BaseModel):
+    name: str | None = None
+
+
+@router.get("/{session_id}/name")
+async def get_session_name(session: CurrentSessionFromPath) -> SessionNameResponse:
+    """获取会话信息"""
+    return SessionNameResponse(name=session.name)
+
+
 @router.delete("/{session_id}")
-async def delete_session(session: CurrentSession) -> dict[str, Any]:
+async def delete_session(session: CurrentSessionFromPath) -> dict[str, Any]:
     """删除会话"""
     try:
         await daa_service.safe_destroy(session.id)
@@ -135,7 +138,7 @@ class AddMCPToSessionRequest(BaseModel):
 
 
 @router.post("/{session_id}/mcp")
-async def add_mcp_to_session(session: CurrentSession, request: AddMCPToSessionRequest) -> Session:
+async def add_mcp_to_session(session: CurrentSessionFromPath, request: AddMCPToSessionRequest) -> Session:
     """
     向会话添加MCP连接
     """
@@ -178,7 +181,7 @@ class RemoveMCPFromSessionRequest(BaseModel):
 
 
 @router.delete("/{session_id}/mcp")
-async def remove_mcp_from_session(session: CurrentSession, request: RemoveMCPFromSessionRequest) -> Session:
+async def remove_mcp_from_session(session: CurrentSessionFromPath, request: RemoveMCPFromSessionRequest) -> Session:
     """
     从会话移除MCP连接
     """
@@ -205,7 +208,7 @@ async def remove_mcp_from_session(session: CurrentSession, request: RemoveMCPFro
 
 
 @router.get("/{session_id}/mcp")
-async def get_session_mcp_connections(session: CurrentSession) -> list[MCPConnection]:
+async def get_session_mcp_connections(session: CurrentSessionFromPath) -> list[MCPConnection]:
     """
     获取会话关联的MCP连接
     """
@@ -236,7 +239,7 @@ class AddModelsToSessionRequest(BaseModel):
 
 
 @router.post("/{session_id}/models")
-async def add_models_to_session(session: CurrentSession, request: AddModelsToSessionRequest) -> None:
+async def add_models_to_session(session: CurrentSessionFromPath, request: AddModelsToSessionRequest) -> None:
     """向会话添加外部模型引用"""
     try:
         # 检查模型是否存在
@@ -267,7 +270,7 @@ class RemoveModelsFromSessionRequest(BaseModel):
 
 
 @router.delete("/{session_id}/models")
-async def remove_models_from_session(session: CurrentSession, request: RemoveModelsFromSessionRequest) -> None:
+async def remove_models_from_session(session: CurrentSessionFromPath, request: RemoveModelsFromSessionRequest) -> None:
     """从会话中移除模型引用"""
     try:
         # 移除模型ID
@@ -280,7 +283,7 @@ async def remove_models_from_session(session: CurrentSession, request: RemoveMod
 
 
 @router.get("/{session_id}/models", response_model=list[MLModelInfoOut])
-async def get_session_models(session: CurrentSession) -> list[MLModelInfoOut]:
+async def get_session_models(session: CurrentSessionFromPath) -> list[MLModelInfoOut]:
     """获取会话关联的所有模型信息"""
     try:
         return [model for model_id in (session.model_ids or []) if (model := model_registry.get_model(model_id))]

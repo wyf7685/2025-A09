@@ -17,10 +17,12 @@ from app.core.agent.prompts.data_analyzer import PROMPTS as DATA_ANALYZER_PROMPT
 from app.exception import DAAServiceError
 from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
-from app.schemas.session import SessionID
+from app.schemas.session import Session, SessionID
 from app.services.agent import daa_service
 from app.services.session import session_service
 from app.utils import buffered_stream, escape_tag
+
+from ._depends import CurrentSessionFromBody
 
 router = APIRouter(prefix="/chat")
 
@@ -39,13 +41,8 @@ class ChatRequest(BaseModel):
         return v.strip()
 
 
-async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
+async def generate_chat_stream(request: ChatRequest, session: Session) -> AsyncIterator[str]:
     """生成聊天流响应"""
-    session = await session_service.get(request.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    session_id = session.id
-
     try:
         chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
 
@@ -60,10 +57,10 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
                 chat_entry.add_stream_event(event)
 
-            # 如果这是第一条消息，设置会话名称
-            if len(session.chat_history) == 0:
+            # 设置会话名称
+            if len(session.chat_history) < 3:
                 session.name = await agent.create_title()
-                logger.info(f"设置会话 {session_id} 名称为: {session.name}")
+                logger.info(f"设置会话 {session.id} 名称为: {session.name}")
 
         # 记录对话历史
         chat_entry.merge_text()
@@ -83,14 +80,9 @@ async def generate_chat_stream(request: ChatRequest) -> AsyncIterator[str]:
 
 
 @router.post("/stream")
-async def chat_analysis_stream(request: ChatRequest) -> StreamingResponse:
+async def chat_analysis_stream(request: ChatRequest, session: CurrentSessionFromBody) -> StreamingResponse:
     """对话式数据分析（流式输出）"""
-    return StreamingResponse(generate_chat_stream(request), media_type="text/event-stream")
-
-
-class SummaryRequest(BaseModel):
-    session_id: SessionID
-    model_id: str | None = None  # deprecated
+    return StreamingResponse(generate_chat_stream(request, session), media_type="text/event-stream")
 
 
 class SummaryResponse(BaseModel):
@@ -101,12 +93,8 @@ class SummaryResponse(BaseModel):
 
 
 @router.post("/summary")
-async def chat_summary(request: SummaryRequest) -> SummaryResponse:
+async def chat_summary(session: CurrentSessionFromBody) -> SummaryResponse:
     """获取对话摘要"""
-    session = await session_service.get(request.session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
     try:
         async with daa_service.use_agent(session) as agent:
             summary, figures = await agent.summary()
@@ -181,9 +169,9 @@ async def list_templates() -> list[ReportTemplate]:
 
 @router.post("/templates/upload")
 async def upload_template(
-    template_name: str = Form(...),
-    template_description: str = Form(...),
-    template_file: UploadFile = File(...),
+    template_name: str = Form(),
+    template_description: str = Form(),
+    template_file: UploadFile = File(),
 ) -> dict[str, Any]:
     """上传自定义报告模板"""
     try:
@@ -250,12 +238,8 @@ class GenerateReportResponse(BaseModel):
 
 
 @router.post("/generate-report")
-async def generate_report(request: GenerateReportRequest) -> GenerateReportResponse:
+async def generate_report(request: GenerateReportRequest, session: CurrentSessionFromBody) -> GenerateReportResponse:
     """生成分析报告（基于现有的summary功能）"""
-    session = await session_service.get(request.session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-
     try:
         # 获取模板内容
         template_content = None

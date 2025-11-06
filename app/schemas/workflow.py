@@ -36,7 +36,6 @@ class SaveWorkflowRequest(BaseModel):
     name: str
     description: str = ""
     session_id: str
-    messages: list[dict] = Field(default_factory=list)
 
 
 class ExecuteWorkflowRequest(BaseModel):
