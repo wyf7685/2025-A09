@@ -5,7 +5,7 @@
 import contextlib
 import json
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -35,6 +35,206 @@ if TYPE_CHECKING:
 WORKFLOWS_DIR = DATA_DIR / "workflows"
 # 创建目录（如果不存在）
 WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+async def extract_from_session(session: Session, name: str, description: str) -> WorkflowDefinition:
+    # 从会话中提取所有工具调用
+    tool_calls: list[WorkflowToolCall] = []
+
+    # 记录可恢复工具列表
+    resumable_tools = get_resumable_tools()
+    logger.info(f"当前已注册 {len(resumable_tools)} 个可恢复工具: {resumable_tools[:10]}...")
+
+    # 统计信息
+    total_tool_calls = 0
+    skipped_non_resumable = 0
+    failed_to_parse = 0
+
+    # 从chat_history中提取工具调用
+    for entry_idx, chat_entry in enumerate(session.chat_history):
+        assistant_response = chat_entry.assistant_response
+
+        # 处理assistant_response中的tool_calls
+        for tool_call_id, tool_call in assistant_response.tool_calls.items():
+            total_tool_calls += 1
+            try:
+                # 检查工具是否可恢复
+                if not is_resumable_tool(tool_call.name):
+                    logger.warning(f"跳过不可恢复的工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
+                    skipped_non_resumable += 1
+                    continue
+
+                # 处理参数
+                args = json.loads(tool_call.args)
+
+                # 构建工具调用字典
+                tool_call_data = WorkflowToolCall(id=tool_call_id, name=tool_call.name, args=args)
+
+                # 添加结果信息（如果有）
+                if (result := tool_call.result) is not None:
+                    # 尝试将复杂对象序列化为可存储的形式
+                    try:
+                        # 检查是否需要序列化
+                        json.dumps(result)
+                        tool_call_data.result = result
+                    except (TypeError, ValueError):
+                        # 如果无法直接序列化，转换为字符串
+                        tool_call_data.result = str(result)
+
+                # 添加到工具调用列表
+                tool_calls.append(tool_call_data)
+                logger.info(f"✓ 添加工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
+
+            except Exception as e:
+                logger.warning(f"✗ 处理工具调用 [{entry_idx + 1}] 时出错 (ID: {tool_call_id}): {e}")
+                failed_to_parse += 1
+
+    # 详细的调试信息
+    logger.info(
+        f"从会话 {session.id} 提取工具调用统计:\n"
+        f"  - 总工具调用数: {total_tool_calls}\n"
+        f"  - 成功提取: {len(tool_calls)}\n"
+        f"  - 跳过(不可恢复): {skipped_non_resumable}\n"
+        f"  - 解析失败: {failed_to_parse}"
+    )
+
+    datasets: dict[str, str] = {}
+    for ds_id in session.dataset_ids:
+        source = await datasource_service.get_source(ds_id)
+        datasets[ds_id] = source.metadata.name or ds_id
+
+    # 创建工作流
+    return WorkflowDefinition(
+        name=name,
+        description=description,
+        tool_calls=tool_calls,
+        initial_datasets=datasets,
+        source_rs=get_agent_random_state(session.id),
+    )
+
+
+@contextlib.asynccontextmanager
+async def _fetch_sources_for_workflow(
+    session: Session,
+    workflow: WorkflowDefinition,
+    datasource_mappings: dict[str, str],  # original dataset ID -> mapped dataset ID
+) -> AsyncGenerator[tuple[list[AnyMessage], Sources]]:
+    async with daa_service.use_agent(session) as agent:
+        original_sources = agent.ctx.sources
+        sources_dict: dict[str, DataSource] = {}
+        for ds_id in workflow.initial_datasets:
+            if ds_id not in datasource_mappings:
+                raise ValueError(f"工作流初始数据源 {ds_id} 未设置映射")
+            mapped = datasource_mappings[ds_id]
+            if mapped not in original_sources.sources:
+                raise ValueError(f"当前会话中不存在数据源 {mapped}, 无法映射工作流数据源 {ds_id}")
+            sources_dict[ds_id] = original_sources.get(mapped).copy()
+
+        messages: list[AnyMessage] = []
+        sources = Sources(sources_dict, random_state=workflow.source_rs)
+
+        yield messages, sources
+
+        agent_state = await agent.get_state()
+        agent_state.values.setdefault("messages", []).extend(messages)
+        agent.ctx.graph.update_state(agent.ctx.runnable_config, agent_state.values)
+
+        reversed_mapping = {v: k for k, v in datasource_mappings.items()}
+        for source_id, source in sources.items():
+            original_id = reversed_mapping.get(source_id)
+            agent.ctx.sources.sources[original_id or source_id] = source
+
+
+async def execute_workflow_stream(
+    session: Session,
+    workflow: WorkflowDefinition,
+    datasource_mappings: dict[str, str],
+) -> AsyncGenerator[StreamEvent]:
+    """流式执行工作流，生成事件供前端显示"""
+
+    # 检查工作流中的工具调用
+    logger.info(f"工作流 {workflow.id} 中有 {len(workflow.tool_calls)} 个工具调用")
+    if len(workflow.tool_calls) == 0:
+        logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
+        return
+
+    def append_tool_call() -> None:
+        if not messages or not isinstance((m := messages[-1]), AIMessage):
+            messages.append(AIMessage(content="", tool_calls=[tc]))
+        else:
+            m.tool_calls.append(tc)
+
+    def tool_call_success(result: str, artifact: dict | None = None) -> None:
+        append_tool_call()
+        messages.append(ToolMessage(tool_call_id=tool_call_id, content=result, artifact=artifact, status="success"))
+
+    def tool_call_error(error_msg: str) -> None:
+        append_tool_call()
+        messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
+
+    async with _fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
+        messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
+
+        # 逐个执行工具调用并生成事件
+        for idx, tool_call in enumerate(workflow.tool_calls, 1):
+            tool_call_id = tool_call.id or f"tool_{id(tool_call)}"
+            tool_name = tool_call.name or ""
+            tool_args = tool_call.args.copy() if isinstance(tool_call.args, dict) else tool_call.args
+
+            logger.info(f"处理第 {idx}/{len(workflow.tool_calls)} 个工具调用: {tool_name}")
+            logger.info(f"工具参数(原始): {tool_args}")
+            logger.info(f"当前Sources中的数据源: {list(sources.sources.keys())}")
+
+            # 发送工具调用事件
+            yield ToolCallEvent(
+                id=tool_call_id,
+                name=tool_name,
+                human_repr=tool_name_human_repr(tool_name),
+                args=tool_args,
+            )
+
+            try:
+                # 执行工具调用
+                tc: ToolCall = {"name": tool_name, "args": tool_args, "id": tool_call_id}
+                extra = {"sources": sources, "model_config": session.agent_model_config.fixed}
+                result = await anyio.to_thread.run_sync(resume_tool_call, tc, extra)
+
+                # 处理工具返回的结果
+                if isinstance(result, tuple) and len(result) == 2:
+                    # 处理可能的图像结果
+                    text_result, artifact = result
+                    result_content = str(text_result.content if isinstance(text_result, ToolMessage) else text_result)
+                    yield ToolResultEvent(id=tool_call_id, result=result_content, artifact=artifact)
+                    tool_call_success(result_content, artifact)
+                else:
+                    # 标准的文本结果处理
+                    result_content = str(result.content if isinstance(result, ToolMessage) else result)
+                    yield ToolResultEvent(id=tool_call_id, result=result_content)
+                    tool_call_success(result_content)
+
+                logger.info(f"工具调用执行成功: {tool_name}")
+
+            except Exception as e:
+                # 发送错误事件
+                error_msg = str(e)
+                yield ToolErrorEvent(id=tool_call_id, error=error_msg)
+                tool_call_error(error_msg)
+                logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
+
+        # 总结工作流执行结果
+        conversation, _ = format_conversation(messages, include_figures=False)
+        chat_llm = await get_llm_async(session.agent_model_config.fixed.chat)
+        summary_prompt = DAAPROMPTS.summarize_workflow.format(
+            workflow_name=workflow.name,
+            workflow_description=workflow.description,
+            execution_history=conversation,
+        )
+        summary_chunks = []
+        async for chunk in chat_llm.astream(summary_prompt):
+            yield LlmTokenEvent(content=chunk)
+            summary_chunks.append(chunk)
+        summary = "".join(summary_chunks)
+        messages.append(AIMessage(content=summary))
 
 
 class WorkflowService:
@@ -166,208 +366,16 @@ class WorkflowService:
 
     @staticmethod
     async def extract_from_session(session: Session, name: str, description: str) -> WorkflowDefinition:
-        # 从会话中提取所有工具调用
-        tool_calls: list[WorkflowToolCall] = []
-
-        # 记录可恢复工具列表
-        resumable_tools = get_resumable_tools()
-        logger.info(f"当前已注册 {len(resumable_tools)} 个可恢复工具: {resumable_tools[:10]}...")
-
-        # 统计信息
-        total_tool_calls = 0
-        skipped_non_resumable = 0
-        failed_to_parse = 0
-
-        # 从chat_history中提取工具调用
-        for entry_idx, chat_entry in enumerate(session.chat_history):
-            assistant_response = chat_entry.assistant_response
-
-            # 处理assistant_response中的tool_calls
-            for tool_call_id, tool_call in assistant_response.tool_calls.items():
-                total_tool_calls += 1
-                try:
-                    # 检查工具是否可恢复
-                    if not is_resumable_tool(tool_call.name):
-                        logger.warning(
-                            f"跳过不可恢复的工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})"
-                        )
-                        skipped_non_resumable += 1
-                        continue
-
-                    # 处理参数
-                    args = json.loads(tool_call.args)
-
-                    # 构建工具调用字典
-                    tool_call_data = WorkflowToolCall(id=tool_call_id, name=tool_call.name, args=args)
-
-                    # 添加结果信息（如果有）
-                    if (result := tool_call.result) is not None:
-                        # 尝试将复杂对象序列化为可存储的形式
-                        try:
-                            # 检查是否需要序列化
-                            json.dumps(result)
-                            tool_call_data.result = result
-                        except (TypeError, ValueError):
-                            # 如果无法直接序列化，转换为字符串
-                            tool_call_data.result = str(result)
-
-                    # 添加到工具调用列表
-                    tool_calls.append(tool_call_data)
-                    logger.info(f"✓ 添加工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
-
-                except Exception as e:
-                    logger.warning(f"✗ 处理工具调用 [{entry_idx + 1}] 时出错 (ID: {tool_call_id}): {e}")
-                    failed_to_parse += 1
-
-        # 详细的调试信息
-        logger.info(
-            f"从会话 {session.id} 提取工具调用统计:\n"
-            f"  - 总工具调用数: {total_tool_calls}\n"
-            f"  - 成功提取: {len(tool_calls)}\n"
-            f"  - 跳过(不可恢复): {skipped_non_resumable}\n"
-            f"  - 解析失败: {failed_to_parse}"
-        )
-
-        datasets: dict[str, str] = {}
-        for ds_id in session.dataset_ids:
-            source = await datasource_service.get_source(ds_id)
-            datasets[ds_id] = source.metadata.name or ds_id
-
-        # 创建工作流
-        return WorkflowDefinition(
-            name=name,
-            description=description,
-            tool_calls=tool_calls,
-            initial_datasets=datasets,
-            source_rs=get_agent_random_state(session.id),
-        )
+        return await extract_from_session(session, name, description)
 
     @staticmethod
-    @contextlib.asynccontextmanager
-    async def _fetch_sources_for_workflow(
-        session: Session,
-        workflow: WorkflowDefinition,
-        datasource_mappings: dict[str, str],  # original dataset ID -> mapped dataset ID
-    ) -> AsyncGenerator[tuple[list[AnyMessage], Sources]]:
-        async with daa_service.use_agent(session) as agent:
-            original_sources = agent.ctx.sources
-            sources_dict: dict[str, DataSource] = {}
-            for ds_id in workflow.initial_datasets:
-                if ds_id not in datasource_mappings:
-                    raise ValueError(f"工作流初始数据源 {ds_id} 未设置映射")
-                mapped = datasource_mappings[ds_id]
-                if mapped not in original_sources.sources:
-                    raise ValueError(f"当前会话中不存在数据源 {mapped}, 无法映射工作流数据源 {ds_id}")
-                sources_dict[ds_id] = original_sources.get(mapped).copy()
-
-            messages: list[AnyMessage] = []
-            sources = Sources(sources_dict, random_state=workflow.source_rs)
-
-            yield messages, sources
-
-            agent_state = await agent.get_state()
-            agent_state.values.setdefault("messages", []).extend(messages)
-            agent.ctx.graph.update_state(agent.ctx.runnable_config, agent_state.values)
-
-            reversed_mapping = {v: k for k, v in datasource_mappings.items()}
-            for source_id, source in sources.items():
-                original_id = reversed_mapping.get(source_id)
-                agent.ctx.sources.sources[original_id or source_id] = source
-
-    @classmethod
-    async def execute_workflow_stream(
-        cls,
+    def execute_workflow_stream(
         session: Session,
         workflow: WorkflowDefinition,
         datasource_mappings: dict[str, str],
-    ) -> AsyncGenerator[StreamEvent]:
+    ) -> AsyncIterator[StreamEvent]:
         """流式执行工作流，生成事件供前端显示"""
-
-        # 检查工作流中的工具调用
-        logger.info(f"工作流 {workflow.id} 中有 {len(workflow.tool_calls)} 个工具调用")
-        if len(workflow.tool_calls) == 0:
-            logger.warning(f"工作流 {workflow.id} 不包含任何工具调用")
-            return
-
-        def append_tool_call() -> None:
-            if not messages or not isinstance((m := messages[-1]), AIMessage):
-                messages.append(AIMessage(content="", tool_calls=[tc]))
-            else:
-                m.tool_calls.append(tc)
-
-        def tool_call_success(result: str, artifact: dict | None = None) -> None:
-            append_tool_call()
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=result, artifact=artifact, status="success"))
-
-        def tool_call_error(error_msg: str) -> None:
-            append_tool_call()
-            messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
-
-        async with cls._fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
-            messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
-
-            # 逐个执行工具调用并生成事件
-            for idx, tool_call in enumerate(workflow.tool_calls, 1):
-                tool_call_id = tool_call.id or f"tool_{id(tool_call)}"
-                tool_name = tool_call.name or ""
-                tool_args = tool_call.args.copy() if isinstance(tool_call.args, dict) else tool_call.args
-
-                logger.info(f"处理第 {idx}/{len(workflow.tool_calls)} 个工具调用: {tool_name}")
-                logger.info(f"工具参数(原始): {tool_args}")
-                logger.info(f"当前Sources中的数据源: {list(sources.sources.keys())}")
-
-                # 发送工具调用事件
-                yield ToolCallEvent(
-                    id=tool_call_id,
-                    name=tool_name,
-                    human_repr=tool_name_human_repr(tool_name),
-                    args=tool_args,
-                )
-
-                try:
-                    # 执行工具调用
-                    tc: ToolCall = {"name": tool_name, "args": tool_args, "id": tool_call_id}
-                    extra = {"sources": sources, "model_config": session.agent_model_config.fixed}
-                    result = await anyio.to_thread.run_sync(resume_tool_call, tc, extra)
-
-                    # 处理工具返回的结果
-                    if isinstance(result, tuple) and len(result) == 2:
-                        # 处理可能的图像结果
-                        text_result, artifact = result
-                        result_content = str(
-                            text_result.content if isinstance(text_result, ToolMessage) else text_result
-                        )
-                        yield ToolResultEvent(id=tool_call_id, result=result_content, artifact=artifact)
-                        tool_call_success(result_content, artifact)
-                    else:
-                        # 标准的文本结果处理
-                        result_content = str(result.content if isinstance(result, ToolMessage) else result)
-                        yield ToolResultEvent(id=tool_call_id, result=result_content)
-                        tool_call_success(result_content)
-
-                    logger.info(f"工具调用执行成功: {tool_name}")
-
-                except Exception as e:
-                    # 发送错误事件
-                    error_msg = str(e)
-                    yield ToolErrorEvent(id=tool_call_id, error=error_msg)
-                    tool_call_error(error_msg)
-                    logger.exception(f"工具调用 {tool_name} 执行失败: {e}")
-
-            # 总结工作流执行结果
-            conversation, _ = format_conversation(messages, include_figures=False)
-            chat_llm = await get_llm_async(session.agent_model_config.fixed.chat)
-            summary_prompt = DAAPROMPTS.summarize_workflow.format(
-                workflow_name=workflow.name,
-                workflow_description=workflow.description,
-                execution_history=conversation,
-            )
-            summary_chunks = []
-            async for chunk in chat_llm.astream(summary_prompt):
-                yield LlmTokenEvent(content=chunk)
-                summary_chunks.append(chunk)
-            summary = "".join(summary_chunks)
-            messages.append(AIMessage(content=summary))
+        return execute_workflow_stream(session, workflow, datasource_mappings)
 
 
 # 创建单例实例

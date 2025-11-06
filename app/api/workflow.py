@@ -30,7 +30,7 @@ async def list_workflows() -> list[WorkflowDefinition]:
 
 
 @router.get("/{workflow_id}", response_model=WorkflowDefinition)
-async def get_workflow(workflow_id: str = Path(..., description="工作流ID")) -> WorkflowDefinition:
+async def get_workflow(workflow_id: str = Path(description="工作流ID")) -> WorkflowDefinition:
     """获取单个工作流"""
     try:
         workflow = await workflow_service.get_workflow(workflow_id)
@@ -136,7 +136,7 @@ async def execute_workflow(request: ExecuteWorkflowRequest) -> StreamingResponse
 
 
 @router.delete("/{workflow_id}")
-async def delete_workflow(workflow_id: str = Path(..., description="工作流ID")) -> dict:
+async def delete_workflow(workflow_id: str = Path(description="工作流ID")) -> dict:
     """删除工作流"""
     try:
         success = await workflow_service.delete_workflow(workflow_id)
@@ -151,7 +151,7 @@ async def delete_workflow(workflow_id: str = Path(..., description="工作流ID"
 
 
 @router.put("/{workflow_id}", response_model=WorkflowDefinition)
-async def update_workflow(updates: dict, workflow_id: str = Path(..., description="工作流ID")) -> WorkflowDefinition:
+async def update_workflow(updates: dict, workflow_id: str = Path(description="工作流ID")) -> WorkflowDefinition:
     """更新工作流"""
     try:
         if not updates:
