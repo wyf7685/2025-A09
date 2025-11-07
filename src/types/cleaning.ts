@@ -45,7 +45,7 @@ export interface CleaningSuggestion {
 export interface CleaningAction {
   type: string;
   column?: string;
-  parameters?: any;
+  parameters?: unknown;
 }
 
 export interface AnalyzeDataQualitySuccess {

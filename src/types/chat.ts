@@ -17,7 +17,7 @@ export interface ToolCall {
   name: string;
   args: string;
   status: 'running' | 'success' | 'error';
-  result?: any;
+  result?: unknown;
   artifact?: ToolCallArtifact | null; // 工具调用的工件
   error?: string; // 错误信息，如果有的话
   flowStepId?: string; // 对应的流程图步骤ID

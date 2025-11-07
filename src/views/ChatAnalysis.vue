@@ -14,7 +14,6 @@ import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
-import { useWorkflowStore } from '@/stores/workflow';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
@@ -26,14 +25,6 @@ const router = useRouter();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
-let workflowStore;
-
-try {
-  workflowStore = useWorkflowStore();
-} catch (error) {
-  console.error('Error loading workflow store:', error);
-  ElMessage.error('工作流功能加载失败，部分功能可能不可用');
-}
 
 // 添加全局错误处理
 onErrorCaptured((err) => {

@@ -31,10 +31,10 @@ interface BaseDatabaseConnection {
 }
 
 // MSSQL 连接接口
-export interface MSSQLConnection extends BaseDatabaseConnection {}
+export type MSSQLConnection = BaseDatabaseConnection
 
 // MySQL 连接接口
-export interface MySQLConnection extends BaseDatabaseConnection {}
+export type MySQLConnection = BaseDatabaseConnection
 
 // PostgreSQL 连接接口
 export interface PostgreSQLConnection extends BaseDatabaseConnection {

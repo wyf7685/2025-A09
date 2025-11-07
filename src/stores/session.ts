@@ -160,7 +160,9 @@ export const useSessionStore = defineStore('session', () => {
   const sendStreamChatMessage = async (
     message: string,
     onMessage: (content: string) => void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onToolCall: (id: string, name: string, args: any) => void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onToolResult: (id: string, result: any, artifact: ToolCallArtifact | null) => void,
     onToolError: (id: string, error: string) => void,
     onDone: () => void,
@@ -289,7 +291,7 @@ export const useSessionStore = defineStore('session', () => {
     try {
       // 先获取当前会话的模型
       const currentModels = await getSessionModels(sessionId);
-      const currentModelIds = currentModels.map((model: any) => model.id);
+      const currentModelIds = currentModels.map(model => model.id);
 
       // 计算要添加和删除的模型ID
       const modelsToAdd = modelIds.filter((id) => !currentModelIds.includes(id));

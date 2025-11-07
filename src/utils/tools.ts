@@ -38,11 +38,14 @@ export const turncateString = (str: string, maxLength: number): string => {
   return str.slice(0, maxLength) + '...';
 };
 
-export const parsePossibleJsonString = (value: any) => {
+export const parsePossibleJsonString = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+
   try {
     const obj = JSON.parse(value);
     return JSON.stringify(obj, null, 2);
-  } catch (_: unknown) {
+  } catch (error: unknown) {
+    console.log('parsePossibleJsonString error:', error);
     return value;
   }
 };
@@ -94,17 +97,17 @@ export function withLoading<T>(
 export function withLoading<T, E>(
   ref: Ref<boolean>,
   proceed: () => T | Promise<T>,
-  onerror: (error: any) => E | Promise<E>,
+  onerror: (error: unknown) => E | Promise<E>,
 ): Promise<T | E>;
 export async function withLoading<T, E>(
   ref: Ref<boolean>,
   proceed: () => T | Promise<T>,
-  onerror?: string | ((error: any) => E | Promise<E>),
+  onerror?: string | ((error: unknown) => E | Promise<E>),
 ): Promise<T | E | null> {
   ref.value = true;
   try {
     return await proceed();
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (onerror === undefined) throw error;
     if (typeof onerror === 'string') {
       console.error(`${onerror}: ${error}`);

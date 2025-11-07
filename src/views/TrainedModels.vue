@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { useModelStore } from '@/stores/model';
-import { useSessionStore } from '@/stores/session';
 import type { MLModel } from '@/types';
-import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
+import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, View } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
 
-const sessionStore = useSessionStore();
 const modelStore = useModelStore();
 
 // 响应式数据

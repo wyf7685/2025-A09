@@ -39,9 +39,9 @@ const uploadTemplate = async () => {
 
     emit('template-uploaded');
     visible.value = false;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('上传模板失败:', error);
-    ElMessage.error('上传模板失败: ' + (error?.message || error));
+    ElMessage.error('上传模板失败: ' + ((error as { message?: string; })?.message || error));
   }
 };
 </script>

@@ -17,7 +17,7 @@ export const useMCPStore = defineStore('mcp', () => {
   const connectionCount = computed(() => allConnections.value.length);
 
   const loadingWrapper =
-    <T extends any[], R>(errorMessage: string, fn: (...args: T) => Promise<R>) =>
+    <T extends unknown[], R>(errorMessage: string, fn: (...args: T) => Promise<R>) =>
     (...args: T) =>
       withLoading(
         loading,

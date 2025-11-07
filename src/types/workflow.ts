@@ -17,7 +17,6 @@ export interface WorkflowExecutionOptions {
 export interface SaveWorkflowPayload {
   name: string;
   description: string;
-  messages: any[]; // 包含工具调用的消息列表
   session_id: string;
 }
 

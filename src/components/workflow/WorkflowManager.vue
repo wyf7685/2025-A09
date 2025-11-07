@@ -97,7 +97,7 @@ const executeSelectedWorkflow = async () => {
 
   // 验证数据源映射是否完整
   const requiredSourceIds = Object.keys(selectedWorkflow.value.initial_datasets || {});
-  const mappedSourceIds = Object.keys(dataSourceMappings.value);
+  // const mappedSourceIds = Object.keys(dataSourceMappings.value);
 
   const missingMappings = requiredSourceIds.filter(id => !dataSourceMappings.value[id]);
   if (missingMappings.length > 0) {
@@ -171,13 +171,13 @@ const handleClose = () => {
 };
 
 // 打开创建工作流对话框
-const openCreateDialog = () => {
-  createDialogVisible.value = true;
-  newWorkflowForm.value = {
-    name: '',
-    description: '',
-  };
-};
+// const openCreateDialog = () => {
+//   createDialogVisible.value = true;
+//   newWorkflowForm.value = {
+//     name: '',
+//     description: '',
+//   };
+// };
 
 // 保存当前会话为工作流
 const saveCurrentConversationAsWorkflow = async () => {
@@ -197,7 +197,6 @@ const saveCurrentConversationAsWorkflow = async () => {
       name: newWorkflowForm.value.name,
       description: newWorkflowForm.value.description,
       session_id: props.sessionId,
-      messages: [], // 后端会获取会话的消息列表
     });
 
     if (result) {

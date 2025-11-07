@@ -2,7 +2,6 @@ import type {
   AnalyzeDataQualityResponse,
   AnalyzeDataQualitySuccess,
   CleaningSuggestion,
-  DataQualityReport,
 } from '@/types/cleaning';
 import type { DataSourceMetadata } from '@/types/dataSources';
 import type { ReportTemplate } from '@/types/report';
@@ -124,12 +123,6 @@ export const cleaningAPI = {
     modelName?: string,
   ): Promise<{
     success: boolean;
-    file_info: any;
-    cleaning_summary: any;
-    applied_operations: any[];
-    final_columns: string[];
-    field_mappings_applied: Record<string, string>;
-    cleaned_data_info: any;
     cleaned_file_id: string;
     error?: string;
   }> => {
@@ -153,107 +146,10 @@ export const cleaningAPI = {
     return response.data;
   },
 
-  // 完整的分析和清洗流程
-  analyzeAndClean: async (
-    file: File,
-    selectedSuggestions: CleaningSuggestion[],
-    fieldMappings?: Record<string, string>,
-    userRequirements?: string,
-    modelId?: string,
-  ): Promise<{
-    success: boolean;
-    file_info: any;
-    analysis_result: any;
-    cleaning_result: any;
-    field_mappings: Record<string, string>;
-    applied_operations: any[];
-    summary: any;
-    cleaned_file_id?: string;
-    cleaned_data_info?: any;
-    error?: string;
-  }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const cleaningData = {
-      selected_suggestions: selectedSuggestions,
-      field_mappings: fieldMappings || {},
-      user_requirements: userRequirements,
-    };
-
-    formData.append('cleaning_data', JSON.stringify(cleaningData));
-
-    if (modelId) {
-      formData.append('model_id', modelId);
-    }
-
-    const response = await api.post('/clean/analyze-and-clean', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
-  // 获取清洗建议（支持用户自定义要求）
-  getCleaningSuggestions: async (
-    file: File,
-    userRequirements?: string,
-    modelId?: string,
-  ): Promise<CleaningSuggestion[]> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (userRequirements) {
-      formData.append('user_requirements', userRequirements);
-    }
-    if (modelId) {
-      formData.append('model_id', modelId);
-    }
-    const response = await api.post('/clean/suggestions', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
-  // 获取详细的质量报告（支持用户自定义要求）
-  getQualityReport: async (file: File, userRequirements?: string, modelId?: string): Promise<DataQualityReport> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (userRequirements) {
-      formData.append('user_requirements', userRequirements);
-    }
-    if (modelId) {
-      formData.append('model_id', modelId);
-    }
-    const response = await api.post('/clean/quality-report', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  },
-
-  // 保存字段映射到数据源
-  saveFieldMappings: async (
-    sourceId: string,
-    fieldMappings: Record<string, string>,
-  ): Promise<{
-    success: true;
-    message: string;
-    source_id: string;
-    field_mappings: Record<string, string>;
-  }> => {
-    const response = await api.post('/clean/save-field-mappings', {
-      source_id: sourceId,
-      field_mappings: fieldMappings,
-    });
-    return response.data;
-  },
-
   // 获取生成的清洗代码
-  getGeneratedCode: async (cleanedFileId: string): Promise<{
+  getGeneratedCode: async (
+    cleanedFileId: string,
+  ): Promise<{
     success: boolean;
     file_id?: string;
     generated_code?: string;
@@ -359,7 +255,7 @@ export const dataSourceAPI = {
     limit: number = 100,
     skip: number = 0,
   ): Promise<{
-    data: any[];
+    data: unknown[];
     total: number;
     skip: number;
     limit: number;

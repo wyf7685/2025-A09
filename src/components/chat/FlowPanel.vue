@@ -164,13 +164,6 @@ const addFlowStep = (step: Omit<FlowStep, 'id' | 'timestamp'>) => {
   return newStep.id;
 };
 
-const updateFlowStep = (stepId: string, updates: Partial<FlowStep>) => {
-  const stepIndex = flowSteps.value.findIndex(step => step.id === stepId);
-  if (stepIndex !== -1) {
-    flowSteps.value[stepIndex] = { ...flowSteps.value[stepIndex], ...updates };
-  }
-};
-
 const clearFlowSteps = () => {
   // 清除旧的流程步骤
   flowSteps.value = [];
@@ -253,14 +246,6 @@ const getProviderGroups = () => {
   return groups;
 };
 
-// 路线切换处理
-const handleRouteChange = (route: string) => {
-  console.log('切换到路线:', route);
-  logRouteStatus(`切换到${route}`);
-  // 重置所有步骤状态
-  resetAllSteps();
-  logRouteStatus('重置步骤状态完成');
-};
 
 // 重置所有路线步骤状态
 const resetAllSteps = () => {
@@ -305,7 +290,7 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
       if (needLoop) {
         // 只追加一次循环节点，且工具名与左侧对话栏一致
         if (!route2Steps.value[stepIndex].nextLoop || route2Steps.value[stepIndex].nextLoop.length === 0) {
-          let toolName = route2Steps.value[4]?.toolName;
+          const toolName = route2Steps.value[4]?.toolName;
 
           // 旧的工具调用节点直接设为 completed
           if (route2Steps.value[4]) {
@@ -354,26 +339,6 @@ const updateRouteStep = (stepIndex: number, status: 'pending' | 'active' | 'comp
   }
 
   logRouteStatus(`步骤${stepIndex + 1}状态更新为${status}`);
-};
-
-// 测试智能路线选择功能
-const testRouteSelection = () => {
-  const testCases = [
-    "生成完整报告",
-    "创建数据分析报告",
-    "给我一个综合分析",
-    "绘制相关性热力图",
-    "计算统计信息",
-    "分析数据质量"
-  ];
-
-  console.log('=== 智能路线选择测试 ===');
-  testCases.forEach(testCase => {
-    const route = selectRouteAutomatically(testCase);
-    const reason = getRouteSelectionReason(testCase, route);
-    console.log(`输入: "${testCase}" -> 路线: ${route} (${reason})`);
-  });
-  console.log('=== 测试完成 ===');
 };
 
 // 智能路线选择函数
@@ -483,20 +448,6 @@ const autoSelectRoute = (userMessage: string) => {
   }
 
   return newRoute;
-};
-
-// 手动切换路线
-const toggleRouteManually = () => {
-  const currentRoute = selectedRoute.value;
-  const newRoute = currentRoute === 'route1' ? 'route2' : 'route1';
-
-  selectedRoute.value = newRoute;
-  resetAllSteps();
-
-  console.log(`[手动路线切换] ${currentRoute} -> ${newRoute}`);
-  logRouteStatus(`手动切换路线到: ${newRoute}`);
-
-  ElMessage.info(`已手动切换到路线: ${newRoute === 'route1' ? '生成总体报告' : '调用工具分析'}`);
 };
 
 defineExpose({

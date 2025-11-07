@@ -12,7 +12,7 @@ defineProps<{
 // 详情显示状态
 const showDetails = ref(false);
 
-const formatValue = (value: any): string => {
+const formatValue = (value: unknown): string => {
   if (typeof value === 'number') {
     return value.toFixed(2);
   } else if (typeof value === 'boolean') {
@@ -22,7 +22,7 @@ const formatValue = (value: any): string => {
   } else if (typeof value === 'object') {
     return JSON.stringify(value, null, 2);
   }
-  return value;
+  return String(value);
 };
 </script>
 

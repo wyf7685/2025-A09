@@ -3,7 +3,7 @@ import { checkHealth as checkHealthApi } from '@/utils/api';
 import { ChatDotRound, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import { ElAside, ElIcon, ElTooltip } from 'element-plus';
-import { KeepAlive, onMounted, ref, Suspense, Transition } from 'vue';
+import { onMounted, ref } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
 
 // 响应式数据
@@ -18,18 +18,6 @@ const toggleSidebar = () => {
   setTimeout(() => {
     sidebarTransitioning.value = false;
   }, 300); // 与CSS过渡时间同步
-};
-
-const expandSidebar = () => {
-  if (sidebarCollapsed.value) {
-    toggleSidebar();
-  }
-};
-
-const collapseSidebar = () => {
-  if (!sidebarCollapsed.value) {
-    toggleSidebar();
-  }
 };
 
 const checkHealth = async () => {

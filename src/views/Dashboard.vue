@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/multi-word-component-names -->
 <script setup lang="ts">
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
@@ -10,6 +11,7 @@ const dataSourceStore = useDataSourceStore();
 
 // 计算属性
 const currentSessionId = computed(() => sessionStore.currentSession?.id);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const currentSessionName = computed<any>(() => {
   if (!currentSessionId.value) return '无';
   const session = sessionStore.sessions.find(s => s.id === currentSessionId.value);

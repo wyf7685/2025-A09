@@ -104,7 +104,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
             const assistantMessage = {
               ...entry.assistant_response,
               content: mergeTextPart(entry.assistant_response.content),
-            };
+            } as AssistantChatMessageWithSuggestions;
 
             // 重新提取建议按钮（页面刷新后恢复建议）
             const mergedContent = assistantMessage.content
@@ -113,7 +113,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
 
             const suggestions = extractSuggestions(mergedContent);
             if (suggestions.length > 0) {
-              (assistantMessage as any).suggestions = suggestions;
+              assistantMessage.suggestions = suggestions;
             }
 
             return [entry.user_message, assistantMessage];
@@ -185,7 +185,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
       flowPanel.updateRouteStep(2, 'active');
 
       // 获取当前模型信息
-      const modelId = modelStore?.selectedModel?.id || 'gemini-2.0-flash';
+      // const modelId = modelStore?.selectedModel?.id || 'gemini-2.0-flash';
       const modelName = modelStore?.selectedModel?.name || 'Gemini 2.0 Flash';
 
       // 设置模型名称到流程图
@@ -412,9 +412,9 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
           }
 
           // 获取所有已调用的工具名称
-          const toolNames = Object.values(assistantMessage.tool_calls || {})
-            .map((call) => (call as any).name)
-            .filter((name) => !!name);
+          // const toolNames = Object.values(assistantMessage.tool_calls || {})
+          //   .map((call) => call.name)
+          //   .filter((name) => !!name);
 
           // 工具调用完成，更新路线步骤
           if (selectedRouteForThisMessage === 'route2') {
@@ -442,7 +442,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
                 // 有多个工具调用，需要循环处理
                 const toolCallIds = Object.keys(assistantMessage.tool_calls || {});
                 const completedTools = Object.values(assistantMessage.tool_calls || {}).filter(
-                  (tool) => (tool as any).status === 'success',
+                  (tool) => tool.status === 'success',
                 ).length;
 
                 // 还有工具未执行完
@@ -592,7 +592,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
             // 获取所有已调用的工具名称
             const toolNames = hasToolCalls
               ? Object.values(assistantMessage.tool_calls || {})
-                  .map((call) => (call as any).name)
+                  .map((call) => call.name)
                   .filter((name) => !!name)
               : [];
 
@@ -675,7 +675,9 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
               });
           }
 
-          currentSessionId && sessionStore.refreshSessionName(currentSessionId);
+          if (currentSessionId) {
+            sessionStore.refreshSessionName(currentSessionId);
+          }
           nextTick(() => scrollToBottom?.());
         },
         (error) => {

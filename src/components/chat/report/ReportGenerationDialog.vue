@@ -72,6 +72,7 @@ const generateReport = async () => {
     formattedReport.value = await formatMessage(result.report);
     reportFigures.value = result.figures || [];
     ElMessage.success(`报告生成成功！使用模板：${result.template_used}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('生成报告失败:', error);
     ElMessage.error('生成报告失败: ' + (error?.response?.data?.detail || error?.message || error));
@@ -127,7 +128,7 @@ const deleteTemplate = async (templateId: string) => {
     await reportAPI.deleteTemplate(templateId);
     ElMessage.success('模板删除成功');
     await loadReportTemplates();
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error !== 'cancel') {
       console.error('删除模板失败:', error);
       ElMessage.error('删除模板失败');
