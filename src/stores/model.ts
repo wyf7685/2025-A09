@@ -7,6 +7,7 @@ export const useModelStore = defineStore('model', () => {
   const selectedModel = ref<LLMModel | null>(null);
   const availableModels = ref<LLMModel[]>([]);
 
+  // MLModel start
   const getModels = async (sessionId: string): Promise<ModelsResponse> => {
     const response = await api.get('/models', {
       params: { session_id: sessionId },
@@ -23,11 +24,12 @@ export const useModelStore = defineStore('model', () => {
     const response = await api.delete(`/models/${modelId}`);
     return response.data;
   };
+  // MLModel end
 
   // 获取可用模型
   const fetchAvailableModels = async () => {
     try {
-      const response = await api.get('/models/available');
+      const response = await api.get<{ models: LLMModel[] }>('/models/available');
       availableModels.value = response.data.models;
 
       // 如果当前选择的模型不在可用模型中，选择第一个可用模型
@@ -65,12 +67,13 @@ export const useModelStore = defineStore('model', () => {
         model_id: string;
       }>('/models/custom', params);
 
-      const customModel = {
+      const customModel: LLMModel = {
         id: response.data.model_id,
         name: params.model_name,
         provider: params.provider,
         apiUrl: params.api_url,
-        apiKey: params.api_key,
+        model_name: params.model_name,
+        api_model_name: params.api_model_name,
       };
       setCustomModel(customModel);
       setSelectedModel(customModel);
@@ -88,7 +91,7 @@ export const useModelStore = defineStore('model', () => {
       const response = await api.delete(`/models/custom/${modelId}`);
       if (response.data.success) {
         // 从本地列表中移除
-        const index = availableModels.value.findIndex(m => m.id === modelId);
+        const index = availableModels.value.findIndex((m) => m.id === modelId);
         if (index !== -1) {
           availableModels.value.splice(index, 1);
         }
@@ -117,25 +120,33 @@ export const useModelStore = defineStore('model', () => {
   };
 
   // 更新自定义模型
-  const updateCustomModel = async (modelId: string, params: {
-    name?: string;
-    provider?: string;
-    api_url?: string;
-    api_key?: string;
-    model_name?: string;
-    api_model_name?: string;
-  }) => {
+  const updateCustomModel = async (
+    modelId: string,
+    params: {
+      name?: string;
+      provider?: string;
+      api_url?: string;
+      api_key?: string;
+      model_name?: string;
+      api_model_name?: string;
+    },
+  ) => {
     try {
       const response = await api.put(`/models/custom/${modelId}`, params);
       if (response.data.success) {
         // 更新本地列表中的模型
         const index = availableModels.value.findIndex(m => m.id === modelId);
         if (index !== -1) {
+          const updateData: Partial<LLMModel> = {};
+          if (params.name) updateData.name = params.name;
+          if (params.provider) updateData.provider = params.provider;
+          if (params.api_url) updateData.apiUrl = params.api_url;
+          if (params.model_name) updateData.model_name = params.model_name;
+          if (params.api_model_name) updateData.api_model_name = params.api_model_name;
+
           availableModels.value[index] = {
             ...availableModels.value[index],
-            ...params,
-            apiUrl: params.api_url || availableModels.value[index].apiUrl,
-            apiKey: params.api_key || availableModels.value[index].apiKey,
+            ...updateData,
           };
         }
 
@@ -168,7 +179,7 @@ export const useModelStore = defineStore('model', () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }
+  };
 
   return {
     selectedModel: computed(() => selectedModel.value),

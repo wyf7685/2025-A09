@@ -17,13 +17,6 @@ const props = defineProps<{
   dataSources: { id: string; name: string; }[];
 }>();
 
-interface WorkflowExecutionResult {
-  success: boolean;
-  session_id: string;
-  message?: string;
-  executed_tools?: number;
-}
-
 interface WorkflowExecutionPayload {
   workflow_id: string;
   workflow_name: string;
@@ -34,7 +27,6 @@ interface WorkflowExecutionPayload {
 
 // 组件事件
 const emit = defineEmits<{
-  workflowExecuted: [result: WorkflowExecutionResult];
   workflowExecuting: [payload: WorkflowExecutionPayload];
 }>();
 
@@ -117,10 +109,10 @@ const executeSelectedWorkflow = async () => {
   try {
     // 构造工作流执行的消息
     const workflowMessage = `执行工作流：${selectedWorkflow.value.name}`;
-    
+
     // 关闭对话框
     visible.value = false;
-    
+
     // 发出事件，让父组件通过聊天接口执行工作流
     emit('workflowExecuting', {
       workflow_id: selectedWorkflow.value.id,
@@ -129,7 +121,7 @@ const executeSelectedWorkflow = async () => {
       datasource_mappings: dataSourceMappings.value,
       message: workflowMessage,
     });
-    
+
     ElMessage.success('开始执行工作流，请查看聊天界面');
   } catch (error) {
     console.error('执行工作流失败:', error);

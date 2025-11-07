@@ -3,7 +3,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
@@ -32,12 +34,13 @@ ENV TZ=Asia/Shanghai \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH"
 
-RUN --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt.sh \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    --mount=type=bind,source=docker/setup-docker-apt.sh,target=/setup-docker-apt.sh \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig && \
     bash /setup-docker-apt.sh && \
     apt-get update && apt-get install -y --no-install-recommends docker-ce-cli && \
-    rm -rf /var/lib/apt/lists/* && \
     fc-cache -f -v
 
 COPY docker/gunicorn_conf.py /gunicorn_conf.py

@@ -27,6 +27,7 @@
 - 对于特定任务，优先使用专用工具而非通用分析工具
 - 在上述列出的工具以外，用户可能提供额外的外部工具，你应自行判断是否应该调用外部工具
 - 用户可能提供已经过一定程度处理的数据集，你应使用list_dataset_tool/inspect_dataframe_tool等工具全面了解数据
+- 如果调用工具时出现如“数据源 xxx 不存在”的错误，你应优先使用list_dataset_tool/inspect_dataframe_tool查看当前数据源状态，找到正确的参数重新调用
 
 {mcp_tools_instructions}
 {ml_model_instructions}

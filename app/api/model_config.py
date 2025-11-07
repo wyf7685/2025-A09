@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.log import logger
-from app.schemas.custom_model import CustomModelConfig, LLModelID
+from app.schemas.custom_model import CustomModelConfig, CustomModelInfo, LLModelID
 from app.services.custom_model import custom_model_manager
 
 router = APIRouter(prefix="/models")
@@ -86,9 +86,9 @@ async def update_custom_model(model_id: LLModelID, request: UpdateCustomModelReq
         raise HTTPException(status_code=500, detail="更新自定义模型失败") from e
 
 
-@router.get("/custom/{model_id}")
+@router.get("/custom/{model_id}", response_model=CustomModelInfo)
 async def get_custom_model(model_id: LLModelID) -> CustomModelConfig:
-    """获取自定义模型配置"""
+    """获取自定义模型配置（不返回API密钥）"""
     config = custom_model_manager.get_model(model_id)
     if not config:
         raise HTTPException(status_code=404, detail="自定义模型未找到")
@@ -101,7 +101,7 @@ class ModelsResponse(BaseModel):
 
 @router.get("/available")
 async def get_available_models() -> ModelsResponse:
-    """获取可用的模型列表（仅包含用户自定义模型）"""
+    """获取可用的模型列表"""
     models = []
 
     # 获取自定义模型
@@ -138,26 +138,3 @@ async def delete_custom_model(model_id: LLModelID) -> dict:
     except Exception as e:
         logger.error(f"删除自定义模型失败: {e}")
         raise HTTPException(status_code=500, detail="删除自定义模型失败") from e
-
-
-@router.get("/custom")
-async def list_custom_models() -> dict:
-    """获取所有自定义模型配置"""
-    try:
-        custom_models = custom_model_manager.list_models()
-        models_list = [
-            {
-                "id": model_config.id,
-                "name": model_config.name,
-                "provider": model_config.provider,
-                "api_url": model_config.api_url,
-                "model_name": model_config.model_name,
-                "api_model_name": getattr(model_config, "api_model_name", model_config.model_name),
-                "available": True,
-            }
-            for model_config in custom_models.values()
-        ]
-        return {"success": True, "models": models_list}
-    except Exception as e:
-        logger.error(f"获取自定义模型列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取自定义模型列表失败") from e

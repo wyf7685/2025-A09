@@ -1,11 +1,22 @@
 import type { ChatEntry, MLModel, Session, SessionListItem, ToolCallArtifact } from '@/types';
 import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
 
 export const useSessionStore = defineStore('session', () => {
-  const currentSession = ref<Session | null>(null);
+  const currentSessionReactive = reactive<{ session: Session | null }>({ session: null });
+  const currentSession = computed({
+    get: () => currentSessionReactive.session,
+    set: (value: Session | null) => {
+      currentSessionReactive.session = value;
+    },
+  });
+  const currentSessionName = computed(() =>
+    currentSession.value
+      ? currentSession.value.name || `会话 ${currentSession.value.id.substring(0, 8)}`
+      : '',
+  );
   const sessions = ref<SessionListItem[]>([]);
   const chatHistory = ref<ChatEntry[]>([]);
   const isDeleting = ref<Record<string, boolean>>({});
@@ -21,7 +32,7 @@ export const useSessionStore = defineStore('session', () => {
     currentSession.value = session;
   };
 
-  const setCurrentSessionById = async (sessionId: string) => {
+  const setCurrentSessionById = async (sessionId: string): Promise<void> => {
     try {
       setCurrentSession(await getSession(sessionId));
       await listSessions();
@@ -32,12 +43,33 @@ export const useSessionStore = defineStore('session', () => {
   };
 
   // 更新会话名称
-  const updateSessionName = async (sessionId: string, name: string | null) => {
+  const updateSessionName = async (sessionId: string, name: string | null): Promise<void> => {
     if (!name) return;
 
     try {
       // 调用后端API更新会话名称
-      const response = await api.put<Session>(`/sessions/${sessionId}`, { name });
+      await api.put<Session>(`/sessions/${sessionId}`, { name });
+
+      // 更新本地会话列表中的会话名称
+      const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
+      if (sessionIndex !== -1) {
+        sessions.value[sessionIndex].name = name;
+      }
+
+      // 如果当前会话是目标会话，也更新当前会话
+      if (currentSession.value?.id === sessionId) {
+        currentSession.value.name = name;
+      }
+    } catch (error) {
+      console.error('更新会话名称失败:', error);
+      throw error;
+    }
+  };
+
+  const refreshSessionName = async (sessionId: string): Promise<string> => {
+    try {
+      const response = await api.get<{ name: string | null }>(`/sessions/${sessionId}/name`);
+      const name = response.data.name || `会话 ${sessionId.substring(0, 8)}`;
 
       // 更新本地会话列表中的会话名称
       const sessionIndex = sessions.value.findIndex((s) => s.id === sessionId);
@@ -50,9 +82,9 @@ export const useSessionStore = defineStore('session', () => {
         currentSession.value.name = name;
       }
 
-      return response.data;
+      return name;
     } catch (error) {
-      console.error('更新会话名称失败:', error);
+      console.error(`获取会话 ${sessionId} 名称失败:`, error);
       throw error;
     }
   };
@@ -203,6 +235,8 @@ export const useSessionStore = defineStore('session', () => {
     } catch (error) {
       console.error('Stream chat error:', error);
       onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      await refreshSessionName(currentSession.value!.id);
     }
   };
 
@@ -288,19 +322,15 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     try {
-      await api.put<void>(
-        `/sessions/${currentSession.value.id}/model_config`,
-        config,
-      );
+      await api.put<void>(`/sessions/${currentSession.value.id}/model_config`, config);
 
       // 成功更新后端配置后，同步更新前端的 currentSession 状态
       if (currentSession.value.agent_model_config) {
         currentSession.value.agent_model_config = {
           ...currentSession.value.agent_model_config,
-          ...config
+          ...config,
         };
       }
-      
     } catch (error) {
       console.error('更新会话模型配置失败:', error);
       ElMessage.error('更新会话模型配置失败');
@@ -311,12 +341,14 @@ export const useSessionStore = defineStore('session', () => {
   return {
     currentSession: computed(() => currentSession.value),
     currentSessionId: computed(() => currentSession.value?.id),
+    currentSessionName,
     sessions,
     chatHistory,
     createSession,
     setCurrentSession,
     setCurrentSessionById,
     updateSessionName,
+    refreshSessionName,
     listSessions,
     getSession,
     deleteSession,

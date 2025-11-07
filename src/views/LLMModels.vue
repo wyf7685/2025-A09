@@ -93,7 +93,7 @@ const editLLMModel = async (model: any): Promise<void> => {
     llmModelForm.value = {
       name: customModelConfig.name,
       provider: customModelConfig.provider,
-      apiKey: customModelConfig.api_key || '',
+      apiKey: '', // 编辑时不显示已存储的API Key，用户需要重新输入或保持不变
       apiUrl: customModelConfig.api_url || '',
       modelName: customModelConfig.model_name
     };
@@ -163,8 +163,16 @@ const deleteLLMModel = async (modelId: string): Promise<void> => {
 
 const saveLLMModel = async (): Promise<void> => {
   try {
-    if (!llmModelForm.value.name || !llmModelForm.value.provider || !llmModelForm.value.apiKey) {
+    // 新增模型时，name、provider、apiKey、modelName 都是必填的
+    // 编辑模型时，apiKey 是可选的（不填则保持原值）
+    if (!llmModelForm.value.name || !llmModelForm.value.provider || !llmModelForm.value.modelName) {
       ElMessage.error('请填写完整的模型信息');
+      return;
+    }
+
+    // 新增时必须填写 API Key
+    if (!currentEditLLMModel.value && !llmModelForm.value.apiKey) {
+      ElMessage.error('请填写 API Key');
       return;
     }
 
@@ -176,14 +184,18 @@ const saveLLMModel = async (): Promise<void> => {
 
     if (currentEditLLMModel.value) {
       // 编辑现有模型
-      await modelStore.updateCustomModel(currentEditLLMModel.value.id, {
+      const updateData: any = {
         name: llmModelForm.value.name,
         provider: llmModelForm.value.provider,
-        api_key: llmModelForm.value.apiKey,
         api_url: finalApiUrl,
         model_name: llmModelForm.value.modelName,
         api_model_name: apiModelName
-      });
+      };
+      // 只有当用户填写了新的 API Key 时才更新它
+      if (llmModelForm.value.apiKey.trim()) {
+        updateData.api_key = llmModelForm.value.apiKey;
+      }
+      await modelStore.updateCustomModel(currentEditLLMModel.value.id, updateData);
       ElMessage.success('模型配置更新成功');
     } else {
       // 添加新模型
@@ -314,6 +326,9 @@ onMounted(async () => {
       <!-- 添加LLM模型对话框 -->
       <el-dialog v-model="showAddLLMDialog" title="添加LLM模型" width="600px" @close="resetLLMForm">
         <el-form :model="llmModelForm" label-width="120px">
+          <el-form-item label="显示名称" required>
+            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
+          </el-form-item>
           <el-form-item label="提供商" required>
             <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
@@ -340,9 +355,6 @@ onMounted(async () => {
             <div class="form-tip">
               默认URL: {{modelProviders.find(p => p.name === llmModelForm.provider)?.defaultUrl || '请选择提供商'}}
             </div>
-          </el-form-item>
-          <el-form-item label="显示名称">
-            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
           </el-form-item>
         </el-form>
         <template #footer>
@@ -356,6 +368,9 @@ onMounted(async () => {
       <!-- 编辑LLM模型对话框 -->
       <el-dialog v-model="showEditLLMDialog" :title="getDialogTitle()" width="600px" @close="resetLLMForm">
         <el-form :model="llmModelForm" label-width="120px">
+          <el-form-item label="显示名称" required>
+            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
+          </el-form-item>
           <el-form-item label="提供商" required>
             <el-select v-model="llmModelForm.provider" placeholder="选择模型提供商" style="width: 100%">
               <el-option v-for="provider in modelProviders" :key="provider.name" :label="provider.name"
@@ -374,7 +389,7 @@ onMounted(async () => {
                 :key="model" :label="model" :value="model" />
             </el-select>
           </el-form-item>
-          <el-form-item label="API Key" required>
+          <el-form-item label="API Key">
             <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password />
           </el-form-item>
           <el-form-item label="API URL">
@@ -382,9 +397,6 @@ onMounted(async () => {
             <div class="form-tip">
               默认URL: {{modelProviders.find(p => p.name === llmModelForm.provider)?.defaultUrl || '请选择提供商'}}
             </div>
-          </el-form-item>
-          <el-form-item label="显示名称">
-            <el-input v-model="llmModelForm.name" placeholder="自定义显示名称（可选）" />
           </el-form-item>
         </el-form>
         <template #footer>

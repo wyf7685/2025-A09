@@ -11,3 +11,4 @@ class PROMPTS:
     external_ml_model: str
     mcp_server: str
     mcp_tools_instruction: str
+    summarize_workflow: str

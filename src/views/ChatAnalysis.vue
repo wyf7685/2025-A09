@@ -15,7 +15,8 @@ import { useDataSourceStore } from '@/stores/datasource';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import { useWorkflowStore } from '@/stores/workflow';
-import type { MCPConnection, MLModel } from '@/types';
+import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
+import { API_BASE_URL } from '@/utils/api';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
@@ -59,6 +60,7 @@ const workflowManagerDialogVisible = ref(false);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
+const currentSessionName = computed(() => sessionStore.currentSessionName);
 const currentDatasetMetadatas = computed(() =>
   sessionStore.currentSession
     ? sessionStore.currentSession.dataset_ids
@@ -191,8 +193,7 @@ const onWorkflowExecuting = async (payload: {
   workflowManagerDialogVisible.value = false;
 
   // 使用 EventSource 处理流式响应
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-  const url = `${apiBaseUrl}/workflow/execute`;
+  const url = `${API_BASE_URL}/workflow/execute`;
 
   try {
     const response = await fetch(url, {
@@ -226,7 +227,7 @@ const onWorkflowExecuting = async (payload: {
       tool_calls: {},
       loading: true,
       suggestions: [],
-    } as any);
+    } as AssistantChatMessage & { loading: boolean; tool_calls: NonNullable<AssistantChatMessage["tool_calls"]>; });
 
     messages.value.push(assistantMessage);
     scrollToBottom();
@@ -256,7 +257,19 @@ const onWorkflowExecuting = async (payload: {
           const event = JSON.parse(line);
 
           // 处理不同类型的事件
-          if (event.type === 'tool_call') {
+          if (event.type === 'llm_token') {
+            const content = event.content;
+            if (
+              !assistantMessage.content.length ||
+              assistantMessage.content[assistantMessage.content.length - 1].type !== 'text'
+            ) {
+              assistantMessage.content.push({ type: 'text', content });
+            }
+            const lastText = assistantMessage.content[assistantMessage.content.length - 1] as {
+              content: string;
+            };
+            lastText.content += content;
+          } else if (event.type === 'tool_call') {
             // 工具调用开始
             const toolCallId = event.id;
             assistantMessage.content.push({
@@ -311,57 +324,13 @@ const onWorkflowExecuting = async (payload: {
 
     // 刷新聊天历史
     await refreshChatHistory();
+    await sessionStore.refreshSessionName(payload.session_id);
 
     ElMessage.success('工作流执行完成');
   } catch (error) {
     console.error('执行工作流失败:', error);
     ElMessage.error(`执行工作流失败: ${error}`);
   }
-};
-
-const onWorkflowExecuted = async (result: {
-  success: boolean;
-  session_id: string;
-  message?: string;
-  executed_tools?: number;
-}) => {
-  // 构建详细的成功消息
-  const successMessage = result.message || `工作流执行成功，共执行了${result.executed_tools || '多个'}工具调用`;
-
-  // 使用更突出的消息框而不是普通消息
-  ElMessageBox.alert(
-    `<div style="text-align:center;margin-bottom:10px;"><i class="el-icon-success" style="font-size:30px;color:#67C23A;"></i></div>
-     <div>${successMessage}</div>
-     <div style="margin-top:10px;font-size:14px;color:#909399;">刷新会话中，请稍候...</div>`,
-    '工作流执行成功',
-    {
-      dangerouslyUseHTMLString: true,
-      confirmButtonText: '确定',
-      customClass: 'workflow-success-dialog',
-      callback: () => { }
-    }
-  );
-
-  workflowManagerDialogVisible.value = false;
-
-  // 刷新聊天历史，显示工作流执行结果
-  await refreshChatHistory();
-
-  // 如果有流程图面板，也需要刷新
-  if (flowPanelRef.value?.flowPanel) {
-    nextTick(() => {
-      flowPanelRef.value?.flowPanel?.clearFlowSteps?.();
-    });
-  }
-
-  // 显示提示：用户可以保存此会话为新的工作流
-  setTimeout(() => {
-    ElMessage({
-      type: 'info',
-      message: '提示: 您可以将当前对话保存为新的工作流，以便再次使用',
-      duration: 5000
-    });
-  }, 1000);
 };
 
 const openEditSessionDialog = (sessionId: string, sessionName: string) => {
@@ -380,6 +349,7 @@ const saveSessionEdit = async () => {
     await sessionStore.updateSessionName(editingSessionId.value, editingSessionName.value.trim());
     ElMessage.success('会话名称更新成功');
     editSessionDialogVisible.value = false;
+    await sessionStore.refreshSessionName(editingSessionId.value);
   } catch (error) {
     console.error('更新会话名称失败:', error);
     ElMessage.error('更新会话名称失败');
@@ -570,7 +540,7 @@ onMounted(async () => {
         <div class="header-left">
           <!-- 侧边栏收缩时不显示展开按钮，因为收缩的侧边栏本身就有展开按钮 -->
           <span class="session-title" v-if="currentSessionId">
-            {{sessions.find(s => s.id === currentSessionId)?.name || `会话: ${currentSessionId.slice(0, 8)}...`}}
+            {{ currentSessionName }}
           </span>
         </div>
         <div class="header-right">
@@ -650,8 +620,7 @@ onMounted(async () => {
       :selectionMode="true"
       :sessionId="currentSessionId || ''"
       :dataSources="currentDatasets"
-      @workflowExecuting="onWorkflowExecuting"
-      @workflowExecuted="onWorkflowExecuted" />
+      @workflowExecuting="onWorkflowExecuting" />
   </div>
 </template>
 

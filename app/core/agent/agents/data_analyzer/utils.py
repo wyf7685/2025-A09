@@ -1,4 +1,6 @@
 import itertools
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable
@@ -11,21 +13,70 @@ from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.exception import AgentNotFound
 from app.log import logger
+from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
-from .schemas import DataAnalyzerAgentState
+from .schemas import DataAnalyzerAgentState, WorkflowData
+
+if TYPE_CHECKING:
+    from app.core.datasource import DataSource
 
 
-def resume_tool_calls(sources: Sources, messages: list[AnyMessage]) -> None:
-    for tool_call in itertools.chain.from_iterable(
+def create_mapped_sources(
+    original: Sources,
+    mapping: dict[str, str],
+    random_state: int,
+) -> tuple[Sources, Callable[[], None]]:
+    sources_dict: dict[str, DataSource] = {}
+    for mapped_id, original_id in mapping.items():
+        source = original.get(original_id)
+        if source is None:
+            raise ValueError(f"找不到数据源 ID: {original_id}")
+        sources_dict[mapped_id] = source.copy()
+
+    sources = Sources(sources_dict, random_state=random_state)
+
+    def restore() -> None:
+        for source_id, source in list(sources.items()):
+            original_id = mapping.get(source_id)
+            sources_dict[original_id or source_id] = source
+
+    return sources, restore
+
+
+def resume_tool_calls(
+    sources: Sources,
+    model_config: AgentModelConfigFixed,
+    wf_data: WorkflowData,
+    messages: list[AnyMessage],
+) -> None:
+    wf_sources: dict[str, tuple[Sources, Callable[[], None]]] = {}
+
+    tool_calls = itertools.chain.from_iterable(
         m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls
-    ):
+    )
+    for tool_call in tool_calls:
+        call_sources = sources
+        restore = None
+        if tool_call["id"] and (wf_call_id := wf_data.tool_calls.get(tool_call["id"])):
+            if wf_call_id not in wf_sources:
+                wf_meta = wf_data.call_meta[wf_call_id]
+                wf_sources[wf_call_id] = create_mapped_sources(
+                    original=sources,
+                    mapping=wf_meta.mapping,
+                    random_state=wf_meta.random_state,
+                )
+            call_sources, restore = wf_sources[wf_call_id]
+
         try:
-            resume_tool_call(tool_call, {"sources": sources})
+            resume_tool_call(tool_call, {"sources": call_sources, "model_config": model_config})
         except Exception as e:
             logger.opt(colors=True, exception=True).warning(
                 f"恢复工具调用时出错: <y>{escape_tag(tool_call['name'])}</> - {escape_tag(str(e))}"
             )
+
+        if restore is not None:
+            restore()
 
 
 def format_conversation(messages: list[AnyMessage], *, include_figures: bool) -> tuple[str, list[str]]:

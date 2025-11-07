@@ -496,7 +496,7 @@ def dataframe_tools(sources: Sources) -> list[BaseTool]:
     ]
 
 
-@resumable("correlation_analysis_tool")
+@resumable
 def correlation_analysis_tool(
     sources: Sources,
     dataset_id: DatasetID,
@@ -507,7 +507,7 @@ def correlation_analysis_tool(
     return corr_analys(sources.read(dataset_id), col1, col2, method)
 
 
-@resumable("lag_analysis_tool")
+@resumable
 def lag_analysis_tool(
     sources: Sources,
     dataset_id: DatasetID,
@@ -517,7 +517,7 @@ def lag_analysis_tool(
     return lag_analys(sources.read(dataset_id), time_col1, time_col2)
 
 
-@resumable("detect_outliers_tool")
+@resumable
 def detect_outliers_tool(
     sources: Sources,
     dataset_id: DatasetID,
@@ -528,7 +528,7 @@ def detect_outliers_tool(
     return detect_outliers(sources.read(dataset_id), column, method, threshold)
 
 
-@resumable("inspect_dataframe_tool")
+@resumable
 def inspect_dataframe_tool(
     sources: Sources,
     dataset_id: DatasetID,
@@ -537,13 +537,13 @@ def inspect_dataframe_tool(
     return inspect_dataframe(sources.read(dataset_id), options)
 
 
-@resumable("get_missing_values_summary_tool")
+@resumable
 def get_missing_values_summary_tool(sources: Sources, dataset_id: DatasetID) -> MissingValuesSummary:
     return get_missing_values_summary(sources.read(dataset_id))
 
 
-@resumable("create_column_tool")
-def _(
+@resumable
+def create_column_tool(
     sources: Sources,
     dataset_id: DatasetID,
     column_name: str,
@@ -558,8 +558,8 @@ def _(
     create_column(sources, source_datasets, target_dataset_id, column_name, expression, description)
 
 
-@resumable("create_interaction_term_tool")
-def _(
+@resumable
+def create_interaction_term_tool(
     sources: Sources,
     dataset_id: DatasetID,
     column_name: str,
@@ -571,8 +571,8 @@ def _(
     create_interaction_term(sources.read(dataset_id), column_name, columns_to_interact, interaction_type, scale)
 
 
-@resumable("create_aggregated_feature_tool")
-def _(
+@resumable
+def create_aggregated_feature_tool(
     sources: Sources,
     dataset_id: DatasetID,
     column_name: str,

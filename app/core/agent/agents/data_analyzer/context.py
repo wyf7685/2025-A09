@@ -28,7 +28,7 @@ from app.core.lifespan import Lifespan
 from app.log import logger
 from app.schemas.mcp import Connection
 from app.schemas.ml_model import MLModelInfo
-from app.schemas.session import AgentModelConfig, SessionID
+from app.schemas.session import AgentModelConfig, AgentModelConfigFixed, SessionID
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
@@ -70,18 +70,13 @@ class AgentContext:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._saved_models
 
-    async def get_model_config(self) -> AgentModelConfig:
+    async def get_model_config(self) -> AgentModelConfigFixed:
         from app.services.session import session_service
 
         if (session := await session_service.get(self.session_id)) is None:
-            return AgentModelConfig.default_config()
+            return AgentModelConfig.default_config().fixed
 
-        config = session.agent_model_config.model_copy()
-        for attr in ("chat", "create_title", "summary", "code_generation"):
-            if getattr(config, attr) is None:
-                setattr(config, attr, config.default)
-
-        return config
+        return session.agent_model_config.model_copy().fixed
 
     async def _load_external_models(self) -> list[MLModelInfo]:
         from app.services.model_registry import model_registry

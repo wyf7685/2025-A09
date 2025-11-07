@@ -1,3 +1,4 @@
+import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type {
   AssistantChatMessage,
@@ -6,6 +7,9 @@ import type {
   ChatMessage,
   DataSourceMetadata,
 } from '@/types';
+import type { FlowPanel } from '@/types/flow';
+import { ElMessage } from 'element-plus';
+import { nextTick, reactive, ref } from 'vue';
 
 // 声明全局类型扩展
 declare global {
@@ -13,10 +17,6 @@ declare global {
     _flowTimeoutIds?: number[];
   }
 }
-import type { FlowPanel } from '@/types/flow';
-import { useModelStore } from '@/stores/model';
-import { ElMessage } from 'element-plus';
-import { nextTick, reactive, ref } from 'vue';
 
 type MessageExtraState = { loading?: boolean; suggestions?: string[] };
 type ChatMessageWithSuggestions = ChatMessage & MessageExtraState;
@@ -675,6 +675,7 @@ export const useChat = (flowPanelRef?: () => FlowPanel | undefined) => {
               });
           }
 
+          currentSessionId && sessionStore.refreshSessionName(currentSessionId);
           nextTick(() => scrollToBottom?.());
         },
         (error) => {
