@@ -20,6 +20,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    concurrency:
+      group: docker-spf-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
       packages: write
