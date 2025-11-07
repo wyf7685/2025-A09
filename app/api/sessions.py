@@ -255,6 +255,10 @@ async def add_models_to_session(session: CurrentSession, request: AddModelsToSes
                 session.model_ids.append(model_id)
 
         await session_service.save_session(session)
+
+        # 清除Agent缓存，强制重新创建以加载新的模型
+        await daa_service.safe_destroy(session.id)
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -274,6 +278,10 @@ async def remove_models_from_session(session: CurrentSession, request: RemoveMod
         if session.model_ids:
             session.model_ids = [mid for mid in session.model_ids if mid not in request.model_ids]
         await session_service.save_session(session)
+
+        # 清除Agent缓存，强制重新创建以移除模型
+        await daa_service.safe_destroy(session.id)
+
     except Exception as e:
         logger.exception("从会话移除模型失败")
         raise HTTPException(status_code=500, detail=f"Failed to remove models from session: {e}") from e

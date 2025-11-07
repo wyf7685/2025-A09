@@ -19,9 +19,10 @@ import type { MCPConnection, MLModel } from '@/types';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const router = useRouter();
+const route = useRoute();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
@@ -399,7 +400,9 @@ const openReportDialog = async () => {
   reportDialogVisible.value = true;
 };
 
-const openModelSelectDialog = () => {
+const openModelSelectDialog = async () => {
+  // 在打开对话框前先加载当前会话的模型
+  await loadCurrentSessionModels();
   modelSelectDialogVisible.value = true;
 };
 
@@ -535,7 +538,13 @@ onMounted(async () => {
   await dataSourceStore.listDataSources(); // 加载数据源
   await mcpStore.listConnections(); // 加载MCP连接
 
-  if (currentSessionId.value) {
+  // 检查URL参数中的session ID
+  const sessionFromUrl = route.query.session as string;
+  if (sessionFromUrl) {
+    // 如果URL中有session参数，切换到该会话
+    await switchSession(sessionFromUrl);
+  } else if (currentSessionId.value) {
+    // 如果没有URL参数但有当前会话，加载当前会话的数据
     await refreshChatHistory();
     await loadCurrentMCPConnections(); // 加载当前会话的MCP连接
     await loadCurrentSessionModels(); // 加载当前会话的模型
@@ -625,7 +634,8 @@ onMounted(async () => {
 
     <!-- Model Selection Dialog -->
     <ModelSelectDialog v-if="currentSessionId" v-model:visible="modelSelectDialogVisible"
-      v-model:session-models="sessionModels" :current-session-id="currentSessionId" />
+      v-model:session-models="sessionModels" :current-session-id="currentSessionId"
+      @models-updated="loadCurrentSessionModels" />
 
     <!-- 保存工作流对话框 -->
     <SaveWorkflowDialog
