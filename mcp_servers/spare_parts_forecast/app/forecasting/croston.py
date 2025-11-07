@@ -392,7 +392,7 @@ def croston_forecast_impl(
         # 创建图表
         image_bytes = None
         if enable_diagnostics:
-            fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+            _, axes = plt.subplots(2, 1, figsize=(12, 10))
 
             # 上图: 原始数据和所有预测
             axes[0].plot(df_work[time_column], data_series, label="原始数据", color="black")
