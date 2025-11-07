@@ -77,7 +77,7 @@ const deleteModel = async (modelId: string): Promise<void> => {
 const openAnalyzeDialog = async (model: MLModel): Promise<void> => {
   analyzeModel.value = model;
   showAnalyzeDialog.value = true;
-  
+
   // 加载会话列表
   loadingSessions.value = true;
   try {
@@ -94,12 +94,12 @@ const openAnalyzeDialog = async (model: MLModel): Promise<void> => {
 // 挂载模型到现有会话
 const mountToSession = async (sessionId: string): Promise<void> => {
   if (!analyzeModel.value) return;
-  
+
   try {
     await sessionStore.addModelsToSession(sessionId, [analyzeModel.value.id]);
     ElMessage.success('模型已挂载到会话');
     showAnalyzeDialog.value = false;
-    
+
     // 跳转到对话页面
     router.push(`/chat-analysis?session=${sessionId}`);
   } catch (error) {
@@ -117,17 +117,17 @@ const openNewSessionDialog = (): void => {
 // 创建新会话并挂载模型
 const createSessionAndMount = async (datasetIds: string[]): Promise<void> => {
   if (!analyzeModel.value) return;
-  
+
   try {
     // 创建新会话
     const newSession = await sessionStore.createSession(datasetIds);
-    
+
     // 挂载模型
     await sessionStore.addModelsToSession(newSession.id, [analyzeModel.value.id]);
-    
+
     ElMessage.success('已创建新会话并挂载模型');
     showDatasetSelector.value = false;
-    
+
     // 跳转到对话页面
     router.push(`/chat-analysis?session=${newSession.id}`);
   } catch (error) {
@@ -228,7 +228,8 @@ onMounted(async () => {
                 </el-icon>
                 查看
               </el-button>
-              <el-button size="small" type="warning" plain @click="modelStore.downloadModel(model.id)" class="action-btn">
+              <el-button size="small" type="warning" plain @click="modelStore.downloadModel(model.id)"
+                class="action-btn">
                 <el-icon>
                   <Download />
                 </el-icon>
@@ -354,7 +355,9 @@ onMounted(async () => {
           </div>
           <div class="dialog-footer">
             <el-button type="success" @click="openNewSessionDialog">
-              <el-icon><TrendCharts /></el-icon>
+              <el-icon>
+                <TrendCharts />
+              </el-icon>
               新建会话
             </el-button>
           </div>
