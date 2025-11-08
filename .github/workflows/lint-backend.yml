@@ -1,0 +1,41 @@
+name: Lint Backend
+
+on:
+  push:
+    paths:
+      - "app/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/lint-backend.yml"
+
+jobs:
+  ruff:
+    name: Ruff Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Ruff Lint
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: >-
+            app/
+
+  basedpyright:
+    name: BasedPyright Lint
+    runs-on: ubuntu-latest
+    needs: ruff
+    concurrency:
+      group: basedpyright-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Run BasedPyright
+        run: uvx basedpyright app/

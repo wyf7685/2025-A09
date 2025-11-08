@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import { useModelStore } from '@/stores/model';
-import { useSessionStore } from '@/stores/session';
 import type { MLModel } from '@/types';
-import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, TrendCharts, View } from '@element-plus/icons-vue';
+import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, View } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-const sessionStore = useSessionStore();
 const modelStore = useModelStore();
 const router = useRouter();
 

@@ -19,7 +19,7 @@ interface SSEConnection {
   /** The URL of the SSE endpoint to connect to. */
   url: string;
   /** HTTP headers to send to the SSE endpoint */
-  headers?: Record<string, any> | null;
+  headers?: Record<string, string> | null;
   /** HTTP timeout */
   timeout: number;
   /** SSE read timeout */
@@ -32,7 +32,7 @@ interface StreamableHttpConnection {
   /** The URL of the endpoint to connect to. */
   url: string;
   /** HTTP headers to send to the endpoint. */
-  headers?: Record<string, any> | null;
+  headers?: Record<string, string> | null;
   /** HTTP timeout. */
   timeout: number;
   /**

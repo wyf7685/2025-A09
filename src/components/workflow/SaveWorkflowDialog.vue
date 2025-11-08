@@ -53,7 +53,6 @@ const handleSave = async () => {
         name: form.value.name,
         description: form.value.description,
         session_id: props.sessionId,
-        messages: props.messages
       });
 
       ElMessage.success('工作流保存成功');

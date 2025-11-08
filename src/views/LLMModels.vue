@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import LLMModelIcon from '@/components/LLMModelIcon.vue';
 import { useModelStore } from '@/stores/model';
-import type { LLMModel } from '@/types';
+import type { LLMModel, LLMModelEditParams } from '@/types';
 import { Delete, Edit, Plus } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import {
@@ -85,7 +85,7 @@ const fetchLLMModels = async (): Promise<void> => {
   }
 };
 
-const editLLMModel = async (model: any): Promise<void> => {
+const editLLMModel = async (model: LLMModel): Promise<void> => {
   currentEditLLMModel.value = model;
 
   try {
@@ -184,7 +184,7 @@ const saveLLMModel = async (): Promise<void> => {
 
     if (currentEditLLMModel.value) {
       // 编辑现有模型
-      const updateData: any = {
+      const updateData: LLMModelEditParams = {
         name: llmModelForm.value.name,
         provider: llmModelForm.value.provider,
         api_url: finalApiUrl,

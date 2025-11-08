@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DataSourceMetadata } from '@/types';
+import type { DataSourceMetadata, MLModel } from '@/types';
 import type { MCPConnection } from '@/types/mcp';
 import { turncateString } from '@/utils/tools';
 import { DataAnalysis, Document, DocumentCopy, Link, PieChart, Search, WarningFilled } from '@element-plus/icons-vue';
@@ -9,7 +9,7 @@ const props = defineProps<{
   isProcessingChat: boolean;
   currentDatasets?: DataSourceMetadata[] | null;
   mcpConnections?: MCPConnection[] | null;
-  sessionModels?: any[] | null;
+  sessionModels?: MLModel[] | null;
 }>();
 
 const input = defineModel<string>('input', { required: true });
@@ -58,10 +58,10 @@ const formatMCPTooltip = (connections: MCPConnection[]) => {
   return `共 ${connections.length} 个 MCP 连接: ${connections.slice(0, 2).map(c => turncateString(c.name, 20)).join(', ')} ${connections.length > 2 ? '等' : ''}`;
 };
 
-const formatModelsTooltip = (models: any[]) => {
+const formatModelsTooltip = (models: MLModel[]) => {
   if (models.length === 0) return '无外部模型';
-  if (models.length === 1) return `模型: ${models[0].name || models[0].model_type}`;
-  return `共 ${models.length} 个外部模型: ${models.slice(0, 2).map(m => turncateString(m.name || m.model_type, 20)).join(', ')} ${models.length > 2 ? '等' : ''}`;
+  if (models.length === 1) return `模型: ${models[0].name || models[0].type}`;
+  return `共 ${models.length} 个外部模型: ${models.slice(0, 2).map(m => turncateString(m.name || m.type, 20)).join(', ')} ${models.length > 2 ? '等' : ''}`;
 };
 
 // 获取传输类型标签样式
@@ -156,7 +156,7 @@ const getTransportTagType = (transport: string): 'primary' | 'success' | 'warnin
                 type="success"
                 size="small"
                 style="margin-left: 4px;">
-                {{ turncateString(model.name || model.model_type, 8) }}
+                {{ turncateString(model.name || model.type, 8) }}
               </el-tag>
               <el-tag v-if="sessionModels.length > 3" size="small" style="margin-left: 4px;">
                 +{{ sessionModels.length - 3 }}

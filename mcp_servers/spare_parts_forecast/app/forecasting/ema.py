@@ -267,7 +267,7 @@ def ema_forecast_impl(
             plt.figure(figsize=(12, 8))
 
             # 创建子图
-            fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+            _, axes = plt.subplots(2, 1, figsize=(12, 10))
 
             # 上图: 原始数据和所有预测
             axes[0].plot(df_work.index, df_work[target_column], label="原始数据", color="black")

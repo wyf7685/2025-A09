@@ -1,11 +1,5 @@
 <script setup lang="ts">
 import type { CleaningSuggestion } from '@/types/cleaning';
-import {
-  CircleClose,
-  DocumentChecked,
-  DocumentCopy, Edit, InfoFilled,
-  QuestionFilled, Warning
-} from '@element-plus/icons-vue';
 import { ElButton, ElCheckbox, ElTag } from 'element-plus';
 
 // 定义组件属性
@@ -19,27 +13,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggle: [suggestion: CleaningSuggestion];
 }>();
-
-// 获取问题类型的图标
-const getIssueTypeIcon = (type: string) => {
-  switch (type) {
-    case 'missing_values':
-      return QuestionFilled;
-    case 'outliers':
-      return Warning;
-    case 'duplicates':
-    case 'duplicate_rows':
-      return DocumentCopy;
-    case 'invalid_values':
-      return CircleClose;
-    case 'column_name':
-      return Edit;
-    case 'data_type':
-      return DocumentChecked;
-    default:
-      return InfoFilled;
-  }
-};
 
 // 获取问题类型的颜色
 const getIssueTypeColor = (type: string) => {

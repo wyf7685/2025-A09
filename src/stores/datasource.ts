@@ -112,6 +112,7 @@ export const useDataSourceStore = defineStore('dataSource', () => {
   const getSourceData = async (sourceId: SourceID, skip: number = 0, limit: number = 100) => {
     try {
       const response = await api.get<{
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data: Record<SourceID, any>[];
         total: number;
         skip: number;

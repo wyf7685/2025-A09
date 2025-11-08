@@ -68,15 +68,13 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
       </el-tooltip>
       <div class="collapsed-sessions">
         <el-tooltip
-          v-for="(session, index) in sessions.slice(0, 5)"
+          v-for="session in sessions.slice(0, 5)"
           :key="session.id"
           :content="session.name || `会话 ${session.id.slice(0, 8)}`"
-          placement="right"
-        >
+          placement="right">
           <div
             :class="['collapsed-session-item', { active: session.id === currentSessionId }]"
-            @click="handleSwitchSession(session.id)"
-          >
+            @click="handleSwitchSession(session.id)">
             <el-icon class="session-icon">
               <ChatDotRound />
             </el-icon>
@@ -104,7 +102,8 @@ const handleDeleteSession = async (sessionId: string, event: Event) => {
       </div>
       <div class="session-list">
         <div v-for="session in sessions" :key="session.id"
-          :class="['session-item', { active: session.id === currentSessionId }]" @click="handleSwitchSession(session.id)">
+          :class="['session-item', { active: session.id === currentSessionId }]"
+          @click="handleSwitchSession(session.id)">
           <el-icon class="session-icon">
             <ChatDotRound />
           </el-icon>

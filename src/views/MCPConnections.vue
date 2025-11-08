@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MCPConnectionForm from '@/components/mcp/MCPConnectionForm.vue';
 import { useMCPStore } from '@/stores/mcp';
-import type { MCPConnection } from '@/types/mcp';
+import type { AnyMCPConnection, MCPConnection } from '@/types/mcp';
 import { Delete, Edit, MoreFilled, Plus, Search } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import {
@@ -108,7 +108,7 @@ const handleDelete = async (connectionId: string) => {
 const handleSave = async (connectionData: {
   name: string;
   description?: string;
-  connection: any;
+  connection: AnyMCPConnection;
 }) => {
   try {
     if (editingConnection.value) {

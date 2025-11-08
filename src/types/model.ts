@@ -20,7 +20,7 @@ export interface MLModel {
   version: string;
   accuracy: number;
   metrics: Record<string, number>;
-  hyperparams?: Record<string, any>;
+  hyperparams?: Record<string, unknown>;
   is_registered?: boolean;
 }
 
@@ -36,6 +36,16 @@ export interface LLMModel {
   api_model_name?: string; // API调用时使用的正确模型名称
   available?: boolean; // 是否已配置可用
 }
+
+export type LLMModelEditParams = Partial<{
+  name: string;
+  provider: string;
+  api_url: string;
+  api_key: string;
+  model_name: string; // 用户自定义的显示名称
+  api_model_name: string; // API调用时使用的正确模型名称
+  available: boolean; // 是否已配置可用
+}>;
 
 /**
  * 模型列表响应

@@ -39,7 +39,7 @@ const currentEditSource = ref<DataSourceMetadataWithID | null>(null);
 // =============================================
 // 预览数据状态
 // =============================================
-const previewData = ref<Array<Record<string, any>>>([]);
+const previewData = ref<Array<Record<string, unknown>>>([]);
 const previewColumns = ref<string[]>([]);
 const previewLoading = ref(false);
 const previewPagination = ref({

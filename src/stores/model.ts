@@ -1,4 +1,4 @@
-import type { LLMModel, ModelsResponse } from '@/types';
+import type { LLMModel, LLMModelEditParams, ModelsResponse } from '@/types';
 import api, { API_BASE_URL } from '@/utils/api';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
@@ -120,22 +120,12 @@ export const useModelStore = defineStore('model', () => {
   };
 
   // 更新自定义模型
-  const updateCustomModel = async (
-    modelId: string,
-    params: {
-      name?: string;
-      provider?: string;
-      api_url?: string;
-      api_key?: string;
-      model_name?: string;
-      api_model_name?: string;
-    },
-  ) => {
+  const updateCustomModel = async (modelId: string, params: LLMModelEditParams) => {
     try {
       const response = await api.put(`/models/custom/${modelId}`, params);
       if (response.data.success) {
         // 更新本地列表中的模型
-        const index = availableModels.value.findIndex(m => m.id === modelId);
+        const index = availableModels.value.findIndex((m) => m.id === modelId);
         if (index !== -1) {
           const updateData: Partial<LLMModel> = {};
           if (params.name) updateData.name = params.name;

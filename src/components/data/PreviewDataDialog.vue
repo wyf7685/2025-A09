@@ -13,7 +13,7 @@ interface PaginationProps {
 
 interface Props {
   datasource: DataSourceMetadataWithID | null;
-  previewData: Array<Record<string, any>>;
+  previewData: Array<Record<string, unknown>>;
   previewColumns: string[];
   pagination: PaginationProps;
   loading: boolean;
@@ -51,7 +51,7 @@ const handleCurrentChange = (page: number) => {
 };
 
 // 处理每页条数变化
-const handleSizeChange = (size: number) => {
+const handleSizeChange = () => {
   emit('loadPage', props.pagination.current);
 };
 </script>
@@ -82,6 +82,7 @@ const handleSizeChange = (size: number) => {
       </div>
 
       <div class="preview-pagination">
+        <!-- eslint-disable-next-line vue/no-mutating-props -->
         <el-pagination v-model:current-page="pagination.current" v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]" :small="false" :disabled="loading" :background="true"
           layout="total, sizes, prev, pager, next, jumper" :total="pagination.total"

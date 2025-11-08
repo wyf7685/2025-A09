@@ -45,7 +45,8 @@ const formatDateTime = (dateTimeStr: string | undefined) => {
   try {
     const date = new Date(dateTimeStr);
     return date.toLocaleString('zh-CN');
-  } catch (e) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (_error: unknown) {
     return dateTimeStr;
   }
 };
@@ -60,7 +61,7 @@ const metricsToTable = (metrics: Record<string, number> | undefined) => {
 };
 
 // 将超参数对象转换为表格数据
-const hyperparamsToTable = (hyperparams: Record<string, any> | undefined) => {
+const hyperparamsToTable = (hyperparams: Record<string, unknown> | undefined) => {
   if (!hyperparams) return [];
   return Object.entries(hyperparams).map(([param, value]) => ({
     param,
