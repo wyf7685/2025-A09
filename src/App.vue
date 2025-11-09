@@ -2,9 +2,13 @@
 import { checkHealth as checkHealthApi } from '@/utils/api';
 import { ChatDotRound, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
-import { ElAside, ElIcon, ElTooltip } from 'element-plus';
+import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
+import { useLoginStore } from './stores/login';
+import LoginView from './views/LoginView.vue';
+
+const loginStore = useLoginStore();
 
 // 响应式数据
 const sidebarCollapsed = ref(false);
@@ -40,7 +44,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="layout-container">
+  <div v-if="loginStore.isLoggedIn" class="layout-container">
     <!-- 主体内容 -->
     <div class="layout-main">
       <!-- 侧边栏 -->
@@ -103,13 +107,24 @@ onMounted(async () => {
 
         <!-- 添加底部状态指示器 -->
         <div class="sidebar-footer">
-          <div v-if="!sidebarCollapsed" class="status-indicators">
-            <div class="status-item">
-              <el-icon class="status-icon" :class="{ active: apiStatus }">
-                <Lightning />
-              </el-icon>
-              <span class="status-label">API: {{ apiStatus ? '在线' : '离线' }}</span>
+          <div v-if="!sidebarCollapsed" class="status-wrapper">
+            <div class="status-indicators">
+              <div class="status-item">
+                <el-icon class="status-icon" :class="{ active: apiStatus }">
+                  <Lightning />
+                </el-icon>
+                <span class="status-label">API: {{ apiStatus ? '在线' : '离线' }}</span>
+              </div>
             </div>
+
+            <!-- 登出按钮 -->
+            <el-button
+              type="danger"
+              class="logout-button"
+              @click="loginStore.logout()">
+              <Icon icon="material-symbols:logout-rounded"></Icon>
+              <span>退出登录</span>
+            </el-button>
           </div>
           <div v-else class="status-indicators-collapsed">
             <el-tooltip content="API: 在线" placement="right" v-if="apiStatus">
@@ -147,6 +162,7 @@ onMounted(async () => {
       </main>
     </div>
   </div>
+  <LoginView v-else />
 </template>
 
 <style scoped>
@@ -274,6 +290,33 @@ onMounted(async () => {
 .status-label {
   font-size: 14px;
   color: #94a3b8;
+}
+
+/* 状态栏包装器 */
+.status-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 登出按钮样式 */
+.logout-button {
+  height: 32px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.logout-button:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 .layout-sidebar.collapsed {
