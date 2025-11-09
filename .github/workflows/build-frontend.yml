@@ -66,3 +66,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_BASE_URL=/api
+            VITE_ICP_NUMBER=${{ secrets.VITE_ICP_NUMBER }}
+            VITE_POLICE_NUMBER=${{ secrets.VITE_POLICE_NUMBER }}
+            VITE_COMPANY_NAME=${{ secrets.VITE_COMPANY_NAME }}
