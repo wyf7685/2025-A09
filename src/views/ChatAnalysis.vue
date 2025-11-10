@@ -15,7 +15,7 @@ import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
-import { Document, Monitor, Share } from '@element-plus/icons-vue';
+import { Document, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

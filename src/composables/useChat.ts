@@ -1,4 +1,3 @@
-import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type {
   AssistantChatMessage,
@@ -67,11 +66,8 @@ const extractSuggestions = (content: string): string[] => {
   return suggestions;
 };
 
-
-
 export const useChat = () => {
   const sessionStore = useSessionStore();
-  const modelStore = useModelStore();
   const messages = ref<ChatMessageWithSuggestions[]>([]);
   const isProcessingChat = ref<boolean>(false);
 
@@ -138,7 +134,6 @@ export const useChat = () => {
       sessionStore.updateSessionName(currentSessionId, sessionName);
     }
 
-
     messages.value.push({
       type: 'user',
       content: userMessage,
@@ -187,8 +182,6 @@ export const useChat = () => {
             assistantMessage.suggestions = suggestions;
           }
 
-
-
           nextTick(() => scrollToBottom?.());
         },
         (id, name, args) => {
@@ -214,11 +207,6 @@ export const useChat = () => {
             toolCall.artifact = artifact || null;
           }
 
-          // 获取所有已调用的工具名称
-          // const toolNames = Object.values(assistantMessage.tool_calls || {})
-          //   .map((call) => call.name)
-          //   .filter((name) => !!name);
-
           nextTick(() => scrollToBottom?.());
         },
         (id, error) => {
@@ -237,9 +225,7 @@ export const useChat = () => {
           console.log('对话完成');
           console.log('assistantMessage.tool_calls:', assistantMessage.tool_calls);
 
-
           assistantMessage.loading = false;
-
 
           // 如果是第一条消息，从后端获取最终的会话名称（可能经过后端清理）
           if (isFirstMessage && currentSessionId) {
@@ -265,11 +251,8 @@ export const useChat = () => {
         (error) => {
           // 错误处理
           console.error('对话处理错误:', error);
-
-
           ElMessage.error(`处理消息时出错: ${error}`);
           pushText(`\n\n处理出错: ${error}`);
-
 
           nextTick(() => scrollToBottom?.());
         },
@@ -279,14 +262,12 @@ export const useChat = () => {
     } catch (error) {
       console.error('发送消息失败:', error);
 
-
       // 添加错误消息
       messages.value.push({
         type: 'assistant',
         content: [{ type: 'text', content: '抱歉，处理您的请求时出现了错误。请稍后重试。' }],
         timestamp: new Date().toISOString(),
       });
-
 
       nextTick(() => scrollToBottom?.());
     } finally {
