@@ -10,6 +10,10 @@ const props = defineProps<{
   currentSessionId: string;
 }>();
 
+const emit = defineEmits<{
+  'models-updated': [];
+}>();
+
 // 使用v-model绑定已选模型列表
 const selectedModels = defineModel<MLModel[]>('sessionModels', { required: true });
 const visible = defineModel<boolean>('visible', { required: true });
@@ -82,44 +86,34 @@ const toggleModel = (modelId: string) => {
 
 // 确认选择
 const confirmSelection = async () => {
-  // 根据选中的ID更新模型列表
-  const selectedModelList = models.value.filter(model =>
-    selectedModelIds.value.includes(model.id)
-  );
-
-  // 更新v-model绑定的值
-  selectedModels.value = selectedModelList;
-
-  // 通过API将选中的模型关联到当前会话
-  await sessionStore.updateSessionModels(props.currentSessionId, selectedModelIds.value);
-
-  // 从API重新获取更新的模型列表
   try {
+    // 通过API将选中的模型关联到当前会话
+    await sessionStore.updateSessionModels(props.currentSessionId, selectedModelIds.value);
+
+    // 从API重新获取更新的模型列表
     const models = await sessionStore.getSessionModels(props.currentSessionId);
     selectedModels.value = models;
-  } catch (error) {
-    console.error('加载会话模型失败:', error);
-    selectedModels.value = [];
-  }
 
-  // 关闭对话框
-  visible.value = false;
+    // 通知父组件模型已更新
+    emit('models-updated');
+
+    // 关闭对话框
+    visible.value = false;
+  } catch (error) {
+    console.error('更新会话模型失败:', error);
+  }
 };
 
 // 初始加载已选模型
 onMounted(async () => {
-  if (selectedModels.value?.length) {
-    selectedModelIds.value = selectedModels.value.map(m => m.id);
-  }
+  // 初始化已选模型ID列表(在加载前先设置)
+  selectedModelIds.value = selectedModels.value?.map(m => m.id) || [];
 
   loading.value = true;
 
   try {
-    // 加载所有可用模型，排除当前会话的模型
+    // 加载所有可用模型,排除当前会话的模型
     await loadModels();
-
-    // 初始化已选模型ID列表
-    selectedModelIds.value = selectedModels.value?.map(m => m.id) || [];
   } catch (error) {
     console.error('加载模型失败:', error);
   } finally {

@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue';
+import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import { useModelStore } from '@/stores/model';
-import type { MLModel } from '@/types';
+import { useSessionStore } from '@/stores/session';
+import type { MLModel, SessionListItem } from '@/types';
 import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, View } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
 import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
+const sessionStore = useSessionStore();
 const modelStore = useModelStore();
+const router = useRouter();
 
 // 响应式数据
 const loading = ref<boolean>(false);
 const models = ref<MLModel[]>([]);
 const showModelDialog = ref<boolean>(false);
 const selectedModel = ref<MLModel | null>(null);
+const showAnalyzeDialog = ref<boolean>(false);
+const analyzeModel = ref<MLModel | null>(null);
+const sessions = ref<SessionListItem[]>([]);
+const loadingSessions = ref<boolean>(false);
+const showDatasetSelector = ref<boolean>(false);
 
 // 方法
 const refreshModels = async (): Promise<void> => {
@@ -61,6 +71,69 @@ const deleteModel = async (modelId: string): Promise<void> => {
       console.error('删除模型失败:', error);
       ElMessage.error('删除模型失败');
     }
+  }
+};
+
+// 打开分析对话框
+const openAnalyzeDialog = async (model: MLModel): Promise<void> => {
+  analyzeModel.value = model;
+  showAnalyzeDialog.value = true;
+
+  // 加载会话列表
+  loadingSessions.value = true;
+  try {
+    await sessionStore.listSessions();
+    sessions.value = sessionStore.sessions;
+  } catch (error) {
+    console.error('加载会话列表失败:', error);
+    ElMessage.error('加载会话列表失败');
+  } finally {
+    loadingSessions.value = false;
+  }
+};
+
+// 挂载模型到现有会话
+const mountToSession = async (sessionId: string): Promise<void> => {
+  if (!analyzeModel.value) return;
+
+  try {
+    await sessionStore.addModelsToSession(sessionId, [analyzeModel.value.id]);
+    ElMessage.success('模型已挂载到会话');
+    showAnalyzeDialog.value = false;
+
+    // 跳转到对话页面
+    router.push(`/chat-analysis?session=${sessionId}`);
+  } catch (error) {
+    console.error('挂载模型失败:', error);
+    ElMessage.error('挂载模型失败');
+  }
+};
+
+// 打开新建会话弹窗
+const openNewSessionDialog = (): void => {
+  showAnalyzeDialog.value = false;
+  showDatasetSelector.value = true;
+};
+
+// 创建新会话并挂载模型
+const createSessionAndMount = async (datasetIds: string[]): Promise<void> => {
+  if (!analyzeModel.value) return;
+
+  try {
+    // 创建新会话
+    const newSession = await sessionStore.createSession(datasetIds);
+
+    // 挂载模型
+    await sessionStore.addModelsToSession(newSession.id, [analyzeModel.value.id]);
+
+    ElMessage.success('已创建新会话并挂载模型');
+    showDatasetSelector.value = false;
+
+    // 跳转到对话页面
+    router.push(`/chat-analysis?session=${newSession.id}`);
+  } catch (error) {
+    console.error('创建会话失败:', error);
+    ElMessage.error('创建会话失败');
   }
 };
 
@@ -115,7 +188,12 @@ onMounted(async () => {
         <el-card v-for="model in models" :key="model.id" class="model-card" shadow="hover">
           <div class="model-header">
             <div class="model-info">
-              <h3>{{ model.name || model.type }}</h3>
+              <div class="model-title">
+                <h3>{{ model.name || model.type }}</h3>
+                <el-tag :type="model.status === 'trained' ? 'success' : 'warning'" size="small">
+                  {{ model.status }}
+                </el-tag>
+              </div>
               <div class="model-meta">
                 <span class="meta-item">
                   <el-icon>
@@ -138,22 +216,26 @@ onMounted(async () => {
               </div>
             </div>
             <div class="model-actions">
-              <el-tag :type="model.status === 'trained' ? 'success' : 'warning'" size="small">
-                {{ model.status }}
-              </el-tag>
-              <el-button size="small" @click="viewModel(model)">
+              <el-button size="small" type="primary" plain @click="openAnalyzeDialog(model)" class="action-btn">
                 <el-icon>
                   <View />
                 </el-icon>
+                分析
+              </el-button>
+              <el-button size="small" type="success" plain @click="viewModel(model)" class="action-btn">
+                <el-icon>
+                  <Refresh />
+                </el-icon>
                 查看
               </el-button>
-              <el-button size="small" @click="modelStore.downloadModel(model.id)">
+              <el-button size="small" type="warning" plain @click="modelStore.downloadModel(model.id)"
+                class="action-btn">
                 <el-icon>
                   <Download />
                 </el-icon>
                 下载
               </el-button>
-              <el-button size="small" type="danger" @click="deleteModel(model.id)">
+              <el-button size="small" type="danger" plain @click="deleteModel(model.id)" class="action-btn">
                 <el-icon>
                   <Delete />
                 </el-icon>
@@ -248,6 +330,43 @@ onMounted(async () => {
           </div>
         </div>
       </el-dialog>
+
+      <!-- 分析对话框：选择会话 -->
+      <el-dialog v-model="showAnalyzeDialog" title="选择会话进行分析" width="500px">
+        <div v-if="loadingSessions" class="dialog-loading">
+          <el-skeleton :rows="3" animated />
+        </div>
+        <div v-else>
+          <div class="session-list">
+            <div v-if="sessions.length === 0" class="empty-sessions">
+              <p>暂无可用会话</p>
+            </div>
+            <div v-else>
+              <div v-for="session in sessions" :key="session.id" class="session-item">
+                <div class="session-info">
+                  <div class="session-name">{{ session.name || '未命名会话' }}</div>
+                  <div class="session-meta">创建于 {{ formatDate(session.created_at) }}</div>
+                </div>
+                <el-button type="primary" size="small" @click="mountToSession(session.id)">
+                  选择
+                </el-button>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <el-button type="success" @click="openNewSessionDialog">
+              <el-icon>
+                <TrendCharts />
+              </el-icon>
+              新建会话
+            </el-button>
+          </div>
+        </div>
+      </el-dialog>
+
+      <!-- 数据集选择器弹窗 -->
+      <DatasetSelector v-model:visible="showDatasetSelector" @create-session="createSessionAndMount"
+        @go-to-data="$router.push('/data-management')" />
     </div>
   </div>
 </template>
@@ -272,7 +391,25 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.models-container {
+/* 修复图标对齐问题 */
+:deep(.el-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+/* 为按钮中的图标添加适当的间距 */
+.action-btn :deep(.el-icon) {
+  margin-right: 4px;
+}
+
+/* 调整查看按钮位置，使其向左移动 */
+.model-actions .action-btn:nth-child(2) {
+  margin-left: -0px;
+}
+
+models-container {
   background: white;
   border-radius: 12px;
   padding: 24px;
@@ -375,13 +512,28 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 20px;
+  gap: 24px;
+}
+
+.model-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .model-info h3 {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: #1e293b;
+  line-height: 32px;
+}
+
+.model-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  height: 32px;
 }
 
 .model-meta {
@@ -391,10 +543,27 @@ onMounted(async () => {
 }
 
 .model-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 6px;
+  width: 220px;
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.action-btn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 500;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 12px;
+  transition: all 0.3s ease;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .meta-item {
@@ -492,5 +661,62 @@ onMounted(async () => {
   font-weight: 600;
   color: #1e293b;
   font-size: 13px;
+}
+
+/* 分析对话框样式 */
+.dialog-loading {
+  padding: 20px;
+}
+
+.session-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.empty-sessions {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  transition: all 0.2s ease;
+}
+
+.session-item:hover {
+  background: rgba(241, 245, 249, 1);
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.session-info {
+  flex: 1;
+}
+
+.session-name {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.session-meta {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.dialog-footer {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  display: flex;
+  justify-content: center;
 }
 </style>
