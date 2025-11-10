@@ -192,18 +192,22 @@ watch(() => props.selectedSources, () => {
         <el-table-column label="操作" width="240" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button size="small" type="primary" :icon="View" @click="handleAnalyze(row)" plain>
-                分析
-              </el-button>
-              <el-button size="small" type="success" :icon="Search" @click="handlePreview(row)" plain>
-                预览
-              </el-button>
-              <el-button size="small" type="warning" :icon="Edit" @click="handleEdit(row)" plain>
-                编辑
-              </el-button>
-              <el-button size="small" type="danger" :icon="Delete" @click="handleDelete(row)" plain>
-                删除
-              </el-button>
+              <div class="action-button-row">
+                <el-button size="small" type="primary" :icon="View" @click="handleAnalyze(row)" plain>
+                  分析
+                </el-button>
+                <el-button size="small" type="success" :icon="Search" @click="handlePreview(row)" plain>
+                  预览
+                </el-button>
+              </div>
+              <div class="action-button-row">
+                <el-button size="small" type="warning" :icon="Edit" @click="handleEdit(row)" plain>
+                  编辑
+                </el-button>
+                <el-button size="small" type="danger" :icon="Delete" @click="handleDelete(row)" plain>
+                  删除
+                </el-button>
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -287,6 +291,11 @@ watch(() => props.selectedSources, () => {
         gap: 8px;
         justify-content: center;
         flex-wrap: wrap;
+
+        .action-button-row {
+          display: flex;
+          gap: 2px;
+        }
 
         .el-button {
           border-radius: 20px;

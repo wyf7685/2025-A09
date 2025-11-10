@@ -4,9 +4,9 @@ import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { MLModel, SessionListItem } from '@/types';
-import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, View } from '@element-plus/icons-vue';
+import { Calendar, DataAnalysis, Delete, Download, Refresh, Search, Star, View } from '@element-plus/icons-vue';
 import { Icon } from '@iconify/vue';
-import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag } from 'element-plus';
+import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag, ElTooltip } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -186,34 +186,34 @@ onMounted(async () => {
       <!-- 模型列表 -->
       <div v-else class="models-list">
         <el-card v-for="model in models" :key="model.id" class="model-card" shadow="hover">
-          <div class="model-header">
-            <div class="model-info">
-              <div class="model-title">
-                <h3>{{ model.name || model.type }}</h3>
-                <el-tag :type="model.status === 'trained' ? 'success' : 'warning'" size="small">
-                  {{ model.status }}
-                </el-tag>
-              </div>
-              <div class="model-meta">
-                <span class="meta-item">
-                  <el-icon>
-                    <Calendar />
-                  </el-icon>
-                  {{ formatDate(model.created_at) }}
-                </span>
-                <span class="meta-item">
-                  <el-icon>
-                    <DataAnalysis />
-                  </el-icon>
-                  目标变量: {{ model.target_column }}
-                </span>
-                <span class="meta-item">
-                  <el-icon>
-                    <Star />
-                  </el-icon>
-                  准确率: {{ (model.accuracy * 100).toFixed(1) }}%
-                </span>
-              </div>
+          <!-- Title Row -->
+          <div class="model-title-row">
+            <el-tooltip :content="model.name || model.type" placement="top">
+              <h3 class="model-title">{{ model.name || model.type }}</h3>
+            </el-tooltip>
+          </div>
+
+          <!-- Meta and Actions Row -->
+          <div class="model-content-row">
+            <div class="model-meta">
+              <span class="meta-item">
+                <el-icon>
+                  <Calendar />
+                </el-icon>
+                {{ formatDate(model.created_at) }}
+              </span>
+              <span class="meta-item">
+                <el-icon>
+                  <DataAnalysis />
+                </el-icon>
+                目标变量: {{ model.target_column }}
+              </span>
+              <span class="meta-item">
+                <el-icon>
+                  <Star />
+                </el-icon>
+                准确率: {{ (model.accuracy * 100).toFixed(1) }}%
+              </span>
             </div>
             <div class="model-actions">
               <el-button size="small" type="primary" plain @click="openAnalyzeDialog(model)" class="action-btn">
@@ -224,7 +224,7 @@ onMounted(async () => {
               </el-button>
               <el-button size="small" type="success" plain @click="viewModel(model)" class="action-btn">
                 <el-icon>
-                  <Refresh />
+                  <Search />
                 </el-icon>
                 查看
               </el-button>
@@ -244,15 +244,19 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- Features Row -->
           <div class="model-features">
             <h4>特征变量 ({{ model.feature_count }}个)</h4>
             <div class="features-list">
               <el-tag v-for="feature in model.features.slice(0, 6)" :key="feature" size="small" class="feature-tag">
                 {{ feature }}
               </el-tag>
-              <el-tag v-if="model.features.length > 6" size="small" type="info">
-                +{{ model.features.length - 6 }}个
-              </el-tag>
+              <el-tooltip v-if="model.features.length > 6" placement="top"
+                :content="model.features.slice(6).join(', ')">
+                <el-tag size="small" type="info" class="feature-tag">
+                  +{{ model.features.length - 6 }}个
+                </el-tag>
+              </el-tooltip>
             </div>
           </div>
         </el-card>
@@ -507,11 +511,30 @@ models-container {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
-.model-header {
+/* Title Row - Single Line */
+.model-title-row {
+  margin-bottom: 12px;
+}
+
+.model-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Meta and Actions Row */
+.model-content-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
+  align-items: center;
+  margin-bottom: 16px;
   gap: 24px;
 }
 
@@ -520,26 +543,11 @@ models-container {
   min-width: 0;
 }
 
-.model-info h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #1e293b;
-  line-height: 32px;
-}
-
-.model-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  height: 32px;
-}
-
 .model-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
+  align-items: center;
 }
 
 .model-actions {
@@ -548,7 +556,6 @@ models-container {
   gap: 8px 6px;
   width: 220px;
   flex-shrink: 0;
-  margin-top: 0;
 }
 
 .action-btn {
@@ -572,13 +579,15 @@ models-container {
   gap: 6px;
   color: #64748b;
   font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .model-features h4 {
   margin: 0 0 12px 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
-  color: #374151;
+  color: #454e5d;
 }
 
 .features-list {

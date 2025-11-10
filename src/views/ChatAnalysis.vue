@@ -17,7 +17,7 @@ import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { Document, Monitor, Share } from '@element-plus/icons-vue';
-import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
+import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -530,9 +530,11 @@ onMounted(async () => {
       <div class="chat-panel-header">
         <div class="header-left">
           <!-- 侧边栏收缩时不显示展开按钮，因为收缩的侧边栏本身就有展开按钮 -->
-          <span class="session-title" v-if="currentSessionId">
-            {{ currentSessionName }}
-          </span>
+          <el-tooltip :content="currentSessionName" placement="bottom">
+            <span class="session-title" v-if="currentSessionId">
+              {{ currentSessionName }}
+            </span>
+          </el-tooltip>
         </div>
         <div class="header-right">
           <el-button v-if="currentSessionId" @click="openModelSelectDialog" :icon="Model"
@@ -677,6 +679,8 @@ onMounted(async () => {
     margin-left: 12px;
     color: #1f2937;
     font-size: 16px;
+    max-height: 1.2rem;
+    overflow: hidden;
   }
 }
 
