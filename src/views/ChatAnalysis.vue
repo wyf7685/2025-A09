@@ -2,7 +2,6 @@
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
-import FlowPanel from '@/components/chat/FlowPanel.vue';
 import ModelSelectDialog from '@/components/chat/ModelSelectDialog.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
@@ -38,9 +37,7 @@ onErrorCaptured((err) => {
 const isSidebarOpen = ref(true);
 const userInput = ref<string>('');
 const selectDatasetDialogVisible = ref<boolean>(false);
-const isFlowPanelOpen = ref<boolean>(true); // 控制流程图面板的显示/隐藏
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
-const flowPanelRef = ref<InstanceType<typeof FlowPanel>>();
 
 // 当前会话的模型
 const sessionModels = ref<MLModel[]>([]);
@@ -114,7 +111,7 @@ const {
   messages,
   isProcessingChat,
   ...chat
-} = useChat(() => flowPanelRef.value?.flowPanel);
+} = useChat();
 
 // 打开保存工作流对话框
 const openSaveWorkflowDialog = () => {
@@ -447,7 +444,6 @@ const deleteSession = async (sessionId: string) => {
     // 如果删除的是当前会话
     if (sessionId === currentSessionId.value) {
       messages.value = [];
-      flowPanelRef.value?.flowPanel?.clearFlowSteps();
 
       // 如果还有其他会话，切换到第一个会话
       if (sessions.value.length > 0) {
@@ -555,9 +551,6 @@ onMounted(async () => {
           <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
             生成报告
           </el-button>
-          <el-button @click="isFlowPanelOpen = !isFlowPanelOpen" :icon="Monitor" text class="toggle-btn">
-            流程图
-          </el-button>
         </div>
       </div>
 
@@ -578,8 +571,6 @@ onMounted(async () => {
         @go-to-data="goToAddData" />
     </div>
 
-    <!-- Flow Panel -->
-    <FlowPanel v-model:is-flow-panel-open="isFlowPanelOpen" ref="flowPanelRef" />
 
     <!-- Select Dataset Dialog -->
     <DatasetSelector v-model:visible="selectDatasetDialogVisible"

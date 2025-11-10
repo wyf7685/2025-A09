@@ -28,7 +28,6 @@ declare module 'vue' {
     EditDataSourceDialog: typeof import('./src/components/data/EditDataSourceDialog.vue')['default']
     FieldMappingsGrid: typeof import('./src/components/data/upload/cleaning/FieldMappingsGrid.vue')['default']
     FileUploadStep: typeof import('./src/components/data/upload/FileUploadStep.vue')['default']
-    FlowPanel: typeof import('./src/components/chat/FlowPanel.vue')['default']
     LLMModelIcon: typeof import('./src/components/LLMModelIcon.vue')['default']
     MCPConnectionForm: typeof import('./src/components/mcp/MCPConnectionForm.vue')['default']
     MCPManager: typeof import('./src/components/chat/MCPManager.vue')['default']
