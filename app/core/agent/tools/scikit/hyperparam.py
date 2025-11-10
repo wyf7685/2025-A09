@@ -1,4 +1,6 @@
+import inspect
 import io
+import sys
 import time
 from typing import Any, TypedDict
 
@@ -12,6 +14,8 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_c
 
 from app.log import logger
 from app.utils import escape_tag, resolve_dot_notation
+
+from .model import TaskType
 
 
 class HyperparamOptResult(TypedDict):
@@ -53,6 +57,8 @@ def optimize_hyperparameters(
                    - "random_forest" (默认): 随机森林
                    - "decision_tree": 决策树
                    - "svm": 支持向量机
+                   - "gradient_boosting": 梯度提升回归
+                   - "xgboost": XGBoost模型
                    - "logistic_regression": 逻辑回归(仅分类)
                    - "ridge": 岭回归(仅回归)
                    - "lasso": Lasso回归(仅回归)
@@ -138,7 +144,7 @@ def optimize_hyperparameters(
             scoring=scoring,
             return_train_score=True,
             random_state=random_state,
-            n_jobs=-1,
+            n_jobs=1 if sys.platform == "win32" else -1,  # Windows下禁用并行处理
         )
     else:
         raise ValueError(f"不支持的优化方法: {method}")
@@ -203,9 +209,14 @@ def optimize_hyperparameters(
     return result, figure
 
 
-_MODEL_PARAM_GRID = {
+class _ModelParamGrid(TypedDict):
+    model: str
+    grid: dict[str, list[Any]]
+
+
+_MODEL_PARAM_GRID: dict[TaskType, dict[str, _ModelParamGrid]] = {
     "regression": {
-        "random_forest_regressor": {
+        "random_forest": {
             "model": "sklearn.ensemble:RandomForestRegressor",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -215,7 +226,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "decision_tree_regressor": {
+        "decision_tree": {
             "model": "sklearn.tree:DecisionTreeRegressor",
             "grid": {
                 "max_depth": [None, 5, 10, 15, 20],
@@ -224,7 +235,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "gradient_boosting_regressor": {
+        "gradient_boosting": {
             "model": "sklearn.ensemble:GradientBoostingRegressor",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -235,7 +246,7 @@ _MODEL_PARAM_GRID = {
                 "subsample": [0.8, 0.9, 1.0],
             },
         },
-        "xgboost_regressor": {
+        "xgboost": {
             "model": "xgboost:XGBRegressor",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -273,7 +284,7 @@ _MODEL_PARAM_GRID = {
         },
     },
     "classification": {
-        "random_forest_classifier": {
+        "random_forest": {
             "model": "sklearn.ensemble:RandomForestClassifier",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -283,7 +294,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "decision_tree_classifier": {
+        "decision_tree": {
             "model": "sklearn.tree:DecisionTreeClassifier",
             "grid": {
                 "max_depth": [None, 5, 10, 15, 20],
@@ -292,7 +303,7 @@ _MODEL_PARAM_GRID = {
                 "max_features": ["sqrt", "log2", None],
             },
         },
-        "gradient_boosting_classifier": {
+        "gradient_boosting": {
             "model": "sklearn.ensemble:GradientBoostingClassifier",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -303,7 +314,7 @@ _MODEL_PARAM_GRID = {
                 "subsample": [0.8, 0.9, 1.0],
             },
         },
-        "xgboost_classifier": {
+        "xgboost": {
             "model": "xgboost:XGBClassifier",
             "grid": {
                 "n_estimators": [50, 100, 200],
@@ -340,8 +351,6 @@ _MODEL_PARAM_GRID = {
 
 def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int) -> tuple[Any, dict[str, Any]]:
     """获取指定模型类型和任务类型的模型实例和默认参数网格"""
-    import inspect
-
     # 验证任务类型
     if task_type not in _MODEL_PARAM_GRID:
         raise ValueError(f"不支持的任务类型: {task_type}")
@@ -354,7 +363,6 @@ def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int
 
     # 尝试导入模型
     try:
-        # 使用resolve_dot_notation函数导入模型类
         ModelClass = resolve_dot_notation(model_config["model"])
     except (ImportError, AttributeError) as e:
         if "xgboost" in model_config["model"]:
