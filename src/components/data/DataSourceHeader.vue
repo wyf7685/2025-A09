@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue';
 import { DocumentAdd, Refresh } from '@element-plus/icons-vue';
 import { ElButton } from 'element-plus';
 
@@ -15,10 +16,9 @@ const emit = defineEmits<{
 
 <template>
   <div class="page-header">
-    <div class="header-content">
-      <h1>数据源管理</h1>
-      <p class="header-subtitle">上传、管理和分析您的数据源</p>
-    </div>
+    <PageHeader
+      title="数据源管理"
+      subtitle="上传、管理和分析您的数据源" />
     <div class="header-actions">
       <el-button type="primary" :icon="DocumentAdd" @click="$router.push('/data-upload')">
         添加数据源
@@ -36,22 +36,6 @@ const emit = defineEmits<{
   align-items: center;
   margin-bottom: 32px;
   padding: 0 8px;
-}
-
-.header-content {
-  h1 {
-    margin: 0 0 8px 0;
-    font-size: 32px;
-    font-weight: 700;
-    color: #1f2937;
-  }
-
-  .header-subtitle {
-    margin: 0;
-    color: #6b7280;
-    font-size: 16px;
-    font-weight: 400;
-  }
 }
 
 .header-actions {

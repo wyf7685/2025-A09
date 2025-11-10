@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import LLMModelIcon from '@/components/LLMModelIcon.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { useModelStore } from '@/stores/model';
 import type { LLMModel, LLMModelEditParams } from '@/types';
 import { Delete, Edit, Plus } from '@element-plus/icons-vue';
@@ -249,10 +250,13 @@ onMounted(async () => {
 <template>
   <div class="llm-models-page">
     <div class="page-header">
-      <div class="header-content">
+      <!-- <div class="header-content">
         <h1>大语言模型管理</h1>
         <p class="header-subtitle">配置和管理您的大语言模型API</p>
-      </div>
+      </div> -->
+      <PageHeader
+        title="大语言模型管理"
+        subtitle="配置和管理您的大语言模型API" />
       <div class="header-actions">
         <el-button type="primary" @click="showAddLLMDialog = true">
           <el-icon>
@@ -423,27 +427,6 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 32px;
   padding: 0 8px;
-}
-
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.header-content h1 {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.header-subtitle {
-  margin: 0;
-  color: #6b7280;
-  font-size: 16px;
-  font-weight: 400;
 }
 
 .header-actions {

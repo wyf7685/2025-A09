@@ -35,6 +35,7 @@ declare module 'vue' {
     Model: typeof import('./src/components/icons/Model.vue')['default']
     ModelList: typeof import('./src/components/chat/ModelList.vue')['default']
     ModelSelectDialog: typeof import('./src/components/chat/ModelSelectDialog.vue')['default']
+    PageHeader: typeof import('./src/components/PageHeader.vue')['default']
     PreviewDataDialog: typeof import('./src/components/data/PreviewDataDialog.vue')['default']
     QualitySummaryCards: typeof import('./src/components/data/upload/cleaning/QualitySummaryCards.vue')['default']
     ReportGenerationDialog: typeof import('./src/components/chat/report/ReportGenerationDialog.vue')['default']

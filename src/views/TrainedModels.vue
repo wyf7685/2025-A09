@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue';
 import { useModelStore } from '@/stores/model';
 import type { MLModel } from '@/types';
 import { Calendar, DataAnalysis, Delete, Download, Refresh, Star, View } from '@element-plus/icons-vue';
@@ -72,10 +73,9 @@ onMounted(async () => {
 <template>
   <div class="trained-models-page">
     <div class="page-header">
-      <div class="header-content">
-        <h1>训练模型管理</h1>
-        <p class="header-subtitle">管理您在对话分析过程中训练的机器学习模型</p>
-      </div>
+      <PageHeader
+        title="训练模型管理"
+        subtitle="管理您在对话分析过程中训练的机器学习模型" />
       <div class="header-actions">
         <el-button @click="refreshModels" :loading="loading">
           <el-icon>
@@ -265,20 +265,6 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 32px;
   padding: 0 8px;
-}
-
-.header-content h1 {
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.header-subtitle {
-  margin: 0;
-  color: #6b7280;
-  font-size: 16px;
-  font-weight: 400;
 }
 
 .header-actions {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import MCPConnectionForm from '@/components/mcp/MCPConnectionForm.vue';
+import PageHeader from '@/components/PageHeader.vue';
 import { useMCPStore } from '@/stores/mcp';
 import type { AnyMCPConnection, MCPConnection } from '@/types/mcp';
 import { Delete, Edit, MoreFilled, Plus, Search } from '@element-plus/icons-vue';
@@ -148,10 +149,9 @@ onMounted(async () => {
   <div class="mcp-connections">
     <!-- 页面头部 -->
     <div class="page-header">
-      <div class="header-content">
-        <h1>MCP 连接管理</h1>
-        <p class="header-subtitle">管理和配置 Model Context Protocol 连接</p>
-      </div>
+      <PageHeader
+        title="MCP 连接管理"
+        subtitle="管理和配置 Model Context Protocol 连接" />
       <div class="header-actions">
         <el-button
           type="primary"
@@ -297,20 +297,6 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 32px;
   padding: 0 8px;
-}
-
-.header-content h1 {
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.header-subtitle {
-  margin: 0;
-  color: #6b7280;
-  font-size: 16px;
-  font-weight: 400;
 }
 
 .header-actions {
