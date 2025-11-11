@@ -218,13 +218,15 @@ list_ds_sem = anyio.Semaphore(1)
 
 
 @router.get("")
-async def list_datasources() -> list[str]:
+async def list_datasources(force: bool = False) -> list[str]:
     """
     获取数据源列表
     """
     try:
         with contextlib.suppress(Exception):
             async with list_ds_sem:
+                if force:
+                    await datasource_service.expire_cache()
                 await datasource_service.sync_from_dremio()
         return list(datasource_service.sources)
     except HTTPException:

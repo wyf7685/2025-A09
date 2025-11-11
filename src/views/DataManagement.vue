@@ -88,8 +88,8 @@ const selectedSources = ref<string[]>([]);
 // =============================================
 
 // 刷新数据集列表
-const fetchDatasets = () => withLoading(isLoading, async () => {
-  const sources = await dataSourceStore.listDataSources();
+const fetchDatasets = (force?: boolean) => withLoading(isLoading, async () => {
+  const sources = await dataSourceStore.listDataSources(force);
   datasources.value = sources;
   updateFilteredDataSources();
 }, '获取数据源列表失败');
@@ -159,7 +159,7 @@ const saveEdit = async (name: string, description: string) => {
     });
     ElMessage.success('数据源信息更新成功');
     editDialogVisible.value = false;
-    await fetchDatasets();
+    await fetchDatasets(true);
   } catch (error) {
     ElMessage.error('更新失败');
     console.error(error);
@@ -181,7 +181,7 @@ const deleteDataSource = async (source: DataSourceMetadataWithID) => {
 
     await dataSourceStore.deleteDataSource(source.source_id);
     ElMessage.success('数据源删除成功');
-    await fetchDatasets();
+    await fetchDatasets(true);
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败');
@@ -285,7 +285,7 @@ watch([currentPage, pageSize], updatePaginatedDataSources);
 <template>
   <div class="data-management-container">
     <!-- 顶部操作区域 -->
-    <DataSourceHeader :is-loading="isLoading" @refresh="fetchDatasets" />
+    <DataSourceHeader :is-loading="isLoading" @refresh="fetchDatasets(true)" />
 
     <!-- 搜索和过滤区域 -->
     <DataSourceSearchBar v-model:search-query="searchQuery" :selected-sources="selectedSources"

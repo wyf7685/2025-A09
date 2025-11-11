@@ -26,9 +26,9 @@ export const useDataSourceStore = defineStore('dataSource', () => {
     }
   };
 
-  const listDataSources = async () => {
+  const listDataSources = async (force?: boolean) => {
     try {
-      const response = await api.get<SourceID[]>('/datasources');
+      const response = await api.get<SourceID[]>('/datasources', { params: { force: force || false } });
       const newDataSources = {} as Record<SourceID, DataSourceMetadata>;
       for (const id of response.data) {
         try {
@@ -97,7 +97,7 @@ export const useDataSourceStore = defineStore('dataSource', () => {
 
   const updateDataSource = async (
     sourceId: SourceID,
-    updates: { name?: string; description?: string },
+    updates: { name?: string; description?: string; },
   ) => {
     try {
       const response = await api.put<DataSourceMetadata>(`/datasources/${sourceId}`, updates);

@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.datasource import DataSource, create_dremio_source, deserialize_data_source
 from app.core.datasource.dremio import DremioDataSource
 from app.core.datasource.file import FileDataSource
-from app.core.dremio import get_async_dremio_client
+from app.core.dremio import expire_dremio_cache, get_async_dremio_client
 from app.core.lifespan import lifespan
 from app.exception import DataSourceLoadFailed, DataSourceNotFound
 from app.log import logger
@@ -213,6 +213,9 @@ class DataSourceService:
         await self.save_source(source_id, source)
         logger.info(f"注册新数据源: {source_id} -> {source.unique_id}")
         return source_id, source
+
+    async def expire_cache(self) -> None:
+        await expire_dremio_cache()
 
 
 class TempFileService:

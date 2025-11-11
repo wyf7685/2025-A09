@@ -50,9 +50,17 @@ def get_async_dremio_client() -> AbstractAsyncDremioClient:
     return _async_client
 
 
+async def expire_dremio_cache() -> None:
+    from ._cache import container_cache, source_cache
+
+    await container_cache.aexpire()
+    await source_cache.aexpire()
+
+
 __all__ = [
     "AbstractAsyncDremioClient",
     "AbstractDremioClient",
+    "expire_dremio_cache",
     "get_async_dremio_client",
     "get_dremio_client",
 ]
