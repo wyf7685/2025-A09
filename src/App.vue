@@ -6,12 +6,13 @@ import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
 import { useLoginStore } from './stores/login';
+import { persistConfig } from './utils/tools';
 import LoginView from './views/LoginView.vue';
 
 const loginStore = useLoginStore();
 
 // 响应式数据
-const sidebarCollapsed = ref(false);
+const sidebarCollapsed = persistConfig('app-sidebar-collapsed', false);
 const apiStatus = ref(false);
 const sidebarTransitioning = ref(false);
 

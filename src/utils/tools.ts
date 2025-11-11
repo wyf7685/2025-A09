@@ -2,7 +2,7 @@ import { marked } from 'marked';
 // import hljs from 'highlight.js';
 import 'github-markdown-css/github-markdown-light.css'; // 导入 GitHub 风格样式
 import 'highlight.js/styles/github.css'; // 导入 GitHub 代码高亮样式
-import type { Ref } from 'vue';
+import { computed, ref, type Ref, type WritableComputedRef } from 'vue';
 import { ElMessage } from 'element-plus';
 
 // 配置 marked 使用 highlight.js 进行代码高亮
@@ -123,4 +123,19 @@ export async function withLoading<T, E>(
 
 export const sleep = async (ms: number) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+export const persistConfig = <T>(key: string, defaultValue: T): WritableComputedRef<T> => {
+  const storedValue = localStorage.getItem(key);
+  const data = ref(storedValue ? JSON.parse(storedValue) : defaultValue);
+
+  return computed<T>({
+    get() {
+      return data.value;
+    },
+    set(newValue: T) {
+      data.value = newValue;
+      localStorage.setItem(key, JSON.stringify(newValue));
+    },
+  });
 };

@@ -15,6 +15,7 @@ import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
+import { persistConfig } from '@/utils/tools';
 import { Document, DocumentAdd, Share } from '@element-plus/icons-vue';
 import { ElButton, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
@@ -34,7 +35,7 @@ onErrorCaptured((err) => {
 });
 
 // --- State for new UI ---
-const isSidebarOpen = ref(true);
+const isSidebarOpen = persistConfig('chat-sidebar-open', true);
 const userInput = ref<string>('');
 const selectDatasetDialogVisible = ref<boolean>(false);
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();
