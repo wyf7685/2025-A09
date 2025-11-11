@@ -443,13 +443,13 @@ onMounted(async () => {
 }
 
 .llm-models-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 24px;
 }
 
 .llm-model-card {
-  width: 380px;
+  /* max-width: 480px; */
   flex-shrink: 0;
   border-radius: 16px;
   border: 1px solid #e5e7eb;

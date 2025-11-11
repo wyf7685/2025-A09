@@ -545,9 +545,9 @@ models-container {
 
 .model-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .model-actions {
