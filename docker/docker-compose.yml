@@ -21,6 +21,11 @@ services:
       - EXECUTOR_DATA_DIR=/executor
       - CORS_ALLOW_ORIGINS=["*"]
       - REDIS_HOST=redis
+      - JWT_SECRET_KEY=your_jwt_secret_key_here # 请在生产环境中更改此密钥
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
+      - ADMIN_USERNAME=admin # 管理员用户名
+      - ADMIN_PASSWORD=admin123 # 管理员密码，请在生产环境中更改此密码
     depends_on:
       dremio:
         condition: service_healthy
