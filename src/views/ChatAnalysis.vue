@@ -19,7 +19,7 @@ import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { persistConfig } from '@/utils/tools';
 import { Document, DocumentAdd, Setting, Share } from '@element-plus/icons-vue';
-import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
+import { ElButton, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -546,33 +546,21 @@ onMounted(async () => {
           </el-tooltip>
         </div>
         <div class="header-right">
-          <el-button @click="openModelSelectDialog" :icon="Model"
+          <el-button @click="openModelSelectDialog" :icon="Model" class="panel-header-btn"
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
           </el-button>
-          <el-button @click="openSaveWorkflowDialog" class="panel-header-btn">
-            <el-icon class="icon-margin">
-              <DocumentAdd />
-            </el-icon>
+          <el-button @click="openSaveWorkflowDialog" :icon="DocumentAdd" class="panel-header-btn">
             保存流程
           </el-button>
-          <el-button @click="openWorkflowManager" class="panel-header-btn">
-            <el-icon class="icon-margin">
-              <Share />
-            </el-icon>
+          <el-button @click="openWorkflowManager" :icon="Share" class="panel-header-btn">
             调用流程
           </el-button>
-          <el-button @click="openReportDialog" class="panel-header-btn">
-            <el-icon class="icon-margin">
-              <Document />
-            </el-icon>
+          <el-button @click="openReportDialog" :icon="Document" class="panel-header-btn">
             生成报告
           </el-button>
           <div class="action-divider"></div>
-          <el-button @click="openModelConfigDialog" type="success" plain>
-            <el-icon class="icon-margin">
-              <Setting />
-            </el-icon>
+          <el-button @click="openModelConfigDialog" :icon="Setting" class="panel-header-btn" type="success" plain>
             模型配置
           </el-button>
         </div>
@@ -664,18 +652,6 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-
-  .toggle-btn {
-    color: #6b7280;
-    padding: 8px;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-
-    &:hover {
-      color: #374151;
-      background-color: #f3f4f6;
-    }
   }
 
   .session-title {
@@ -805,7 +781,8 @@ onMounted(async () => {
 }
 
 .panel-header-btn {
-  margin-right: 8px;
+  margin-left: 4px;
+  margin-right: 4px;
   font-size: 13px;
   border: 1px solid #dcdfe6;
 
@@ -813,10 +790,6 @@ onMounted(async () => {
     color: var(--el-color-primary);
     border-color: var(--el-color-primary-light-7);
     background-color: var(--el-color-primary-light-9);
-  }
-
-  .icon-margin {
-    margin-right: 4px;
   }
 }
 
