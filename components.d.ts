@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AgentModelConfigDialog: typeof import('./src/components/chat/AgentModelConfigDialog.vue')['default']
     AnalysisStepComponent: typeof import('./src/components/data/upload/cleaning/AnalysisStepComponent.vue')['default']
     AssistantMessage: typeof import('./src/components/chat/message/AssistantMessage.vue')['default']
     AssistantSuggestions: typeof import('./src/components/chat/message/AssistantSuggestions.vue')['default']

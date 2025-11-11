@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AgentModelConfigDialog from '@/components/chat/AgentModelConfigDialog.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
@@ -17,8 +18,8 @@ import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { persistConfig } from '@/utils/tools';
-import { Document, DocumentAdd, Share } from '@element-plus/icons-vue';
-import { ElButton, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
+import { Document, DocumentAdd, Setting, Share } from '@element-plus/icons-vue';
+import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -109,6 +110,8 @@ const editingSessionName = ref('');
 const reportDialogVisible = ref(false);
 
 const modelSelectDialogVisible = ref(false);
+
+const modelConfigDialogVisible = ref(false);
 
 const {
   messages,
@@ -366,6 +369,14 @@ const openModelSelectDialog = async () => {
   modelSelectDialogVisible.value = true;
 };
 
+const openModelConfigDialog = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先选择一个会话');
+    return;
+  }
+  modelConfigDialogVisible.value = true;
+};
+
 // --- Methods for new UI ---
 const loadSessions = async () => {
   try {
@@ -525,60 +536,68 @@ onMounted(async () => {
     <!-- Chat Panel -->
     <div class="chat-panel">
       <!-- Chat Panel Header -->
-      <div class="chat-panel-header">
+      <div class="chat-panel-header" v-if="currentSessionId">
         <div class="header-left">
           <!-- 会话标题 -->
           <el-tooltip :content="currentSessionName" placement="bottom">
-            <span class="session-title" v-if="currentSessionId">
+            <span class="session-title">
               {{ currentSessionName }}
             </span>
           </el-tooltip>
         </div>
         <div class="header-right">
-          <el-button v-if="currentSessionId" @click="openModelSelectDialog" :icon="Model"
+          <el-button @click="openModelSelectDialog" :icon="Model"
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
           </el-button>
-          <el-button @click="openSaveWorkflowDialog" :icon="DocumentAdd" class="workflow-btn">
+          <el-button @click="openSaveWorkflowDialog" class="panel-header-btn">
+            <el-icon class="icon-margin">
+              <DocumentAdd />
+            </el-icon>
             保存流程
           </el-button>
-          <el-button @click="openWorkflowManager" :icon="Share" class="workflow-btn">
+          <el-button @click="openWorkflowManager" class="panel-header-btn">
+            <el-icon class="icon-margin">
+              <Share />
+            </el-icon>
             调用流程
           </el-button>
-          <el-button @click="openReportDialog" :icon="Document" text class="workflow-btn">
+          <el-button @click="openReportDialog" class="panel-header-btn">
+            <el-icon class="icon-margin">
+              <Document />
+            </el-icon>
             生成报告
+          </el-button>
+          <div class="action-divider"></div>
+          <el-button @click="openModelConfigDialog" type="success" plain>
+            <el-icon class="icon-margin">
+              <Setting />
+            </el-icon>
+            模型配置
           </el-button>
         </div>
       </div>
 
       <!-- Chat Messages Area -->
-      <ChatMessages :messages="messages"
-        :currentSessionId="currentSessionId"
-        :currentDatasetExists="(currentDatasetMetadatas?.length || 0) > 0"
-        @add-sample-question="userInput = $event"
+      <ChatMessages :messages="messages" :currentSessionId="currentSessionId"
+        :currentDatasetExists="(currentDatasetMetadatas?.length || 0) > 0" @add-sample-question="userInput = $event"
         ref="chatMessagesRef" />
 
       <!-- Chat Input Area -->
-      <ChatInput v-model:input="userInput"
-        :isProcessingChat="isProcessingChat"
+      <ChatInput v-model:input="userInput" :isProcessingChat="isProcessingChat"
         :currentDatasets="currentDatasetMetadatas"
-        :mcpConnections="currentMCPConnections"
-        :sessionModels="sessionModels"
-        @send="sendMessage"
+        :mcpConnections="currentMCPConnections" :sessionModels="sessionModels" @send="sendMessage"
         @go-to-data="goToAddData" />
     </div>
 
 
     <!-- Select Dataset Dialog -->
-    <DatasetSelector v-model:visible="selectDatasetDialogVisible"
-      @create-session="createNewSession"
+    <DatasetSelector v-model:visible="selectDatasetDialogVisible" @create-session="createNewSession"
       @go-to-data="goToAddData" />
 
     <!-- Session Edit Dialog -->
-    <SessionEditDialog v-model:visible="editSessionDialogVisible"
-      v-model:sessionName="editingSessionName"
-      :sessionId="editingSessionId"
-      @save="saveSessionEdit" />
+    <SessionEditDialog v-model:visible="editSessionDialogVisible" v-model:sessionName="editingSessionName"
+      :sessionId="editingSessionId" @save="saveSessionEdit" />
 
     <!-- Report Generation Dialog -->
     <ReportGenerationDialog v-model:visible="reportDialogVisible" />
@@ -588,20 +607,17 @@ onMounted(async () => {
       v-model:session-models="sessionModels" :current-session-id="currentSessionId"
       @models-updated="loadCurrentSessionModels" />
 
+    <!-- Agent Model Config Dialog -->
+    <AgentModelConfigDialog v-model:visible="modelConfigDialogVisible" />
+
     <!-- 保存工作流对话框 -->
-    <SaveWorkflowDialog
-      v-model:visible="saveWorkflowDialogVisible"
-      :messages="messages"
+    <SaveWorkflowDialog v-model:visible="saveWorkflowDialogVisible" :messages="messages"
       :sessionId="currentSessionId || ''"
       @saved="onWorkflowSaved" />
 
     <!-- 工作流管理对话框 -->
-    <WorkflowManager
-      v-model:visible="workflowManagerDialogVisible"
-      :selectionMode="true"
-      :sessionId="currentSessionId || ''"
-      :dataSources="currentDatasets"
-      @workflowExecuting="onWorkflowExecuting" />
+    <WorkflowManager v-model:visible="workflowManagerDialogVisible" :selectionMode="true"
+      :sessionId="currentSessionId || ''" :dataSources="currentDatasets" @workflowExecuting="onWorkflowExecuting" />
   </div>
 </template>
 
@@ -788,7 +804,7 @@ onMounted(async () => {
   }
 }
 
-.workflow-btn {
+.panel-header-btn {
   margin-right: 8px;
   font-size: 13px;
   border: 1px solid #dcdfe6;
@@ -802,6 +818,15 @@ onMounted(async () => {
   .icon-margin {
     margin-right: 4px;
   }
+}
+
+.action-divider {
+  display: inline-block;
+  height: 20px;
+  width: 1px;
+  background-color: #dcdfe6;
+  margin: 0 8px;
+  vertical-align: middle;
 }
 
 .report-preview-section {
