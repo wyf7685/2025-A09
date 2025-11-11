@@ -3,7 +3,7 @@ import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { MLModel } from '@/types';
 import { ElButton, ElCollapse, ElCollapseItem, ElDialog, ElEmpty, ElSkeleton, ElTabPane, ElTabs } from 'element-plus';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ModelList from './ModelList.vue';
 
 const props = defineProps<{
@@ -119,6 +119,11 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+// 监听对话框可见性变化，重置已选模型ID列表
+watch(() => visible.value, () => {
+  selectedModelIds.value = selectedModels.value?.map(m => m.id) || [];
 });
 </script>
 
