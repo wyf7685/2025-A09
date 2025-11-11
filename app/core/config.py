@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"  # noqa: S104
     PORT: int = 8081
 
+    # JWT 配置
+    JWT_SECRET_KEY: SecretStr
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
+
+    # 管理员账号
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: SecretStr
+
     # 数据库配置
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/db.sqlite3"
 
@@ -50,7 +59,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_PASSWORD: str | None = None
+    REDIS_PASSWORD: SecretStr | None = None
 
 
 if os.getenv("APP_SKIP_DOTENV", "false").lower() != "true" and Path(".env").exists():

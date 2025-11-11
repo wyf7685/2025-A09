@@ -3,8 +3,11 @@ import { ElMessage } from 'element-plus';
 import { defineStore } from 'pinia';
 import { computed, reactive, ref } from 'vue';
 import api, { API_BASE_URL } from '../utils/api';
+import { useLoginStore } from './login';
 
 export const useSessionStore = defineStore('session', () => {
+  const loginStore = useLoginStore();
+
   const currentSessionReactive = reactive<{ session: Session | null }>({ session: null });
   const currentSession = computed({
     get: () => currentSessionReactive.session,
@@ -174,6 +177,7 @@ export const useSessionStore = defineStore('session', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...loginStore.getAuthHeaders(),
         },
         body: JSON.stringify({
           message: message,

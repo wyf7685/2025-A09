@@ -15,7 +15,7 @@ async def _init_cache() -> BaseCache:
             endpoint=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
-            password=settings.REDIS_PASSWORD,
+            password=settings.REDIS_PASSWORD.get_secret_value() if settings.REDIS_PASSWORD else None,
         )
         await cache.client.connection_pool.get_connection()
         logger.opt(colors=True).info("使用 <g>RedisCache</> 作为缓存")

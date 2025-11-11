@@ -1,26 +1,33 @@
+import api from '@/utils/api';
+import { persistConfig } from '@/utils/tools';
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import { sleep } from '@/utils/tools';
+import { computed } from 'vue';
 
 export const useLoginStore = defineStore('login', () => {
-  const isLoggedIn = ref(localStorage.getItem('isLoggedIn') === 'true');
+  const token = persistConfig('auth-token', '');
 
   const login = async (username: string, password: string) => {
-    await sleep(1000); // Simulate network delay
-    if (username === 'dataforge' && password === 'operator@dataforge.chat') {
-      isLoggedIn.value = true;
-      localStorage.setItem('isLoggedIn', 'true');
-    } else {
-      isLoggedIn.value = false;
-      localStorage.setItem('isLoggedIn', 'false');
+    try {
+      const response = await api.post('/auth/login', { username, password });
+      token.value = response.data.access_token;
+    } catch (error) {
+      console.error('登录失败: ', error);
       throw new Error('无效的用户名或密码');
     }
   };
 
   const logout = () => {
-    isLoggedIn.value = false;
-    localStorage.setItem('isLoggedIn', 'false');
+    token.value = '';
   };
 
-  return { isLoggedIn, login, logout };
+  const getAuthorization = () => `Bearer ${token.value}`;
+  const getAuthHeaders = () => ({ Authorization: getAuthorization() });
+
+  return {
+    isLoggedIn: computed(() => token.value !== ''),
+    login,
+    logout,
+    getAuthorization,
+    getAuthHeaders,
+  };
 });

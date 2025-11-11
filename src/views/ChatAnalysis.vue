@@ -11,6 +11,7 @@ import SaveWorkflowDialog from '@/components/workflow/SaveWorkflowDialog.vue';
 import WorkflowManager from '@/components/workflow/WorkflowManager.vue';
 import { useChat } from '@/composables/useChat';
 import { useDataSourceStore } from '@/stores/datasource';
+import { useLoginStore } from '@/stores/login';
 import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
@@ -23,6 +24,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 const router = useRouter();
 const route = useRoute();
+const loginStore = useLoginStore();
 const sessionStore = useSessionStore();
 const dataSourceStore = useDataSourceStore();
 const mcpStore = useMCPStore();
@@ -181,14 +183,13 @@ const onWorkflowExecuting = async (payload: {
   // 关闭工作流管理对话框
   workflowManagerDialogVisible.value = false;
 
-  // 使用 EventSource 处理流式响应
-  const url = `${API_BASE_URL}/workflow/execute`;
-
+  // 使用 SSE 处理流式响应
   try {
-    const response = await fetch(url, {
+    const response = await fetch(`${API_BASE_URL}/workflow/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...loginStore.getAuthHeaders(),
       },
       body: JSON.stringify({
         workflow_id: payload.workflow_id,

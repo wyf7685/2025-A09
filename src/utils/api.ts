@@ -19,10 +19,23 @@ const api = axios.create({
   },
 });
 
+const apiRequiresLogin = (endpoint?: string) => {
+  if (!endpoint)
+    return true;
+  if (endpoint.startsWith('/auth/') || endpoint === '/health')
+    return false;
+  return true;
+};
+
 // 请求拦截器
 api.interceptors.request.use(
-  (config) => {
-    // 在这里可以添加 token 等认证信息
+  async (config) => {
+    if (apiRequiresLogin(config.url)) {
+      const loginStore = (await import('@/stores/login')).useLoginStore();
+      if (loginStore.isLoggedIn) {
+        config.headers.Authorization = loginStore.getAuthorization();
+      }
+    }
     return config;
   },
   (error) => {
@@ -82,7 +95,7 @@ api.interceptors.response.use(
 
 export default api;
 
-export const checkHealth = async (): Promise<{ status: string }> => {
+export const checkHealth = async (): Promise<{ status: string; }> => {
   const response = await api.get('/health');
   return response.data;
 };
@@ -237,14 +250,14 @@ export const dataSourceAPI = {
   // 更新数据源信息
   updateDataSource: async (
     sourceId: string,
-    updates: { name?: string; description?: string },
+    updates: { name?: string; description?: string; },
   ): Promise<DataSourceMetadata> => {
     const response = await api.put(`/datasources/${sourceId}`, updates);
     return response.data;
   },
 
   // 删除数据源
-  deleteDataSource: async (sourceId: string): Promise<{ success: boolean; message: string }> => {
+  deleteDataSource: async (sourceId: string): Promise<{ success: boolean; message: string; }> => {
     const response = await api.delete(`/datasources/${sourceId}`);
     return response.data;
   },
