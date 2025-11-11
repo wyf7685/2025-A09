@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AgentModelConfigDialog: typeof import('./src/components/chat/AgentModelConfigDialog.vue')['default']
     AnalysisStepComponent: typeof import('./src/components/data/upload/cleaning/AnalysisStepComponent.vue')['default']
     AssistantMessage: typeof import('./src/components/chat/message/AssistantMessage.vue')['default']
     AssistantSuggestions: typeof import('./src/components/chat/message/AssistantSuggestions.vue')['default']
@@ -26,6 +27,7 @@ declare module 'vue' {
     DataSourceSearchBar: typeof import('./src/components/data/DataSourceSearchBar.vue')['default']
     DataSourceTable: typeof import('./src/components/data/DataSourceTable.vue')['default']
     EditDataSourceDialog: typeof import('./src/components/data/EditDataSourceDialog.vue')['default']
+    ElDivider: typeof import('element-plus/es')['ElDivider']
     FieldMappingsGrid: typeof import('./src/components/data/upload/cleaning/FieldMappingsGrid.vue')['default']
     FileUploadStep: typeof import('./src/components/data/upload/FileUploadStep.vue')['default']
     LLMModelIcon: typeof import('./src/components/LLMModelIcon.vue')['default']

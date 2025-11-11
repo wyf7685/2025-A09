@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AgentModelConfigDialog from '@/components/chat/AgentModelConfigDialog.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
@@ -15,7 +16,7 @@ import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
-import { Document, Monitor, Share } from '@element-plus/icons-vue';
+import { Document, Monitor, Setting, Share } from '@element-plus/icons-vue';
 import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -106,6 +107,8 @@ const editingSessionName = ref('');
 const reportDialogVisible = ref(false);
 
 const modelSelectDialogVisible = ref(false);
+
+const modelConfigDialogVisible = ref(false);
 
 const {
   messages,
@@ -364,6 +367,14 @@ const openModelSelectDialog = async () => {
   modelSelectDialogVisible.value = true;
 };
 
+const openModelConfigDialog = () => {
+  if (!currentSessionId.value) {
+    ElMessage.warning('请先选择一个会话');
+    return;
+  }
+  modelConfigDialogVisible.value = true;
+};
+
 // --- Methods for new UI ---
 const loadSessions = async () => {
   try {
@@ -532,7 +543,7 @@ onMounted(async () => {
             </span>
           </el-tooltip>
         </div>
-        <div class="header-right">
+        <div class="header-right">       
           <el-button v-if="currentSessionId" @click="openModelSelectDialog" :icon="Model"
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
@@ -547,9 +558,17 @@ onMounted(async () => {
               <Share />
             </el-icon>调用流程
           </el-button>
+          <el-button @click="openReportDialog" class="workflow-btn">
+            <el-icon class="icon-margin">
+              <Document />
+            </el-icon>生成报告
+          </el-button>
           <div class="action-divider"></div>
-          <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
-            生成报告
+          <el-button v-if="currentSessionId" @click="openModelConfigDialog" type="success" plain>
+            <el-icon class="icon-margin">
+              <Setting />
+            </el-icon>
+            模型配置
           </el-button>
         </div>
       </div>
@@ -590,6 +609,9 @@ onMounted(async () => {
     <ModelSelectDialog v-if="currentSessionId" v-model:visible="modelSelectDialogVisible"
       v-model:session-models="sessionModels" :current-session-id="currentSessionId"
       @models-updated="loadCurrentSessionModels" />
+
+    <!-- Agent Model Config Dialog -->
+    <AgentModelConfigDialog v-model:visible="modelConfigDialogVisible" />
 
     <!-- 保存工作流对话框 -->
     <SaveWorkflowDialog
