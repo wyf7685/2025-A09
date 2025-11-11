@@ -543,7 +543,7 @@ onMounted(async () => {
             </span>
           </el-tooltip>
         </div>
-        <div class="header-right">       
+        <div class="header-right">
           <el-button v-if="currentSessionId" @click="openModelSelectDialog" :icon="Model"
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
