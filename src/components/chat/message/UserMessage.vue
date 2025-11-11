@@ -32,4 +32,10 @@ defineProps<{
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
 }
+
+@media (max-width: 768px) {
+  .user-message {
+    max-width: 85%;
+  }
+}
 </style>

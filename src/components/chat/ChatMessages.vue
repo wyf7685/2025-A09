@@ -80,6 +80,7 @@ onMounted(() => {
         <AssistantMessage v-if="message.type === 'assistant'" :message="message" />
         <UserMessage v-else :content="message.content" />
       </div>
+
       <!-- 最后一条 AI 消息的加载状态和建议按钮 -->
       <template v-if="lastMessage?.type === 'assistant'">
         <!-- 加载状态 -->
@@ -90,9 +91,10 @@ onMounted(() => {
           <span>正在处理...</span>
         </div>
         <!-- 建议按钮 -->
-        <AssistantSuggestions v-if="!lastMessage.loading && lastMessage.suggestions?.length"
+        <AssistantSuggestions v-else-if="lastMessage.suggestions?.length"
           :suggestions="lastMessage.suggestions" @set="emit('add-sample-question', $event)" />
       </template>
+
     </template>
   </div>
 </template>
@@ -165,12 +167,6 @@ onMounted(() => {
   line-height: 1.5;
 }
 
-.empty-tip {
-  color: #64748b;
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.5;
-}
 
 .message-loading {
   display: flex;
@@ -203,10 +199,6 @@ onMounted(() => {
 @media (max-width: 768px) {
   .chat-messages {
     padding: 16px;
-  }
-
-  .user-message {
-    max-width: 85%;
   }
 }
 </style>

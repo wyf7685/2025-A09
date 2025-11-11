@@ -2,12 +2,12 @@
 import AgentModelConfigDialog from '@/components/chat/AgentModelConfigDialog.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ChatMessages from '@/components/chat/ChatMessages.vue';
+import ChatPanelHeader from '@/components/chat/ChatPanelHeader.vue';
 import DatasetSelector from '@/components/chat/DatasetSelector.vue';
 import ModelSelectDialog from '@/components/chat/ModelSelectDialog.vue';
 import ReportGenerationDialog from '@/components/chat/report/ReportGenerationDialog.vue';
 import SessionEditDialog from '@/components/chat/SessionEditDialog.vue';
 import SessionSidebar from '@/components/chat/SessionSidebar.vue';
-import Model from '@/components/icons/Model.vue';
 import SaveWorkflowDialog from '@/components/workflow/SaveWorkflowDialog.vue';
 import WorkflowManager from '@/components/workflow/WorkflowManager.vue';
 import { useChat } from '@/composables/useChat';
@@ -18,8 +18,7 @@ import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
 import { persistConfig } from '@/utils/tools';
-import { Document, DocumentAdd, Setting, Share } from '@element-plus/icons-vue';
-import { ElButton, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -52,7 +51,6 @@ const workflowManagerDialogVisible = ref(false);
 
 const sessions = computed(() => sessionStore.sessions);
 const currentSessionId = computed(() => sessionStore.currentSessionId);
-const currentSessionName = computed(() => sessionStore.currentSessionName);
 const currentDatasetMetadatas = computed(() =>
   sessionStore.currentSession
     ? sessionStore.currentSession.dataset_ids
@@ -536,35 +534,14 @@ onMounted(async () => {
     <!-- Chat Panel -->
     <div class="chat-panel">
       <!-- Chat Panel Header -->
-      <div class="chat-panel-header" v-if="currentSessionId">
-        <div class="header-left">
-          <!-- 会话标题 -->
-          <el-tooltip :content="currentSessionName" placement="bottom">
-            <span class="session-title">
-              {{ currentSessionName }}
-            </span>
-          </el-tooltip>
-        </div>
-        <div class="header-right">
-          <el-button @click="openModelSelectDialog" :icon="Model" class="panel-header-btn"
-            :type="sessionModels.length ? 'primary' : 'default'">
-            {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
-          </el-button>
-          <el-button @click="openSaveWorkflowDialog" :icon="DocumentAdd" class="panel-header-btn">
-            保存流程
-          </el-button>
-          <el-button @click="openWorkflowManager" :icon="Share" class="panel-header-btn">
-            调用流程
-          </el-button>
-          <el-button @click="openReportDialog" :icon="Document" class="panel-header-btn">
-            生成报告
-          </el-button>
-          <div class="action-divider"></div>
-          <el-button @click="openModelConfigDialog" :icon="Setting" class="panel-header-btn" type="success" plain>
-            模型配置
-          </el-button>
-        </div>
-      </div>
+      <ChatPanelHeader
+        v-if="currentSessionId"
+        :session-models="sessionModels"
+        @open-model-config-dialog="openModelConfigDialog"
+        @open-model-select-dialog="openModelSelectDialog"
+        @open-report-dialog="openReportDialog"
+        @open-save-workflow-dialog="openSaveWorkflowDialog"
+        @open-workflow-manager="openWorkflowManager" />
 
       <!-- Chat Messages Area -->
       <ChatMessages :messages="messages" :currentSessionId="currentSessionId"
@@ -577,7 +554,6 @@ onMounted(async () => {
         :mcpConnections="currentMCPConnections" :sessionModels="sessionModels" @send="sendMessage"
         @go-to-data="goToAddData" />
     </div>
-
 
     <!-- Select Dataset Dialog -->
     <DatasetSelector v-model:visible="selectDatasetDialogVisible" @create-session="createNewSession"
@@ -614,11 +590,10 @@ onMounted(async () => {
   display: flex;
   height: 100vh;
   background-color: #ffffff;
-  margin: -16px;
   /* 抵消 layout-content 的 padding */
+  margin: -16px;
 }
 
-// --- Chat Panel Styles ---
 .chat-panel {
   flex-grow: 1;
   display: flex;
@@ -627,200 +602,14 @@ onMounted(async () => {
   height: 100%;
   position: relative;
   background: #ffffff;
-  overflow: hidden;
   /* 防止内容溢出 */
-}
-
-.chat-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  /* 修改为与 SessionSidebar 一致的内边距 */
-  height: 56px;
-  /* 固定高度与 SessionSidebar 保持一致 */
-  border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
-  background: #ffffff;
-
-  .header-left {
-    display: flex;
-    align-items: center;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .session-title {
-    font-weight: 600;
-    margin-left: 12px;
-    color: #1f2937;
-    font-size: 16px;
-    max-height: 1.2rem;
-    overflow: hidden;
-  }
+  overflow: hidden;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .chat-analysis-container {
     flex-direction: column;
-  }
-
-  .session-sidebar {
-    width: 100%;
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #e5e7eb;
-
-    &.is-closed {
-      max-height: 0;
-      overflow: hidden;
-    }
-  }
-
-  .user-message {
-    max-width: 85%;
-  }
-
-  .chat-input-area {
-    padding: 12px 16px 16px;
-  }
-
-  .quick-actions {
-    justify-content: flex-start;
-  }
-
-  .dataset-indicator {
-    margin-right: 8px;
-    margin-bottom: 8px;
-  }
-}
-
-@keyframes pulse {
-
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-@keyframes rotating {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.rotating {
-  animation: rotating 2s linear infinite;
-}
-
-/* 报告生成相关样式 */
-.report-generation-options {
-  margin-bottom: 24px;
-
-  .template-selection {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-}
-
-.template-preview {
-  margin-top: 24px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
-
-  h4 {
-    margin: 0 0 8px 0;
-    color: #374151;
-    font-weight: 600;
-  }
-
-  p {
-    margin: 0 0 16px 0;
-    color: #6b7280;
-    font-size: 14px;
-  }
-
-  .template-content {
-    max-height: 300px;
-    overflow-y: auto;
-
-    pre {
-      background: #f3f4f6;
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      line-height: 1.5;
-      margin: 0;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-  }
-}
-
-.template-management {
-  .management-actions {
-    margin-bottom: 16px;
-  }
-}
-
-.panel-header-btn {
-  margin-left: 4px;
-  margin-right: 4px;
-  font-size: 13px;
-  border: 1px solid #dcdfe6;
-
-  &:hover {
-    color: var(--el-color-primary);
-    border-color: var(--el-color-primary-light-7);
-    background-color: var(--el-color-primary-light-9);
-  }
-}
-
-.action-divider {
-  display: inline-block;
-  height: 20px;
-  width: 1px;
-  background-color: #dcdfe6;
-  margin: 0 8px;
-  vertical-align: middle;
-}
-
-.report-preview-section {
-  margin-top: 24px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
-
-  h3 {
-    margin: 0 0 16px 0;
-    color: #374151;
-  }
-}
-
-.report-figures-section {
-  margin-top: 24px;
-
-  h3 {
-    margin: 0 0 16px 0;
-    color: #374151;
   }
 }
 </style>

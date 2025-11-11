@@ -118,8 +118,8 @@ onUnmounted(() => removeCurrentUrl());
 </script>
 
 <template>
-  <div :class="['claude-tool-call', status]">
-    <!-- 主要显示区域 - 类似 Claude 左侧 -->
+  <div :class="['tool-call', status]">
+    <!-- 主要显示区域 -->
     <div class="tool-main-content">
       <!-- 工具头部 -->
       <div class="tool-header">
@@ -288,8 +288,8 @@ onUnmounted(() => removeCurrentUrl());
 </template>
 
 <style scoped>
-/* Claude 风格的工具调用组件 */
-.claude-tool-call {
+/* 工具调用组件 */
+.tool-call {
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid #e5e7eb;

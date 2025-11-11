@@ -16,6 +16,7 @@ declare module 'vue' {
     AssistantToolCall: typeof import('./src/components/chat/message/AssistantToolCall.vue')['default']
     ChatInput: typeof import('./src/components/chat/ChatInput.vue')['default']
     ChatMessages: typeof import('./src/components/chat/ChatMessages.vue')['default']
+    ChatPanelHeader: typeof import('./src/components/chat/ChatPanelHeader.vue')['default']
     CleaningStepComponent: typeof import('./src/components/data/upload/cleaning/CleaningStepComponent.vue')['default']
     CleaningStepIndicator: typeof import('./src/components/data/upload/cleaning/CleaningStepIndicator.vue')['default']
     CleaningSuggestionItem: typeof import('./src/components/data/upload/cleaning/CleaningSuggestionItem.vue')['default']
