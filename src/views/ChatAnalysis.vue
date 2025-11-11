@@ -15,8 +15,8 @@ import { useMCPStore } from '@/stores/mcp';
 import { useSessionStore } from '@/stores/session';
 import type { AssistantChatMessage, MCPConnection, MLModel } from '@/types';
 import { API_BASE_URL } from '@/utils/api';
-import { Document, Share } from '@element-plus/icons-vue';
-import { ElButton, ElIcon, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
+import { Document, DocumentAdd, Share } from '@element-plus/icons-vue';
+import { ElButton, ElMessage, ElMessageBox, ElTooltip } from 'element-plus';
 import { computed, nextTick, onErrorCaptured, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -525,7 +525,7 @@ onMounted(async () => {
       <!-- Chat Panel Header -->
       <div class="chat-panel-header">
         <div class="header-left">
-          <!-- 侧边栏收缩时不显示展开按钮，因为收缩的侧边栏本身就有展开按钮 -->
+          <!-- 会话标题 -->
           <el-tooltip :content="currentSessionName" placement="bottom">
             <span class="session-title" v-if="currentSessionId">
               {{ currentSessionName }}
@@ -537,18 +537,13 @@ onMounted(async () => {
             :type="sessionModels.length ? 'primary' : 'default'">
             {{ sessionModels?.length || 0 > 0 ? `已选择 ${sessionModels.length} 个模型` : '机器学习模型' }}
           </el-button>
-          <el-button @click="openSaveWorkflowDialog" class="workflow-btn">
-            <el-icon class="icon-margin">
-              <Document />
-            </el-icon>保存流程
+          <el-button @click="openSaveWorkflowDialog" :icon="DocumentAdd" class="workflow-btn">
+            保存流程
           </el-button>
-          <el-button @click="openWorkflowManager" class="workflow-btn">
-            <el-icon class="icon-margin">
-              <Share />
-            </el-icon>调用流程
+          <el-button @click="openWorkflowManager" :icon="Share" class="workflow-btn">
+            调用流程
           </el-button>
-          <div class="action-divider"></div>
-          <el-button @click="openReportDialog" :icon="Document" text class="toggle-btn">
+          <el-button @click="openReportDialog" :icon="Document" text class="workflow-btn">
             生成报告
           </el-button>
         </div>
@@ -805,15 +800,6 @@ onMounted(async () => {
   .icon-margin {
     margin-right: 4px;
   }
-}
-
-.action-divider {
-  display: inline-block;
-  height: 20px;
-  width: 1px;
-  background-color: #dcdfe6;
-  margin: 0 8px;
-  vertical-align: middle;
 }
 
 .report-preview-section {
