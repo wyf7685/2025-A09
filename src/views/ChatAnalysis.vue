@@ -37,7 +37,7 @@ onErrorCaptured((err) => {
 });
 
 // --- State for new UI ---
-const isSidebarOpen = persistConfig('chat-sidebar-open', true);
+const isSidebarOpen = persistConfig('chatSidebarOpen', true);
 const userInput = ref<string>('');
 const selectDatasetDialogVisible = ref<boolean>(false);
 const chatMessagesRef = ref<InstanceType<typeof ChatMessages>>();

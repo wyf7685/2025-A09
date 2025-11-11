@@ -4,7 +4,7 @@ import { defineStore } from 'pinia';
 import { computed } from 'vue';
 
 export const useLoginStore = defineStore('login', () => {
-  const token = persistConfig('auth-token', '');
+  const token = persistConfig('authToken', '');
 
   const login = async (username: string, password: string) => {
     try {

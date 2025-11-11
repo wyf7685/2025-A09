@@ -12,7 +12,7 @@ import LoginView from './views/LoginView.vue';
 const loginStore = useLoginStore();
 
 // 响应式数据
-const sidebarCollapsed = persistConfig('app-sidebar-collapsed', false);
+const sidebarCollapsed = persistConfig('appSidebarCollapsed', false);
 const apiStatus = ref(false);
 const sidebarTransitioning = ref(false);
 

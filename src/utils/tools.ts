@@ -125,15 +125,24 @@ export const sleep = async (ms: number) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
-export const persistConfig = <T>(key: string, defaultValue: T): WritableComputedRef<T> => {
+interface PersistConfigs {
+  authToken: string;
+  appSidebarCollapsed: boolean;
+  chatSidebarOpen: boolean;
+}
+
+export const persistConfig = <
+  K extends keyof PersistConfigs,
+  V = PersistConfigs[K],
+>(key: K, defaultValue: V): WritableComputedRef<V> => {
   const storedValue = localStorage.getItem(key);
   const data = ref(storedValue ? JSON.parse(storedValue) : defaultValue);
 
-  return computed<T>({
+  return computed<V>({
     get() {
       return data.value;
     },
-    set(newValue: T) {
+    set(newValue: V) {
       data.value = newValue;
       localStorage.setItem(key, JSON.stringify(newValue));
     },
