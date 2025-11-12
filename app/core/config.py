@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
@@ -63,7 +62,10 @@ class Settings(BaseSettings):
 
 
 if os.getenv("APP_SKIP_DOTENV", "false").lower() != "true" and Path(".env").exists():
+    from dotenv import load_dotenv
+
     load_dotenv(".env")
+
 settings = Settings()  # pyright: ignore[reportCallIssue]
 
 __all__ = ["settings"]

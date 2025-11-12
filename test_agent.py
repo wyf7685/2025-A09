@@ -8,12 +8,12 @@ from app.core.agent.events import BufferedStreamEventReader, StreamEvent
 from app.core.chain import rate_limiter
 from app.core.datasource import create_file_source
 from app.log import configure_logging, logger
-from app.utils import configure_matplotlib_fonts, escape_tag
+from app.utils import configure_matplotlib, escape_tag
 
 if TYPE_CHECKING:
     from app.core.agent.schemas import SourcesDict
 
-configure_matplotlib_fonts()
+configure_matplotlib()
 configure_logging()
 
 

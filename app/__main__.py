@@ -2,11 +2,10 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.log import configure_logging
-from app.utils import configure_matplotlib_fonts
+from app.log import configure_logging, logger
 
 configure_logging()
-configure_matplotlib_fonts()
+logger.opt(colors=True).info("Launching <lg>Dataforge</>...")
 
 from app.api import router as api_router
 from app.const import VERSION
@@ -15,8 +14,8 @@ from app.core.lifespan import lifespan
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="智能数据分析平台",
-    description="基于 LangChain 的智能数据分析 API 服务",
+    title="DataForge",
+    description="Dataforge - 智能数据锻造平台",
     version=VERSION,
     lifespan=lifespan,
 )

@@ -5,13 +5,10 @@
 
 import threading
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import anyio.to_thread
 from langchain_core.runnables import ensure_config
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
 
 from app.core.agent.schemas import OperationFailedModel, is_failed, is_success
 from app.log import logger
@@ -38,9 +35,17 @@ from .schemas import (
     load_source,
 )
 
+if TYPE_CHECKING:
+    from langgraph.graph.state import CompiledStateGraph
 
-def _create_graph() -> CompiledStateGraph[CleaningState, None, CleaningState, CleaningState]:
+type AgentGraph = CompiledStateGraph[CleaningState, None, CleaningState, CleaningState]
+
+
+def _create_graph() -> AgentGraph:
     """创建数据清洗工作流图"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import END, StateGraph
+
     graph = StateGraph(CleaningState)
 
     # 添加节点
@@ -66,7 +71,7 @@ def _create_graph() -> CompiledStateGraph[CleaningState, None, CleaningState, Cl
 
 
 class SmartCleanDataAgent:
-    _graph: CompiledStateGraph[CleaningState, None, CleaningState, CleaningState] = _create_graph()
+    _graph: AgentGraph = _create_graph()
 
     @staticmethod
     @copy_param_annotations(apply_cleaning_actions)

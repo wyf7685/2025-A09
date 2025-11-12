@@ -1,16 +1,19 @@
 import io
 from typing import Any, NotRequired, TypedDict, cast
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.font_manager import FontProperties
 
 from app.log import logger
-from app.utils import escape_tag
+from app.utils import configure_matplotlib, escape_tag
 
 
 def _create_feature_importance_plot(feature_importance: dict[str, float]) -> bytes:
+    configure_matplotlib()
+
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties
+
     """创建特征重要性图表并返回字节数据"""
     plt.figure(figsize=(10, 6))
 

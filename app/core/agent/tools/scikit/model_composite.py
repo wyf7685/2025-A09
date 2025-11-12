@@ -1,8 +1,8 @@
-from typing import Any, Literal, Self, TypedDict, cast
+import functools
+from typing import Any, Literal, Protocol, Self, TypedDict, cast
 
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 
 from app.log import logger
 from app.utils import escape_tag
@@ -227,81 +227,97 @@ def _create_stacking_model(
     }
 
 
-class BlendingClassifier(ClassifierMixin, BaseEstimator):
-    def __init__(self, base_estimators: list[Any], meta_estimator: Any, validation_split: float = 0.2) -> None:
-        self.base_estimators = base_estimators
-        self.meta_estimator = meta_estimator
-        self.validation_split = validation_split
-        self.classes_ = None
-
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
-        # 分割数据集
-        from sklearn.model_selection import train_test_split
-
-        X_base, X_meta, y_base, y_meta = train_test_split(X, y, test_size=self.validation_split, random_state=42)
-
-        # 训练基础模型
-        for estimator in self.base_estimators:
-            estimator.fit(X_base, y_base)
-
-        # 生成元特征
-        meta_features = self._generate_meta_features(cast("pd.DataFrame", X_meta))
-
-        # 训练元模型
-        self.meta_estimator.fit(meta_features, y_meta)
-
-        # 保存类别信息
-        self.classes_ = np.unique(y)
-
-        return self
-
-    def _generate_meta_features(self, X: pd.DataFrame) -> np.ndarray:
-        """生成元特征"""
-        return np.column_stack(
-            [
-                model.predict_proba(X)
-                if hasattr(model, "predict_proba")
-                else np.column_stack([model.predict(X), 1 - model.predict(X)])
-                for model in self.base_estimators
-            ]
-        )
-
-    def predict(self, X: pd.DataFrame) -> Any:
-        meta_features = self._generate_meta_features(X)
-        return self.meta_estimator.predict(meta_features)
-
-    def predict_proba(self, X: pd.DataFrame) -> Any:
-        meta_features = self._generate_meta_features(X)
-        return self.meta_estimator.predict_proba(meta_features)
+class _Estimator(Protocol):
+    def __init__(self, base_estimators: list[Any], meta_estimator: Any, validation_split: float = 0.2) -> None: ...
 
 
-class BlendingRegressor(RegressorMixin, BaseEstimator):
-    def __init__(self, base_estimators: list[Any], meta_estimator: Any, validation_split: float = 0.2) -> None:
-        self.base_estimators = base_estimators
-        self.meta_estimator = meta_estimator
-        self.validation_split = validation_split
+@functools.cache
+def _get_blending_classifier_class() -> type[_Estimator]:
+    from sklearn.base import BaseEstimator, ClassifierMixin
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
-        # 分割数据集
-        from sklearn.model_selection import train_test_split
+    class BlendingClassifier(ClassifierMixin, BaseEstimator):
+        def __init__(self, base_estimators: list[Any], meta_estimator: Any, validation_split: float = 0.2) -> None:
+            self.base_estimators = base_estimators
+            self.meta_estimator = meta_estimator
+            self.validation_split = validation_split
+            self.classes_ = None
 
-        X_base, X_meta, y_base, y_meta = train_test_split(X, y, test_size=self.validation_split, random_state=42)
+        def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
+            # 分割数据集
+            from sklearn.model_selection import train_test_split
 
-        # 训练基础模型
-        for estimator in self.base_estimators:
-            estimator.fit(X_base, y_base)
+            X_base, X_meta, y_base, y_meta = train_test_split(X, y, test_size=self.validation_split, random_state=42)
 
-        # 生成元特征
-        meta_features = np.column_stack([model.predict(X_meta).reshape(-1, 1) for model in self.base_estimators])
+            # 训练基础模型
+            for estimator in self.base_estimators:
+                estimator.fit(X_base, y_base)
 
-        # 训练元模型
-        self.meta_estimator.fit(meta_features, y_meta)
+            # 生成元特征
+            meta_features = self._generate_meta_features(cast("pd.DataFrame", X_meta))
 
-        return self
+            # 训练元模型
+            self.meta_estimator.fit(meta_features, y_meta)
 
-    def predict(self, X: pd.DataFrame) -> Any:
-        meta_features = np.column_stack([model.predict(X).reshape(-1, 1) for model in self.base_estimators])
-        return self.meta_estimator.predict(meta_features)
+            # 保存类别信息
+            self.classes_ = np.unique(y)
+
+            return self
+
+        def _generate_meta_features(self, X: pd.DataFrame) -> np.ndarray:
+            """生成元特征"""
+            return np.column_stack(
+                [
+                    model.predict_proba(X)
+                    if hasattr(model, "predict_proba")
+                    else np.column_stack([model.predict(X), 1 - model.predict(X)])
+                    for model in self.base_estimators
+                ]
+            )
+
+        def predict(self, X: pd.DataFrame) -> Any:
+            meta_features = self._generate_meta_features(X)
+            return self.meta_estimator.predict(meta_features)
+
+        def predict_proba(self, X: pd.DataFrame) -> Any:
+            meta_features = self._generate_meta_features(X)
+            return self.meta_estimator.predict_proba(meta_features)
+
+    return BlendingClassifier
+
+
+@functools.cache
+def _get_blending_regressor_class() -> type[_Estimator]:
+    from sklearn.base import BaseEstimator, RegressorMixin
+
+    class BlendingRegressor(RegressorMixin, BaseEstimator):
+        def __init__(self, base_estimators: list[Any], meta_estimator: Any, validation_split: float = 0.2) -> None:
+            self.base_estimators = base_estimators
+            self.meta_estimator = meta_estimator
+            self.validation_split = validation_split
+
+        def fit(self, X: pd.DataFrame, y: pd.Series) -> Self:
+            # 分割数据集
+            from sklearn.model_selection import train_test_split
+
+            X_base, X_meta, y_base, y_meta = train_test_split(X, y, test_size=self.validation_split, random_state=42)
+
+            # 训练基础模型
+            for estimator in self.base_estimators:
+                estimator.fit(X_base, y_base)
+
+            # 生成元特征
+            meta_features = np.column_stack([model.predict(X_meta).reshape(-1, 1) for model in self.base_estimators])
+
+            # 训练元模型
+            self.meta_estimator.fit(meta_features, y_meta)
+
+            return self
+
+        def predict(self, X: pd.DataFrame) -> Any:
+            meta_features = np.column_stack([model.predict(X).reshape(-1, 1) for model in self.base_estimators])
+            return self.meta_estimator.predict(meta_features)
+
+    return BlendingRegressor
 
 
 def _create_blending_model(
@@ -329,6 +345,7 @@ def _create_blending_model(
     base_models = [m.model for m in models]
 
     if is_classification:
+        BlendingClassifier = _get_blending_classifier_class()
         composite_model = BlendingClassifier(base_models, meta_estimator, validation_split)
         logger.opt(colors=True).info(
             f"<g>创建混合分类器</>，"
@@ -337,6 +354,7 @@ def _create_blending_model(
         )
         model_type = "blending_classifier"
     else:
+        BlendingRegressor = _get_blending_regressor_class()
         composite_model = BlendingRegressor(base_models, meta_estimator, validation_split)
         logger.opt(colors=True).info(
             f"<g>创建混合回归器</>，"

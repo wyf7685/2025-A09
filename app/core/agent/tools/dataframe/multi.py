@@ -1,7 +1,6 @@
 from typing import Any, Literal, TypedDict, cast
 
 import pandas as pd
-from sklearn.model_selection import train_test_split
 
 from app.core.agent.schemas import DatasetID, OperationFailed
 from app.core.agent.sources import Sources
@@ -425,6 +424,8 @@ def create_dataset_by_sampling(
     Returns:
         CreateDatasetResult | OperationFailed: 操作结果
     """
+    from sklearn.model_selection import train_test_split
+
     source_df = sources.read(dataset_id)
 
     # 参数验证

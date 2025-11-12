@@ -2,7 +2,6 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr, spearmanr
 
 
 def corr_analys(df: pd.DataFrame, col1: str, col2: str, method: str = "pearson") -> dict[str, Any]:
@@ -37,8 +36,12 @@ def corr_analys(df: pd.DataFrame, col1: str, col2: str, method: str = "pearson")
     y = y[valid]
 
     if method == "pearson":
+        from scipy.stats import pearsonr
+
         corr, p = pearsonr(x, y)
     else:
+        from scipy.stats import spearmanr
+
         corr, p = spearmanr(x, y)
     return {"correlation": corr, "p_value": p}
 

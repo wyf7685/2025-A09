@@ -14,9 +14,6 @@ from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda, e
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_langchain_tool
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode, create_react_agent
 from mcp.types import Implementation as MCPImplementation
 
 from app.const import VERSION
@@ -35,6 +32,8 @@ from app.utils import escape_tag
 
 if TYPE_CHECKING:
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
+    from langgraph.graph.state import CompiledStateGraph
+    from langgraph.prebuilt import ToolNode
 
 
 def get_runnable_config() -> RunnableConfig:
@@ -51,8 +50,8 @@ class AgentContext:
     lifespan: Lifespan | None = None
 
     # private
-    _tool_node: ToolNode | None = None
-    _graph: CompiledStateGraph | None = None
+    _tool_node: "ToolNode | None" = None
+    _graph: "CompiledStateGraph | None" = None
     _saved_models: dict[str, Path] | None = None
     _mcp_instructions: str | None = None
     _tool_sources: dict[str, str] = dataclasses.field(default_factory=dict)
@@ -62,7 +61,7 @@ class AgentContext:
         return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
 
     @property
-    def graph(self) -> CompiledStateGraph:
+    def graph(self) -> "CompiledStateGraph":
         if self._graph is None:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._graph
@@ -190,6 +189,9 @@ class AgentContext:
         return mcp_tools
 
     async def build_graph(self) -> None:
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.prebuilt import ToolNode, create_react_agent
+
         if self.lifespan is not None:
             with contextlib.suppress(BaseException):
                 await self.lifespan.shutdown()

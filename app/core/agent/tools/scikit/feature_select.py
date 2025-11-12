@@ -2,16 +2,6 @@ from typing import Any, TypedDict, cast
 
 import numpy as np
 import pandas as pd
-from sklearn.feature_selection import (
-    RFE,
-    RFECV,
-    SelectKBest,
-    SelectPercentile,
-    chi2,
-    f_regression,
-    mutual_info_classif,
-    mutual_info_regression,
-)
 
 from app.log import logger
 from app.utils import escape_tag
@@ -260,6 +250,7 @@ def _select_by_rfe(
 ) -> FeatureSelectionResult:
     """使用递归特征消除进行特征选择"""
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    from sklearn.feature_selection import RFE
 
     if task_type == "regression":
         estimator = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -303,6 +294,7 @@ def _select_by_rfecv(
 ) -> FeatureSelectionResult:
     """使用带交叉验证的递归特征消除进行特征选择"""
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    from sklearn.feature_selection import RFECV
 
     if task_type == "regression":
         estimator = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -349,6 +341,8 @@ def _select_by_mutual_info(
     threshold: float | None,
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
+    from sklearn.feature_selection import SelectKBest, SelectPercentile, mutual_info_classif, mutual_info_regression
+
     """使用互信息进行特征选择"""
     score_func = mutual_info_regression if task_type == "regression" else mutual_info_classif
 
@@ -401,6 +395,8 @@ def _select_by_f_regression(
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
     """使用F统计量进行回归问题的特征选择"""
+    from sklearn.feature_selection import SelectKBest, SelectPercentile, f_regression
+
     if n_features is not None:
         selector = SelectKBest(score_func=f_regression, k=n_features)
     elif threshold is not None:
@@ -455,6 +451,8 @@ def _select_by_chi2(
     result: FeatureSelectionResult,
 ) -> FeatureSelectionResult:
     """使用卡方检验进行分类问题的特征选择"""
+    from sklearn.feature_selection import SelectKBest, SelectPercentile, chi2
+
     if n_features is not None:
         selector = SelectKBest(score_func=chi2, k=n_features)
     elif threshold is not None:

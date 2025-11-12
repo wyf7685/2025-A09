@@ -8,20 +8,12 @@ import joblib
 import numpy as np
 import pandas as pd
 from pydantic import TypeAdapter
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    mean_squared_error,
-    precision_score,
-    r2_score,
-    recall_score,
-)
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 from app.log import logger
 from app.utils import escape_tag, resolve_dot_notation
+
+if TYPE_CHECKING:
+    from sklearn.preprocessing import LabelEncoder
 
 type TaskType = Literal["regression", "classification"]
 type SupportedBaseModelType = Literal[
@@ -211,7 +203,7 @@ class TrainModelResult:
     feature_columns: list[str]
     target_column: str
     dataset_id: str = ""
-    label_encoder: LabelEncoder | None = dataclasses.field(default=None)
+    label_encoder: "LabelEncoder | None" = dataclasses.field(default=None)
     hyperparams: dict[str, Any] | None = dataclasses.field(default=None)
 
 
@@ -247,6 +239,9 @@ def fit_model(
         raise ValueError(f"部分特征列 {', '.join(set(features) - set(df.columns))} 不存在。")
     if target not in df.columns:
         raise ValueError(f"目标列 {target} 不存在。")
+
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import LabelEncoder
 
     X = df[features].copy()
     Y = df[target].copy()
@@ -302,6 +297,16 @@ def evaluate_model(trained_model_info: TrainModelResult) -> EvaluateModelResult:
     Returns:
         dict: 包含模型评估指标、消息和预测结果摘要的字典。
     """
+    from sklearn.metrics import (
+        accuracy_score,
+        confusion_matrix,
+        f1_score,
+        mean_squared_error,
+        precision_score,
+        r2_score,
+        recall_score,
+    )
+
     model = trained_model_info.model
     X_test = trained_model_info.X_test
     y_test = trained_model_info.Y_test
@@ -420,6 +425,8 @@ def resume_train_result(df: pd.DataFrame, metadata: ModelMetadata, model: Estima
     Returns:
         TrainModelResult: 恢复的训练结果。
     """
+    from sklearn.preprocessing import LabelEncoder
+
     Y = df[metadata["target_column"]].copy()
     le = None
     if Y.dtype == "object" or Y.dtype == "category":

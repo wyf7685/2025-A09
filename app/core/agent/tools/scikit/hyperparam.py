@@ -2,20 +2,18 @@ import inspect
 import io
 import sys
 import time
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.font_manager import FontProperties
-from scipy.stats import randint, uniform
-from sklearn.metrics import make_scorer, mean_squared_error
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
 
 from app.log import logger
-from app.utils import escape_tag, resolve_dot_notation
+from app.utils import configure_matplotlib, escape_tag, resolve_dot_notation
 
 from .model import TaskType
+
+if TYPE_CHECKING:
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 
 class HyperparamOptResult(TypedDict):
@@ -74,6 +72,9 @@ def optimize_hyperparameters(
         HyperparamOptResult: 优化结果，包含最佳参数、得分等
         bytes | None: 参数重要性图表数据
     """
+    from sklearn.metrics import make_scorer, mean_squared_error
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
     start_time = time.time()
 
     # 验证输入参数
@@ -389,6 +390,8 @@ def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int
         "random": {},  # 分布形式，适用于RandomizedSearchCV
     }
 
+    from scipy.stats import randint, uniform
+
     # 为随机搜索创建分布形式的参数网格
     random_param_grid = {}
     for key, values in param_grid.items():
@@ -411,7 +414,7 @@ def _get_model_and_param_grid(model_type: str, task_type: str, random_state: int
     return model, result
 
 
-def _calculate_param_importance(search: GridSearchCV | RandomizedSearchCV) -> dict[str, float]:
+def _calculate_param_importance(search: "GridSearchCV | RandomizedSearchCV") -> dict[str, float]:
     """计算参数重要性"""
     param_importance = {}
 
@@ -466,6 +469,11 @@ def _calculate_param_importance(search: GridSearchCV | RandomizedSearchCV) -> di
 
 def _create_param_importance_plot(param_importance: dict[str, float]) -> bytes:
     """创建参数重要性图表并返回字节数据"""
+    configure_matplotlib()
+
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties
+
     plt.figure(figsize=(10, 6))
 
     # 获取按重要性排序的参数
@@ -563,6 +571,12 @@ def plot_learning_curve(
 
     if target not in df.columns:
         raise ValueError(f"目标列 '{target}' 不存在于数据中")
+
+    configure_matplotlib()
+
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties
+    from sklearn.model_selection import learning_curve
 
     X = df[features].copy()
     y = df[target].copy()

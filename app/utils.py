@@ -9,16 +9,33 @@ from collections.abc import AsyncIterable, Callable, Coroutine
 from typing import Any, cast
 
 import anyio.to_thread
-import matplotlib as mpl
-
-mpl.use("Agg")  # 使用非交互式后端以避免GUI依赖
-
-import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
 
 
-def configure_matplotlib_fonts() -> None:
+def _run_once[F: Callable[[], None]](fn: F) -> F:
+    run_lock = threading.Lock()
+    has_run = False
+
+    @functools.wraps(fn)
+    def wrapper() -> None:
+        nonlocal has_run
+        with run_lock:
+            if not has_run:
+                fn()
+                has_run = True
+
+    return cast("F", wrapper)
+
+
+@_run_once
+def configure_matplotlib() -> None:
     """配置matplotlib支持中文显示"""
+    import matplotlib as mpl
+
+    mpl.use("Agg")  # 使用非交互式后端以避免GUI依赖
+
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties
+
     system = platform.system()
 
     if system == "Windows":
@@ -52,9 +69,6 @@ def configure_matplotlib_fonts() -> None:
 
     # 确保负号正确显示
     plt.rcParams["axes.unicode_minus"] = False
-
-
-configure_matplotlib_fonts()
 
 
 def is_coroutine_callable(call: Callable[..., Any]) -> bool:
