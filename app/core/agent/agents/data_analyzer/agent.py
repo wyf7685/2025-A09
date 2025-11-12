@@ -33,7 +33,7 @@ class DataAnalyzerAgent:
         cls,
         session_id: SessionID,
         sources_dict: SourcesDict,
-        mcp_connections: list[Connection] | None = None,
+        mcp_connections: list[tuple[str, Connection]] | None = None,
         pre_model_hook: Runnable | None = None,
     ) -> Self:
         self = super().__new__(cls)
@@ -136,7 +136,7 @@ class DataAnalyzerAgent:
             message, metadata = cast("tuple[BaseMessage, dict[str, Any]]", event)
             if isinstance(message, AIMessage) and metadata.get("langgraph_node") != "agent":
                 continue
-            for evt in process_stream_event(message):
+            for evt in process_stream_event(message, lookup_tool_source=self.ctx.lookup_tool_source):
                 yield evt
 
         logger.opt(colors=True).success(f"<c>{self.ctx.session_id}</> | 处理完成")

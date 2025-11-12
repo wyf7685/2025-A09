@@ -184,12 +184,13 @@ export const useChat = () => {
 
           nextTick(() => scrollToBottom?.());
         },
-        (id, name, args) => {
+        (id, name, args, source) => {
           // 工具调用
           if (!assistantMessage.tool_calls) assistantMessage.tool_calls = {};
           assistantMessage.tool_calls[id] = {
             name,
             args,
+            source,
             status: 'running',
           };
           assistantMessage.content.push({ type: 'tool_call', id });

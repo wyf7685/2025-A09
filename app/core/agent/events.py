@@ -1,6 +1,6 @@
 import contextlib
 import json
-from collections.abc import AsyncIterable, Iterable
+from collections.abc import AsyncIterable, Callable, Iterable
 from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -25,6 +25,7 @@ class ToolCallEvent(BaseModel):
     id: str
     name: str
     human_repr: str
+    source: str | None = None
     args: dict = Field(default_factory=dict)
 
 
@@ -61,7 +62,11 @@ def fix_message_content(content: str | list[Any]) -> str:
     return str(content) if content else ""
 
 
-def process_stream_event(message: BaseMessage) -> Iterable[StreamEvent]:
+def process_stream_event(
+    message: BaseMessage,
+    *,
+    lookup_tool_source: Callable[[str], str | None] | None = None,
+) -> Iterable[StreamEvent]:
     """处理从 stream/astream 方法返回的事件，将其转换为 StreamEvent 对象"""
     match message:
         case AIMessage(content=content, tool_calls=tool_calls):
@@ -73,6 +78,7 @@ def process_stream_event(message: BaseMessage) -> Iterable[StreamEvent]:
                     id=tool_call["id"],
                     name=tool_call["name"],
                     human_repr=tool_name_human_repr(tool_call["name"]),
+                    source=lookup_tool_source and lookup_tool_source(tool_call["name"]),
                     args=tool_call["args"],
                 )
         case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):

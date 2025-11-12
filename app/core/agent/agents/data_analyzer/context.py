@@ -44,7 +44,7 @@ def get_runnable_config() -> RunnableConfig:
 class AgentContext:
     session_id: SessionID
     sources: Sources
-    mcp_connections: list[Connection] | None
+    mcp_connections: list[tuple[str, Connection]] | None
     pre_model_hook: Runnable | None
     lifespan: Lifespan | None = None
 
@@ -53,6 +53,7 @@ class AgentContext:
     _graph: CompiledStateGraph | None = None
     _saved_models: dict[str, Path] | None = None
     _mcp_instructions: str | None = None
+    _tool_sources: dict[str, str] = dataclasses.field(default_factory=dict)
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
@@ -69,6 +70,13 @@ class AgentContext:
         if self._saved_models is None:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._saved_models
+
+    @property
+    def tool_sources(self) -> dict[str, str]:
+        return self._tool_sources.copy()
+
+    def lookup_tool_source(self, tool_name: str) -> str | None:
+        return self._tool_sources.get(tool_name)
 
     async def get_model_config(self) -> AgentModelConfigFixed:
         from app.services.session import session_service
@@ -123,6 +131,19 @@ class AgentContext:
             model = model.bind_tools(list(self._tool_node.tools_by_name.values()))
         return model
 
+    async def _load_builtin_tools(self) -> list[BaseTool]:
+        model_config = await self.get_model_config()
+        analyzer = analyzer_tool(self.sources, lambda: get_llm(model_config.code_generation))
+        df_tools = dataframe_tools(self.sources)
+        sk_tools, self._saved_models = scikit_tools(self.sources, self.session_id)
+        await self._load_saved_models()
+        sc_tools = sources_tools(self.sources)
+        builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
+
+        for tool in builtin_tools:
+            self._tool_sources[tool.name] = "内置工具"
+        return builtin_tools
+
     async def _load_mcp_tools(self) -> list[BaseTool]:
         if self.mcp_connections is None:
             self._mcp_instructions = ""
@@ -131,16 +152,16 @@ class AgentContext:
         assert self.lifespan is not None
         from app.services.agent import daa_service
 
-        async def delete_tokens() -> None:
+        async def delete_mcp_source_tokens() -> None:
             for token in tokens:
                 daa_service.delete_source_token(token)
 
         instructions: list[str] = []
         mcp_tools: list[BaseTool] = []
         tokens: list[str] = []
-        self.lifespan.on_shutdown(delete_tokens)
+        self.lifespan.on_shutdown(delete_mcp_source_tokens)
 
-        for idx, conn in enumerate(self.mcp_connections, 1):
+        for idx, (server_name, conn) in enumerate(self.mcp_connections, 1):
             token = daa_service.create_source_token(self.session_id)
             tokens.append(token)
             connection = cast("LangChainMCPConnection", deepcopy(conn))
@@ -156,7 +177,10 @@ class AgentContext:
                 ),
             )
             instructions.append(instruction)
-            mcp_tools.extend(convert_mcp_tool_to_langchain_tool(None, tool, connection=connection) for tool in tools)
+            for mcp_tool in tools:
+                lc_tool = convert_mcp_tool_to_langchain_tool(None, mcp_tool, connection=connection)
+                self._tool_sources[lc_tool.name] = f"{server_name} (MCP)"
+                mcp_tools.append(lc_tool)
 
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n".join(instructions))
         return mcp_tools
@@ -170,19 +194,9 @@ class AgentContext:
         self.lifespan = Lifespan(f"Agent<white>[<c>{escape_tag(self.session_id)}</>]</>")
         await self.lifespan.startup()
 
-        # Builtin Tools
-        model_config = await self.get_model_config()
-        analyzer = analyzer_tool(self.sources, lambda: get_llm(model_config.code_generation))
-        df_tools = dataframe_tools(self.sources)
-        sk_tools, self._saved_models = scikit_tools(self.sources, self.session_id)
-        await self._load_saved_models()
-        sc_tools = sources_tools(self.sources)
-        builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
-
-        # MCP Tools
+        # Load Tools
+        builtin_tools = await self._load_builtin_tools()
         mcp_tools = await self._load_mcp_tools()
-
-        # All Tools
         self._tool_node = ToolNode(builtin_tools + mcp_tools)
 
         # Prompt

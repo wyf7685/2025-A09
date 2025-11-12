@@ -5,7 +5,7 @@
 import contextlib
 import json
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -119,7 +119,7 @@ async def _fetch_sources_for_workflow(
     session: Session,
     workflow: WorkflowDefinition,
     datasource_mappings: dict[str, str],  # original dataset ID -> mapped dataset ID
-) -> AsyncGenerator[tuple[list[AnyMessage], Sources]]:
+) -> AsyncGenerator[tuple[list[AnyMessage], Sources, Callable[[str], str | None]]]:
     async with daa_service.use_agent(session) as agent:
         original_sources = agent.ctx.sources
         sources_dict: dict[str, DataSource] = {}
@@ -134,7 +134,7 @@ async def _fetch_sources_for_workflow(
         messages: list[AnyMessage] = []
         sources = Sources(sources_dict, random_state=workflow.source_rs)
 
-        yield messages, sources
+        yield messages, sources, agent.ctx.lookup_tool_source
 
         agent_state = await agent.get_state()
         agent_state.values.setdefault("messages", []).extend(messages)
@@ -181,7 +181,11 @@ async def execute_workflow_stream(
         append_tool_call()
         messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
 
-    async with _fetch_sources_for_workflow(session, workflow, datasource_mappings) as (messages, sources):
+    async with _fetch_sources_for_workflow(session, workflow, datasource_mappings) as (
+        messages,
+        sources,
+        lookup_tool_source,
+    ):
         messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
 
         # 逐个执行工具调用并生成事件
@@ -199,6 +203,7 @@ async def execute_workflow_stream(
                 id=tool_call_id,
                 name=tool_name,
                 human_repr=tool_name_human_repr(tool_name),
+                source=lookup_tool_source(tool_name),
                 args=tool_args,
             )
 

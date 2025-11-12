@@ -8,7 +8,7 @@ import { useLoginStore } from './login';
 export const useSessionStore = defineStore('session', () => {
   const loginStore = useLoginStore();
 
-  const currentSessionReactive = reactive<{ session: Session | null }>({ session: null });
+  const currentSessionReactive = reactive<{ session: Session | null; }>({ session: null });
   const currentSession = computed({
     get: () => currentSessionReactive.session,
     set: (value: Session | null) => {
@@ -71,7 +71,7 @@ export const useSessionStore = defineStore('session', () => {
 
   const refreshSessionName = async (sessionId: string): Promise<string> => {
     try {
-      const response = await api.get<{ name: string | null }>(`/sessions/${sessionId}/name`);
+      const response = await api.get<{ name: string | null; }>(`/sessions/${sessionId}/name`);
       const name = response.data.name || `会话 ${sessionId.substring(0, 8)}`;
 
       // 更新本地会话列表中的会话名称
@@ -164,7 +164,7 @@ export const useSessionStore = defineStore('session', () => {
     message: string,
     onMessage: (content: string) => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onToolCall: (id: string, name: string, args: any) => void,
+    onToolCall: (id: string, name: string, args: any, source: string) => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onToolResult: (id: string, result: any, artifact: ToolCallArtifact | null) => void,
     onToolError: (id: string, error: string) => void,
@@ -223,7 +223,7 @@ export const useSessionStore = defineStore('session', () => {
             if (data.type === 'llm_token') {
               onMessage(data.content);
             } else if (data.type === 'tool_call') {
-              onToolCall(data.id, data.human_repr, data.args);
+              onToolCall(data.id, data.human_repr, data.args, data.source);
             } else if (data.type === 'tool_result') {
               onToolResult(data.id, data.result, data.artifact || null);
             } else if (data.type === 'tool_error') {
@@ -247,7 +247,7 @@ export const useSessionStore = defineStore('session', () => {
   };
 
   const summaryChat = async (sessionId: string): Promise<string> => {
-    const response = await api.post<{ summary: string }>('/chat/summary', {
+    const response = await api.post<{ summary: string; }>('/chat/summary', {
       session_id: sessionId,
     });
     return response.data.summary;

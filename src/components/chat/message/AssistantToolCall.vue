@@ -2,7 +2,7 @@
 import type { ToolCall } from '@/types';
 import { parsePossibleJsonString } from '@/utils/tools';
 import { Check, Loading, View, WarningFilled } from '@element-plus/icons-vue';
-import { ElButton, ElDialog, ElIcon, ElTabPane, ElTabs } from 'element-plus';
+import { ElButton, ElDialog, ElIcon, ElTabPane, ElTabs, ElTag } from 'element-plus';
 import { computed, onUnmounted, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -24,6 +24,7 @@ const status = computed(() => props.data.status);
 const statusIcon = computed(() => statusIconMap[props.data.status]);
 const name = computed(() => props.data.name);
 const args = computed(() => props.data.args);
+const source = computed(() => props.data.source);
 const result = computed(() => props.data.result || null);
 const artifact = computed(() => props.data.artifact || null);
 const error = computed(() => props.data.error || null);
@@ -127,6 +128,9 @@ onUnmounted(() => removeCurrentUrl());
           <component :is="statusIcon" :class="{ rotating: status === 'running' }" />
         </el-icon>
         <span class="tool-name">{{ name }}</span>
+        <el-tag v-if="source" :type="source === '内置工具' ? 'success' : 'primary'" size="small">
+          {{ source }}
+        </el-tag>
         <el-button
           class="detail-button"
           size="small"

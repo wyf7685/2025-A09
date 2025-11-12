@@ -64,7 +64,7 @@ class DataAnalyzerAgentService:
         agent = await DataAnalyzerAgent.create(
             session_id=session.id,
             sources_dict=sources,
-            mcp_connections=[mcp.connection for mcp in mcps],
+            mcp_connections=[(mcp.name, mcp.connection) for mcp in mcps],
         )
         await agent.load_state(STATE_DIR / f"{session.id}.json")
 

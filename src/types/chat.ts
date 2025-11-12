@@ -16,6 +16,7 @@ export interface ToolCallArtifact {
 export interface ToolCall {
   name: string;
   args: string;
+  source?: string;
   status: 'running' | 'success' | 'error';
   result?: unknown;
   artifact?: ToolCallArtifact | null; // 工具调用的工件
