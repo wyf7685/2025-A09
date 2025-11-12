@@ -1,3 +1,4 @@
+import { useLoginStore } from '@/stores/login';
 import type {
   AnalyzeDataQualityResponse,
   AnalyzeDataQualitySuccess,
@@ -31,7 +32,7 @@ const apiRequiresLogin = (endpoint?: string) => {
 api.interceptors.request.use(
   async (config) => {
     if (apiRequiresLogin(config.url)) {
-      const loginStore = (await import('@/stores/login')).useLoginStore();
+      const loginStore = useLoginStore();
       if (loginStore.isLoggedIn) {
         config.headers.Authorization = loginStore.getAuthorization();
       }
