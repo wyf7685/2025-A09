@@ -1,0 +1,18 @@
+[project]
+name = "fault-diagnosis-mcp"
+version = "0.1.0"
+description = "MCP服务器 - 提供机器故障诊断和预测维护工具"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "wyf7685", email = "wyf7685@163.com" },
+    { name = "Cccccwd", email = "1838935684@qq.com" },
+]
+dependencies = [
+    "loguru>=0.7.3",
+    "mcp>=1.1.2",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.4.0",
+]

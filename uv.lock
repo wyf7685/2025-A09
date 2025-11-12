@@ -5,6 +5,7 @@ requires-python = "==3.13.*"
 [manifest]
 members = [
     "analysis-agent",
+    "fault-diagnosis-mcp",
     "spare-parts-forecast",
 ]
 
@@ -522,6 +523,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/2e/3b6e5016affc310e5109bc580f760586eabecea0c8a7ab067611cd849ac0/fastapi_cloud_cli-0.1.5.tar.gz", hash = "sha256:341ee585eb731a6d3c3656cb91ad38e5f39809bf1a16d41de1333e38635a7937", size = 22710, upload-time = "2025-07-28T13:30:48.216Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/a6/5aa862489a2918a096166fd98d9fe86b7fd53c607678b3fa9d8c432d88d5/fastapi_cloud_cli-0.1.5-py3-none-any.whl", hash = "sha256:d80525fb9c0e8af122370891f9fa83cf5d496e4ad47a8dd26c0496a6c85a012a", size = 18992, upload-time = "2025-07-28T13:30:47.427Z" },
+]
+
+[[package]]
+name = "fault-diagnosis-mcp"
+version = "0.1.0"
+source = { virtual = "mcp_servers/fault_diagnosis" }
+dependencies = [
+    { name = "loguru" },
+    { name = "mcp" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "loguru", specifier = ">=0.7.3" },
+    { name = "mcp", specifier = ">=1.1.2" },
+    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "scikit-learn", specifier = ">=1.4.0" },
+    { name = "scipy", specifier = ">=1.11.0" },
 ]
 
 [[package]]
