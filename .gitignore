@@ -341,3 +341,6 @@ state.json
 /data
 /output
 /exports
+
+auto-imports.d.ts
+components.d.ts

@@ -7,13 +7,17 @@ import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
-
 // 获取环境变量
 const env = import.meta.env;
 const icpNumber = env.VITE_ICP_NUMBER;
 const policeNumber = env.VITE_POLICE_NUMBER;
 const companyName = env.VITE_COMPANY_NAME;
+
+const props = defineProps<{
+  apiStatus: boolean;
+}>();
+
+const router = useRouter();
 const loginStore = useLoginStore();
 
 // 表单数据
@@ -41,6 +45,11 @@ const loading = ref(false);
 const handleLogin = async (formEl?: FormInstance) => {
   if (!formEl) return;
 
+  if (!props.apiStatus) {
+    ElMessage.error('无法连接到服务器，请稍后再试');
+    return;
+  }
+
   await formEl.validate(async (valid, fields) => {
     if (!valid) {
       console.error('表单验证失败:', fields);
@@ -49,8 +58,6 @@ const handleLogin = async (formEl?: FormInstance) => {
 
     loading.value = true;
     try {
-      // TODO: 调用登录 API
-      // 模拟登录
       await loginStore.login(loginForm.value.username, loginForm.value.password);
       ElMessage.success('登录成功');
       router.push('/dashboard');
