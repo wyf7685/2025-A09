@@ -1,11 +1,9 @@
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.log import configure_logging, logger
+from app.log import configure_logging
 
 configure_logging()
-logger.opt(colors=True).info("Launching <lg>Dataforge</>...")
 
 from app.api import router as api_router
 from app.const import VERSION
@@ -34,4 +32,6 @@ app.include_router(api_router)
 
 
 if __name__ == "__main__":
+    import uvicorn
+
     uvicorn.run("app.__main__:app", host=settings.HOST, port=settings.PORT)

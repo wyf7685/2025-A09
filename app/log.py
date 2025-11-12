@@ -87,3 +87,17 @@ logger.configure(patcher=_hidden_upsteam)
 def configure_logging() -> None:
     """配置日志记录器。"""
     logging.config.dictConfig(LOGGING_CONFIG)
+
+
+def __print_logo() -> None:
+    import shutil
+
+    from app.logo import WIDTH, print_logo
+
+    if shutil.get_terminal_size().columns - 32 >= WIDTH:
+        print_logo(logger.opt(colors=True).patch(lambda r: r.update(name="DataForge")).success)
+    else:
+        logger.opt(colors=True).success("Launching <lg>Dataforge</>...")
+
+
+__print_logo()
