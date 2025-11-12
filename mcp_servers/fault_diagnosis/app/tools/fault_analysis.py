@@ -10,6 +10,8 @@ import numpy as np
 from scipy.spatial.distance import mahalanobis
 from scipy.stats import ttest_ind
 
+from ._utils import filter_fault_samples, filter_normal_samples
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -28,8 +30,8 @@ def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str = "fail") -> dict
         包含对比分析结果的字典
     """
     # 分离正常和故障样本
-    normal_samples = cast("pd.DataFrame", df[df[target_col] == "False"])
-    fault_samples = cast("pd.DataFrame", df[df[target_col] == "True"])
+    normal_samples = filter_normal_samples(df, target_col)
+    fault_samples = filter_fault_samples(df, target_col)
 
     # 获取特征列（排除目标列）
     feature_cols = [col for col in df.columns if col != target_col]
@@ -117,7 +119,7 @@ def calculate_health_score(
     feature_cols = [col for col in df.columns if col != target_col]
 
     # 提取正常样本作为基线
-    normal_samples = cast("pd.DataFrame", df[df[target_col] == "False"][feature_cols])
+    normal_samples = cast("pd.DataFrame", filter_normal_samples(df, target_col)[feature_cols])
 
     if len(normal_samples) < 2:
         return {"error": "正常样本数量不足，无法计算健康度", "health_score": None}

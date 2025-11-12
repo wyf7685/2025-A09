@@ -8,136 +8,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.tree import DecisionTreeClassifier
+
+from ._utils import filter_fault_samples, filter_normal_samples
 
 if TYPE_CHECKING:
     import pandas as pd
-
-
-def mine_fault_rules(
-    df: pd.DataFrame, target_col: str = "fail", min_confidence: float = 0.7, max_rules: int = 5
-) -> dict[str, Any]:
-    """
-    工具3: 故障规则挖掘
-
-    使用决策树提取可解释的故障规则。
-
-    Args:
-        df: 数据框
-        target_col: 故障标签列名
-        min_confidence: 最小置信度阈值
-        max_rules: 最多返回的规则数
-
-    Returns:
-        包含挖掘出的规则及其统计信息的字典
-    """
-    # 获取特征和标签
-    feature_cols = [col for col in df.columns if col != target_col]
-    X = df[feature_cols]
-    y = df[target_col]
-
-    # 训练决策树
-    clf = DecisionTreeClassifier(
-        max_depth=4,  # 限制深度保证规则简单
-        min_samples_leaf=max(5, len(df) // 200),  # 动态调整最小叶子样本数
-        min_samples_split=max(10, len(df) // 100),
-        random_state=42,
-    )
-    clf.fit(X, y)
-
-    # 提取规则
-    tree = clf.tree_
-    feature_names = feature_cols
-
-    def extract_rules(node: int = 0, conditions: list | None = None) -> list[dict[str, Any]]:
-        """递归提取规则"""
-        if conditions is None:
-            conditions = []
-
-        # 如果是叶子节点
-        if tree.feature[node] == -2:  # type: ignore
-            samples = tree.n_node_samples[node]  # type: ignore
-            fault_samples = tree.value[node][0][1]  # type: ignore
-            normal_samples = tree.value[node][0][0]  # type: ignore
-
-            if fault_samples > normal_samples and samples > 0:  # 故障样本占多数
-                confidence = fault_samples / samples
-                support = samples / len(df)
-
-                if confidence >= min_confidence:
-                    return [
-                        {
-                            "conditions": conditions.copy(),
-                            "confidence": confidence,
-                            "support": support,
-                            "fault_samples": int(fault_samples),
-                            "total_samples": int(samples),
-                        }
-                    ]
-            return []
-
-        # 递归处理左右子树
-        feature = feature_names[tree.feature[node]]  # type: ignore
-        threshold = tree.threshold[node]  # type: ignore
-
-        rules = []
-
-        # 左子树 (<=)
-        left_conditions = [*conditions, (feature, "<=", threshold)]
-        rules.extend(extract_rules(tree.children_left[node], left_conditions))  # type: ignore
-
-        # 右子树 (>)
-        right_conditions = [*conditions, (feature, ">", threshold)]
-        rules.extend(extract_rules(tree.children_right[node], right_conditions))  # type: ignore
-
-        return rules
-
-    all_rules = extract_rules()
-
-    # 按置信度和支持度排序
-    all_rules.sort(key=lambda x: (x["confidence"], x["support"]), reverse=True)
-
-    # 限制规则数量
-    top_rules = all_rules[:max_rules]
-
-    # 格式化规则
-    formatted_rules = []
-    total_coverage = 0
-
-    for rule in top_rules:
-        # 构建规则文本
-        rule_parts = []
-        for feature, op, threshold in rule["conditions"]:
-            if op == "<=":
-                rule_parts.append(f"{feature} <= {threshold:.1f}")
-            else:
-                rule_parts.append(f"{feature} > {threshold:.1f}")
-
-        rule_text = "IF " + " AND ".join(rule_parts) + " THEN 故障"
-
-        coverage_pct = (rule["fault_samples"] / df[target_col].sum()) * 100
-        total_coverage += coverage_pct
-
-        formatted_rules.append(
-            {
-                "rule": rule_text,
-                "confidence": round(rule["confidence"], 3),
-                "support": round(rule["support"], 3),
-                "fault_samples_covered": rule["fault_samples"],
-                "coverage": f"覆盖了{rule['fault_samples']}个故障样本 ({coverage_pct:.1f}%)",
-            }
-        )
-
-    # 统计信息
-    total_faults = int(df[target_col].sum())
-
-    return {
-        "total_fault_samples": total_faults,
-        "rules_found": len(formatted_rules),
-        "rules": formatted_rules,
-        "total_coverage": f"这些规则共覆盖了{total_coverage:.1f}%的故障案例",
-        "min_confidence_threshold": min_confidence,
-    }
 
 
 def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_clusters: int = 3) -> dict[str, Any]:
@@ -155,7 +30,7 @@ def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_cluster
         包含故障模式分析结果的字典
     """
     # 提取故障样本
-    fault_samples = df[df[target_col] == "True"]
+    fault_samples = filter_fault_samples(df, target_col)
 
     if len(fault_samples) < n_clusters:
         return {"error": f"故障样本数量({len(fault_samples)})少于聚类数({n_clusters})", "fault_patterns": []}
@@ -165,7 +40,7 @@ def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_cluster
     X_fault = fault_samples[feature_cols]
 
     # 正常样本的均值（用于对比）
-    normal_samples = df[df[target_col] == "False"]
+    normal_samples = filter_normal_samples(df, target_col)
     normal_means = cast("pd.Series", normal_samples[feature_cols].mean())
 
     # K-means聚类

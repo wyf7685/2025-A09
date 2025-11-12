@@ -19,11 +19,11 @@ from app.utils import escape_tag
 router = APIRouter(prefix="/agent_source", tags=["Agent数据源"])
 
 
-async def _session_id_from_token(auth: str = Header(description="Agent数据源令牌")) -> SessionID:
-    if not auth.startswith("Bearer "):
+async def _session_id_from_token(authorization: str = Header(description="Agent数据源令牌")) -> SessionID:
+    if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的认证头")
 
-    token = auth[len("Bearer ") :]
+    token = authorization[len("Bearer ") :]
     session_id = daa_service.get_session_id_by_source_token(token)
     if session_id is None:
         raise HTTPException(status_code=401, detail="无效的Agent数据源令牌")

@@ -12,7 +12,7 @@ from mcp.server import FastMCP
 
 from .data_source import read_agent_source_data
 from .log import LOGGING_CONFIG
-from .tools import analyze_fault_patterns, calculate_health_score, fault_vs_normal_analysis, mine_fault_rules
+from .tools import analyze_fault_patterns, calculate_health_score, fault_vs_normal_analysis
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -23,7 +23,6 @@ instructions = """\
 主要功能:
 1. 故障特征对比分析 - 识别正常vs故障样本的显著差异特征
 2. 健康度评分 - 评估设备当前的健康状态和故障风险
-3. 故障规则挖掘 - 从历史数据提取可解释的故障判断规则
 4. 故障模式分析 - 将故障聚类，识别不同类型的故障模式
 
 适用场景:
@@ -35,7 +34,6 @@ instructions = """\
 使用建议:
 1. 先用 fault_vs_normal_analysis 了解哪些特征与故障相关
 2. 用 analyze_fault_patterns 识别故障类型
-3. 用 mine_fault_rules 获取具体的判断规则
 4. 用 calculate_health_score 评估当前设备健康状况
 """
 
@@ -114,39 +112,6 @@ async def health_score(source_id: str, sample_index: int | None = None) -> dict:
     """
     df = await read_source(source_id)
     return calculate_health_score(df, sample_index)
-
-
-@app.tool()
-async def fault_rules(source_id: str, min_confidence: float = 0.7) -> dict:
-    """
-    挖掘故障判断规则
-
-    从历史数据中提取可解释的IF-THEN规则，帮助理解"满足什么条件会导致故障"。
-    规则基于决策树算法，输出置信度和支持度等统计信息。
-
-    Args:
-        source_id: 数据源ID
-        min_confidence: 最小置信度阈值(0-1)，默认0.7
-
-    Returns:
-        dict: 包含以下内容:
-            - rules: 规则列表，每个规则包含:
-                - rule: 规则文本(IF ... THEN 故障)
-                - confidence: 置信度
-                - support: 支持度
-                - coverage: 覆盖的故障样本数
-            - total_coverage: 所有规则覆盖的故障比例
-
-    Example:
-        ```python
-        result = await fault_rules("machine_data", min_confidence=0.75)
-        for rule in result["rules"]:
-            print(rule["rule"])
-            print(f"  置信度: {rule['confidence']}, {rule['coverage']}")
-        ```
-    """
-    df = await read_source(source_id)
-    return mine_fault_rules(df, min_confidence=min_confidence)
 
 
 @app.tool()
