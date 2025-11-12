@@ -91,6 +91,14 @@ services:
   #     - APP_HOST=0.0.0.0
   #     - APP_PORT=8000
 
+  # [可选] 机器故障MCP服务
+  # fault_diagnosis:
+  #   image: ghcr.io/wyf7685/2025-a09/fault-diagnosis:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - APP_HOST=0.0.0.0
+  #     - APP_PORT=8000
+
 volumes:
   backend_data:
   dremio_data:

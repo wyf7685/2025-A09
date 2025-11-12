@@ -12,6 +12,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=mcp_servers/spare_parts_forecast/uv.lock,target=mcp_servers/spare_parts_forecast/uv.lock \
     --mount=type=bind,source=mcp_servers/spare_parts_forecast/pyproject.toml,target=mcp_servers/spare_parts_forecast/pyproject.toml \
+    --mount=type=bind,source=mcp_servers/fault_diagnosis/uv.lock,target=mcp_servers/fault_diagnosis/uv.lock \
+    --mount=type=bind,source=mcp_servers/fault_diagnosis/pyproject.toml,target=mcp_servers/fault_diagnosis/pyproject.toml \
     uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
     uv sync --locked --active --no-dev --link-mode copy

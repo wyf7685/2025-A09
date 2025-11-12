@@ -8,8 +8,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=mcp_servers/spare_parts_forecast/uv.lock,target=uv.lock \
-    --mount=type=bind,source=mcp_servers/spare_parts_forecast/pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=mcp_servers/fault_diagnosis/uv.lock,target=uv.lock \
+    --mount=type=bind,source=mcp_servers/fault_diagnosis/pyproject.toml,target=pyproject.toml \
     uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
     uv sync --locked --active --no-dev --link-mode copy --all-extras
@@ -18,7 +18,7 @@ FROM python:3.12-slim-bookworm AS compiler
 
 WORKDIR /
 RUN --mount=type=bind,source=docker/compile_pyc.py,target=/compile_pyc.py \
-    --mount=type=bind,source=mcp_servers/spare_parts_forecast/app,target=/app \
+    --mount=type=bind,source=mcp_servers/fault_diagnosis/app,target=/app \
     python /compile_pyc.py /app /out
 
 FROM python:3.12-slim-bookworm AS app
@@ -31,13 +31,6 @@ ENV TZ=Asia/Shanghai \
     LC_ALL=zh_CN.UTF-8 \
     PYTHONPATH=/app \
     PATH="/opt/venv/bin:$PATH"
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    fonts-wqy-microhei fonts-wqy-zenhei fonts-arphic-ukai fonts-arphic-uming fontconfig && \
-    rm -rf /var/lib/apt/lists/* && \
-    fc-cache -f -v
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=compiler /out /app/app

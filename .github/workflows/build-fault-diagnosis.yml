@@ -1,25 +1,25 @@
-name: Build Spare Parts Forecast Image
+name: Build Fault Diagnosis Image
 
 on:
   push:
     branches:
       - master
     paths:
-      - "mcp_servers/spare_parts_forecast/**"
-      - "docker/Dockerfile.spare-parts"
+      - "mcp_servers/fault_diagnosis/**"
+      - "docker/Dockerfile.fault-diagnosis"
       - "docker/compile_pyc.py"
-      - ".github/workflows/build-spare-parts.yml"
+      - ".github/workflows/build-fault-diagnosis.yml"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/spare-parts-forecast
+  IMAGE_NAME: ${{ github.repository }}/fault-diagnosis
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     concurrency:
-      group: docker-spf-${{ github.ref }}
+      group: docker-fd-${{ github.ref }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -53,7 +53,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/Dockerfile.spare-parts
+          file: ./docker/Dockerfile.fault-diagnosis
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
