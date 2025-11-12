@@ -19,10 +19,12 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, create_react_agent
 from mcp.types import Implementation as MCPImplementation
 
+from app.const import VERSION
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import format_sources_overview
 from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
+from app.core.agent.tools._registry import register_tool_name
 from app.core.chain import get_chat_model_async, get_llm
 from app.core.lifespan import Lifespan
 from app.log import logger
@@ -165,7 +167,7 @@ class AgentContext:
             token = daa_service.create_source_token(self.session_id)
             tokens.append(token)
             connection = cast("LangChainMCPConnection", deepcopy(conn))
-            connection["session_kwargs"] = {"client_info": MCPImplementation(name=token, version="0.1.0")}
+            connection["session_kwargs"] = {"client_info": MCPImplementation(name=token, version=VERSION)}
             async with create_session(connection) as session:
                 init = await session.initialize()
                 tools = await _list_all_tools(session)
@@ -180,9 +182,11 @@ class AgentContext:
             for mcp_tool in tools:
                 lc_tool = convert_mcp_tool_to_langchain_tool(None, mcp_tool, connection=connection)
                 self._tool_sources[lc_tool.name] = f"{server_name} (MCP)"
+                if mcp_tool.title:
+                    register_tool_name(lc_tool.name, mcp_tool.title)
                 mcp_tools.append(lc_tool)
 
-        self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n".join(instructions))
+        self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n\n".join(instructions))
         return mcp_tools
 
     async def build_graph(self) -> None:

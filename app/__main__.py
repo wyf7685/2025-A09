@@ -9,6 +9,7 @@ configure_logging()
 configure_matplotlib_fonts()
 
 from app.api import router as api_router
+from app.const import VERSION
 from app.core.config import settings
 from app.core.lifespan import lifespan
 
@@ -16,7 +17,7 @@ from app.core.lifespan import lifespan
 app = FastAPI(
     title="智能数据分析平台",
     description="基于 LangChain 的智能数据分析 API 服务",
-    version="1.0.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 

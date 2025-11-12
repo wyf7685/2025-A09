@@ -6,9 +6,13 @@ from app.core.lifespan import lifespan
 TOOL_NAMES: dict[str, str] = {}
 
 
+def register_tool_name(tool_name: str, human_repr: str) -> None:
+    TOOL_NAMES[tool_name] = human_repr
+
+
 def register_tool[T: Callable](name: str) -> Callable[[T], T]:
     def decorator(func: T) -> T:
-        TOOL_NAMES[func.__name__] = name
+        register_tool_name(func.__name__, name)
         return func
 
     return decorator

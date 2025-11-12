@@ -53,7 +53,7 @@ async def read_source(source_id: str) -> pd.DataFrame:
     return await read_agent_source_data(client_name, source_id)
 
 
-@app.tool()
+@app.tool(title="故障与正常样本对比分析")
 async def fault_vs_normal(source_id: str) -> dict:
     """
     故障与正常样本对比分析
@@ -82,7 +82,7 @@ async def fault_vs_normal(source_id: str) -> dict:
     return fault_vs_normal_analysis(df)
 
 
-@app.tool()
+@app.tool(title="计算设备健康度评分")
 async def health_score(source_id: str, sample_index: int | None = None) -> dict:
     """
     计算设备健康度评分
@@ -114,7 +114,7 @@ async def health_score(source_id: str, sample_index: int | None = None) -> dict:
     return calculate_health_score(df, sample_index)
 
 
-@app.tool()
+@app.tool(title="故障模式聚类分析")
 async def fault_patterns(source_id: str, n_clusters: int = 3) -> dict:
     """
     故障模式聚类分析

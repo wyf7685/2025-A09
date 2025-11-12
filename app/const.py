@@ -1,5 +1,7 @@
 from pathlib import Path
 
+VERSION = "0.1.0"
+
 DATA_DIR = Path("data")
 UPLOAD_DIR = DATA_DIR / "uploads"
 EXPORT_DIR = DATA_DIR / "exports"
