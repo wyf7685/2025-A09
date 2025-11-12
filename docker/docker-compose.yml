@@ -90,6 +90,7 @@ services:
   #   environment:
   #     - APP_HOST=0.0.0.0
   #     - APP_PORT=8000
+  #     - AGENT_API_BASE_URL=http://backend:8081/api
 
   # [可选] 机器故障MCP服务
   # fault_diagnosis:
@@ -98,6 +99,7 @@ services:
   #   environment:
   #     - APP_HOST=0.0.0.0
   #     - APP_PORT=8000
+  #     - AGENT_API_BASE_URL=http://backend:8081/api
 
 volumes:
   backend_data:

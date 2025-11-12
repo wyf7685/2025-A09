@@ -1,4 +1,5 @@
 import io
+import os
 import types
 from dataclasses import dataclass
 from typing import Any, Self
@@ -6,7 +7,7 @@ from typing import Any, Self
 import httpx
 import pandas as pd
 
-API_BASE_URL = "http://localhost:8081/api"
+API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:8000/api/v1")
 
 
 @dataclass
