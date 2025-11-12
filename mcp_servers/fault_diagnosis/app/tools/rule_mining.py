@@ -1,6 +1,7 @@
 """
 规则挖掘工具模块 - 工具3和工具4
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -154,7 +155,7 @@ def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_cluster
         包含故障模式分析结果的字典
     """
     # 提取故障样本
-    fault_samples = df[df[target_col] == 1]
+    fault_samples = df[df[target_col] == 'True']
 
     if len(fault_samples) < n_clusters:
         return {"error": f"故障样本数量({len(fault_samples)})少于聚类数({n_clusters})", "fault_patterns": []}
@@ -164,7 +165,7 @@ def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_cluster
     X_fault = fault_samples[feature_cols]
 
     # 正常样本的均值（用于对比）
-    normal_samples = df[df[target_col] == 0]
+    normal_samples = df[df[target_col] == 'False']
     normal_means = normal_samples[feature_cols].mean()
 
     # K-means聚类

@@ -28,8 +28,8 @@ def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str = "fail") -> dict
         包含对比分析结果的字典
     """
     # 分离正常和故障样本
-    normal_samples = df[df[target_col] == 0]
-    fault_samples = df[df[target_col] == 1]
+    normal_samples = df[df[target_col] == 'False']
+    fault_samples = df[df[target_col] == 'True']
 
     # 获取特征列（排除目标列）
     feature_cols = [col for col in df.columns if col != target_col]
@@ -117,7 +117,7 @@ def calculate_health_score(
     feature_cols = [col for col in df.columns if col != target_col]
 
     # 提取正常样本作为基线
-    normal_samples = df[df[target_col] == 0][feature_cols]
+    normal_samples = df[df[target_col] == 'False'][feature_cols]
 
     if len(normal_samples) < 2:
         return {"error": "正常样本数量不足，无法计算健康度", "health_score": None}

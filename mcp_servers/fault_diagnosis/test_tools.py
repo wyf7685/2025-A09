@@ -1,7 +1,8 @@
 """
 测试故障诊断MCP工具
 """
-#ruff: noqa T201
+
+# ruff: noqa T201
 import pandas as pd
 import sys
 from pathlib import Path
