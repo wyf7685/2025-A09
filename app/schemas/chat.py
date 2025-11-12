@@ -23,6 +23,7 @@ class AssistantToolCallArtifact(BaseModel):
 class AssistantToolCall(BaseModel):
     name: str
     args: str
+    source: str | None = None
     status: Literal["running", "success", "error"]
     result: Any | None = None
     artifact: AssistantToolCallArtifact | None = None
@@ -69,6 +70,7 @@ class ChatEntry(BaseModel):
                     resp.tool_calls[event.id] = AssistantToolCall(
                         name=event.name,
                         args=json.dumps(event.args),
+                        source=event.source,
                         status="running",
                     )
             case "tool_result" if call := (resp.tool_calls.get(event.id)):
