@@ -58,56 +58,53 @@ class AsyncAgentSourceClient:
     ) -> None:
         await self.close()
 
-    async def list_sources(self, session_id: str) -> list[DataSourceInfo]:
+    def _auth_headers(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    async def list_sources(self, agent_token: str) -> list[DataSourceInfo]:
         """列出指定会话Agent中的所有可用数据源
 
         Args:
-            session_id: 会话ID
+            agent_token: 会话token
 
         Returns:
             数据源信息列表
         """
         url = f"{self.base_url}/agent_source/list"
-        params = {"session_id": session_id}
-
-        response = await self.client.get(url, params=params)
+        response = await self.client.get(url, headers=self._auth_headers(agent_token))
         response.raise_for_status()
 
         data = response.json()
         return [DataSourceInfo.from_dict(source) for source in data["sources"]]
 
-    async def get_source_info(self, session_id: str, source_id: str) -> DataSourceInfo:
+    async def get_source_info(self, agent_token: str, source_id: str) -> DataSourceInfo:
         """获取指定数据源的详细信息
 
         Args:
-            session_id: 会话ID
+            agent_token: 会话token
             source_id: 数据源ID
 
         Returns:
             数据源详细信息
         """
         url = f"{self.base_url}/agent_source/info/{source_id}"
-        params = {"session_id": session_id}
-
-        response = await self.client.get(url, params=params)
+        response = await self.client.get(url, headers=self._auth_headers(agent_token))
         response.raise_for_status()
 
         return DataSourceInfo.from_dict(response.json())
 
-    async def read_source_data(self, session_id: str, source_id: str) -> pd.DataFrame:
+    async def read_source_data(self, agent_token: str, source_id: str) -> pd.DataFrame:
         """读取指定数据源的数据（以pickle文件形式返回）
 
         Args:
-            session_id: 会话ID
+            agent_token: 会话token
             source_id: 数据源ID
 
         Returns:
             DataFrame数据
         """
         url = f"{self.base_url}/agent_source/data/{source_id}"
-        params = {"session_id": session_id}
-
-        response = await self.client.get(url, params=params)
+        response = await self.client.get(url, headers=self._auth_headers(agent_token))
         response.raise_for_status()
 
         pickle_data = response.content
@@ -117,7 +114,7 @@ class AsyncAgentSourceClient:
 
     async def create_source_from_dataframe(
         self,
-        session_id: str,
+        agent_token: str,
         df: pd.DataFrame,
         new_id: str | None = None,
         description: str | None = None,
@@ -125,7 +122,7 @@ class AsyncAgentSourceClient:
         """在指定会话的Agent中创建新的数据源
 
         Args:
-            session_id: 会话ID
+            agent_token: 会话token
             df: DataFrame数据
             new_id: 新数据源ID（可选）
             description: 数据源描述（可选）
@@ -134,8 +131,7 @@ class AsyncAgentSourceClient:
             创建结果，包含dataset_id和message
         """
         url = f"{self.base_url}/agent_source/create"
-        params = {"session_id": session_id}
-
+        params = {}
         if new_id:
             params["new_id"] = new_id
         if description:
@@ -148,37 +144,37 @@ class AsyncAgentSourceClient:
 
         files = {"file": ("data.pkl", buffer.getvalue(), "application/octet-stream")}
 
-        response = await self.client.post(url, params=params, files=files)
+        response = await self.client.post(url, params=params, files=files, headers=self._auth_headers(agent_token))
         response.raise_for_status()
 
         return response.json()
 
 
-async def list_agent_sources(session_id: str) -> list[DataSourceInfo]:
+async def list_agent_sources(agent_token: str) -> list[DataSourceInfo]:
     """列出Agent数据源"""
     async with AsyncAgentSourceClient() as client:
-        return await client.list_sources(session_id)
+        return await client.list_sources(agent_token)
 
 
-async def get_agent_source_info(session_id: str, source_id: str) -> DataSourceInfo:
+async def get_agent_source_info(agent_token: str, source_id: str) -> DataSourceInfo:
     """获取Agent数据源信息"""
     async with AsyncAgentSourceClient() as client:
-        return await client.get_source_info(session_id, source_id)
+        return await client.get_source_info(agent_token, source_id)
 
 
-async def read_agent_source_data(session_id: str, source_id: str) -> pd.DataFrame:
+async def read_agent_source_data(agent_token: str, source_id: str) -> pd.DataFrame:
     """读取Agent数据源数据"""
     async with AsyncAgentSourceClient() as client:
-        return await client.read_source_data(session_id, source_id)
+        return await client.read_source_data(agent_token, source_id)
 
 
 async def create_agent_source(
-    session_id: str,
+    agent_token: str,
     df: pd.DataFrame,
     new_id: str | None = None,
     description: str | None = None,
 ) -> str:
     """创建Agent数据源，返回数据源ID"""
     async with AsyncAgentSourceClient() as client:
-        result = await client.create_source_from_dataframe(session_id, df, new_id, description)
+        result = await client.create_source_from_dataframe(agent_token, df, new_id, description)
         return result["dataset_id"]

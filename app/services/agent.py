@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import secrets
 from collections.abc import AsyncIterator, Iterator
 
 import anyio
@@ -49,6 +50,7 @@ async def dataset_id_to_sources(dataset_ids: list[str]) -> dict[str, DataSource]
 class DataAnalyzerAgentService:
     def __init__(self) -> None:
         self.agents: dict[SessionID, AgentState] = {}
+        self.agent_source_token: dict[str, SessionID] = {}
 
         lifespan.on_shutdown(self._destroy_all)
 
@@ -168,6 +170,20 @@ class DataAnalyzerAgentService:
         # 直接销毁当前 Agent，下次调用会创建带有新 MCP 的 Agent
         with contextlib.suppress(AgentNotFound):
             await self._destroy(session.id, pop=False)
+
+    def create_source_token(self, session_id: SessionID) -> str:
+        """为会话创建数据源令牌"""
+        token = secrets.token_urlsafe(32)
+        self.agent_source_token[token] = session_id
+        return token
+
+    def get_session_id_by_source_token(self, token: str) -> SessionID | None:
+        """通过数据源令牌获取会话ID"""
+        return self.agent_source_token.get(token)
+
+    def delete_source_token(self, token: str) -> None:
+        """删除数据源令牌"""
+        self.agent_source_token.pop(token, None)
 
 
 daa_service = DataAnalyzerAgentService()

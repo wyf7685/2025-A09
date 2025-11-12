@@ -128,12 +128,23 @@ class AgentContext:
             self._mcp_instructions = ""
             return []
 
+        assert self.lifespan is not None
+        from app.services.agent import daa_service
+
+        async def delete_tokens() -> None:
+            for token in tokens:
+                daa_service.delete_source_token(token)
+
         instructions: list[str] = []
         mcp_tools: list[BaseTool] = []
-        client_info = MCPImplementation(name=self.session_id, version="0.1.0")
+        tokens: list[str] = []
+        self.lifespan.on_shutdown(delete_tokens)
+
         for idx, conn in enumerate(self.mcp_connections, 1):
+            token = daa_service.create_source_token(self.session_id)
+            tokens.append(token)
             connection = cast("LangChainMCPConnection", deepcopy(conn))
-            connection["session_kwargs"] = {"client_info": client_info}
+            connection["session_kwargs"] = {"client_info": MCPImplementation(name=token, version="0.1.0")}
             async with create_session(connection) as session:
                 init = await session.initialize()
                 tools = await _list_all_tools(session)

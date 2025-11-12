@@ -68,7 +68,7 @@ async def read_source(source_id: str) -> pd.DataFrame:
     ctx = app.get_context()
     params = ctx.request_context.session.client_params
     client_name = params and params.clientInfo.name
-    assert client_name is not None, "Session ID is required"
+    assert client_name is not None, "Agent Token is required"
 
     return await read_agent_source_data(client_name, source_id)
 

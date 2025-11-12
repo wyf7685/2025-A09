@@ -3,7 +3,7 @@ from typing import Annotated
 
 import anyio.to_thread
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -19,7 +19,19 @@ from app.utils import escape_tag
 router = APIRouter(prefix="/agent_source", tags=["Agent数据源"])
 
 
-QuerySessionID = Annotated[SessionID, Query(description="会话ID")]
+async def _session_id_from_token(auth: str = Header(description="Agent数据源令牌")) -> SessionID:
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的认证头")
+
+    token = auth[len("Bearer ") :]
+    session_id = daa_service.get_session_id_by_source_token(token)
+    if session_id is None:
+        raise HTTPException(status_code=401, detail="无效的Agent数据源令牌")
+
+    return session_id
+
+
+QuerySessionID = Annotated[SessionID, Depends(_session_id_from_token)]
 
 
 async def borrow_agent(session_id: QuerySessionID) -> DataAnalyzerAgent:
