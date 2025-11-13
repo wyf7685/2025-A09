@@ -66,5 +66,3 @@ def print_logo(log: Callable[[str], object], mode: ColorMode = "rich") -> None:
     log("━" * WIDTH)
     [log(line) for line in render(mode)]
     log("━" * WIDTH)
-
-

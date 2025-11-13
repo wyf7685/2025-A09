@@ -4,9 +4,7 @@ import contextlib
 import json
 import uuid
 from pathlib import Path
-from typing import Any, Literal, cast
-
-from langchain_core.tools import BaseTool, tool
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from app.const import MODEL_DIR
 from app.core.agent.schemas import DatasetID
@@ -42,6 +40,9 @@ from .model_composite import (
     VotingOptions,
     create_composite_model,
 )
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 
 def _format_train_result_for_llm(model_id: str, result: TrainModelResult) -> str:
@@ -99,7 +100,9 @@ type ModelID = str
 def scikit_tools(
     sources: Sources,
     session_id: SessionID,
-) -> tuple[list[BaseTool], dict[ModelID, Path]]:
+) -> tuple[list["BaseTool"], dict[ModelID, Path]]:
+    from langchain_core.tools import tool
+
     model_instance_cache: dict[ModelID, ModelInstanceInfo] = {}
     train_model_cache: dict[ModelID, TrainModelResult] = {}
     saved_models: dict[ModelID, Path] = {}
