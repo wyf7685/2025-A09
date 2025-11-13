@@ -5,7 +5,7 @@
 import contextlib
 import json
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -14,15 +14,15 @@ import anyio.to_thread
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolCall, ToolMessage
 
 from app.const import DATA_DIR
+from app.core.agent import tool_name_human_repr
 from app.core.agent.agents.data_analyzer import get_agent_random_state
 from app.core.agent.agents.data_analyzer.schemas import WorkflowCallMeta
 from app.core.agent.agents.data_analyzer.utils import format_conversation
 from app.core.agent.events import LlmTokenEvent, StreamEvent, ToolCallEvent, ToolErrorEvent, ToolResultEvent
-from app.core.agent.prompts.data_analyzer import PROMPTS as DAAPROMPTS
+from app.core.agent.prompts.data_analyzer import PROMPTS as DAA_PROMPTS
 from app.core.agent.resume import get_resumable_tools, is_resumable_tool, resume_tool_call
 from app.core.agent.sources import Sources
-from app.core.agent.tools import tool_name_human_repr
-from app.core.chain.llm import get_llm_async
+from app.core.chain import get_llm_async
 from app.log import logger
 from app.schemas.session import Session
 from app.schemas.workflow import WorkflowDefinition, WorkflowToolCall
@@ -39,6 +39,12 @@ WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 async def extract_from_session(session: Session, name: str, description: str) -> WorkflowDefinition:
+    # 提取初始数据集名称
+    datasets: dict[str, str] = {}
+    for ds_id in session.dataset_ids:
+        source = await datasource_service.get_source(ds_id)
+        datasets[ds_id] = source.metadata.name or ds_id
+
     # 从会话中提取所有工具调用
     tool_calls: list[WorkflowToolCall] = []
 
@@ -49,19 +55,26 @@ async def extract_from_session(session: Session, name: str, description: str) ->
     # 统计信息
     total_tool_calls = 0
     skipped_non_resumable = 0
+    skipped_non_success = 0
     failed_to_parse = 0
 
     # 从chat_history中提取工具调用
-    for entry_idx, chat_entry in enumerate(session.chat_history):
+    for entry_idx, chat_entry in enumerate(session.chat_history, 1):
         assistant_response = chat_entry.assistant_response
+        total_tool_calls += len(assistant_response.tool_calls)
 
         # 处理assistant_response中的tool_calls
         for tool_call_id, tool_call in assistant_response.tool_calls.items():
-            total_tool_calls += 1
             try:
+                # 检查工具调用是否成功
+                if tool_call.status != "success":
+                    logger.warning(f"跳过失败的工具调用 [{entry_idx}]: {tool_call.name} (ID: {tool_call_id})")
+                    skipped_non_success += 1
+                    continue
+
                 # 检查工具是否可恢复
                 if not is_resumable_tool(tool_call.name):
-                    logger.warning(f"跳过不可恢复的工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
+                    logger.warning(f"跳过不可恢复的工具调用 [{entry_idx}]: {tool_call.name} (ID: {tool_call_id})")
                     skipped_non_resumable += 1
                     continue
 
@@ -84,10 +97,10 @@ async def extract_from_session(session: Session, name: str, description: str) ->
 
                 # 添加到工具调用列表
                 tool_calls.append(tool_call_data)
-                logger.info(f"✓ 添加工具调用 [{entry_idx + 1}]: {tool_call.name} (ID: {tool_call_id})")
+                logger.info(f"✓ 添加工具调用 [{entry_idx}]: {tool_call.name} (ID: {tool_call_id})")
 
             except Exception as e:
-                logger.warning(f"✗ 处理工具调用 [{entry_idx + 1}] 时出错 (ID: {tool_call_id}): {e}")
+                logger.warning(f"✗ 处理工具调用 [{entry_idx}] 时出错 (ID: {tool_call_id}): {e}")
                 failed_to_parse += 1
 
     # 详细的调试信息
@@ -96,13 +109,9 @@ async def extract_from_session(session: Session, name: str, description: str) ->
         f"  - 总工具调用数: {total_tool_calls}\n"
         f"  - 成功提取: {len(tool_calls)}\n"
         f"  - 跳过(不可恢复): {skipped_non_resumable}\n"
+        f"  - 跳过(非成功状态): {skipped_non_success}\n"
         f"  - 解析失败: {failed_to_parse}"
     )
-
-    datasets: dict[str, str] = {}
-    for ds_id in session.dataset_ids:
-        source = await datasource_service.get_source(ds_id)
-        datasets[ds_id] = source.metadata.name or ds_id
 
     # 创建工作流
     return WorkflowDefinition(
@@ -153,6 +162,8 @@ async def _fetch_sources_for_workflow(
             original_id = reversed_mapping.get(source_id)
             original_sources.sources[original_id or source_id] = source
 
+        await agent.save_state()
+
 
 async def execute_workflow_stream(
     session: Session,
@@ -168,10 +179,13 @@ async def execute_workflow_stream(
         return
 
     def append_tool_call() -> None:
-        if not messages or not isinstance((m := messages[-1]), AIMessage):
-            messages.append(AIMessage(content="", tool_calls=[tc]))
+        for m in reversed(messages):
+            if isinstance(m, AIMessage):
+                break
         else:
-            m.tool_calls.append(tc)
+            m = AIMessage(content="", tool_calls=[])
+            messages.append(m)
+        m.tool_calls.append(tc)
 
     def tool_call_success(result: str, artifact: dict | None = None) -> None:
         append_tool_call()
@@ -238,7 +252,7 @@ async def execute_workflow_stream(
         # 总结工作流执行结果
         conversation, _ = format_conversation(messages, include_figures=False)
         chat_llm = await get_llm_async(session.agent_model_config.fixed.chat)
-        summary_prompt = DAAPROMPTS.summarize_workflow.format(
+        summary_prompt = DAA_PROMPTS.summarize_workflow.format(
             workflow_name=workflow.name,
             workflow_description=workflow.description,
             execution_history=conversation,
@@ -377,19 +391,6 @@ class WorkflowService:
         except Exception as e:
             logger.error(f"保存工作流文件失败: {e}")
             raise
-
-    @staticmethod
-    async def extract_from_session(session: Session, name: str, description: str) -> WorkflowDefinition:
-        return await extract_from_session(session, name, description)
-
-    @staticmethod
-    def execute_workflow_stream(
-        session: Session,
-        workflow: WorkflowDefinition,
-        datasource_mappings: dict[str, str],
-    ) -> AsyncIterator[StreamEvent]:
-        """流式执行工作流，生成事件供前端显示"""
-        return execute_workflow_stream(session, workflow, datasource_mappings)
 
 
 # 创建单例实例

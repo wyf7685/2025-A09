@@ -4,7 +4,7 @@ import uuid
 import anyio
 
 from app.const import SESSION_DIR, STATE_DIR
-from app.core.agent.tools import TOOL_NAMES
+from app.core.agent import tool_name_human_repr
 from app.core.lifespan import lifespan
 from app.exception import SessionDeleteFailed, SessionLoadFailed, SessionNotFound
 from app.log import logger
@@ -141,7 +141,7 @@ class SessionService:
         session = session.model_copy(deep=True)
         for entry in session.chat_history:
             for tool_call in entry.assistant_response.tool_calls.values():
-                tool_call.name = TOOL_NAMES.get(tool_call.name, tool_call.name)
+                tool_call.name = tool_name_human_repr(tool_call.name)
         return session
 
 

@@ -7,7 +7,6 @@ from datetime import datetime
 import anyio
 import anyio.lowlevel
 
-from app.const import STATE_DIR
 from app.core.agent import DataAnalyzerAgent
 from app.core.datasource import DataSource
 from app.core.lifespan import lifespan
@@ -70,7 +69,7 @@ class DataAnalyzerAgentService:
             sources_dict=sources,
             mcp_connections=[(mcp.name, mcp.connection) for mcp in mcps],
         )
-        await agent.load_state(STATE_DIR / f"{session.id}.json")
+        await agent.load_state()
 
         self.agents[session.id].agent = agent
         logger.opt(colors=True).info(
@@ -106,7 +105,7 @@ class DataAnalyzerAgentService:
 
             if save_state:
                 try:
-                    await agent.save_state(STATE_DIR / f"{session_id}.json")
+                    await agent.save_state()
                 except Exception:
                     logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
 
@@ -157,7 +156,7 @@ class DataAnalyzerAgentService:
                         state.scope = None
 
                         try:
-                            await agent.save_state(STATE_DIR / f"{session.id}.json")
+                            await agent.save_state()
                         except Exception:
                             logger.opt(colors=True).exception(
                                 f"保存会话 <c>{escape_tag(session.id)}</> 的 Agent 状态失败"

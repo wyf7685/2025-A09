@@ -15,7 +15,7 @@ from app.schemas.session import Session
 from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, WorkflowDefinition
 from app.services.agent import daa_service
 from app.services.session import session_service
-from app.services.workflow import workflow_service
+from app.services.workflow import execute_workflow_stream, extract_from_session, workflow_service
 from app.utils import buffered_stream
 
 from ._depends import CurrentSessionFromBody
@@ -53,7 +53,7 @@ async def save_workflow(request: SaveWorkflowRequest, session: CurrentSessionFro
     """保存工作流"""
     try:
         # 从会话中提取工作流
-        workflow = await workflow_service.extract_from_session(session, request.name, request.description)
+        workflow = await extract_from_session(session, request.name, request.description)
 
         # 保存工作流
         success = await workflow_service.save_workflow(workflow)
@@ -85,10 +85,7 @@ async def generate_workflow_execution_stream(
         chat_entry = ChatEntry(user_message=UserChatMessage(content=workflow_message))
 
         # 使用 workflow_service 的流式执行
-        async for event in buffered_stream(
-            workflow_service.execute_workflow_stream(session, workflow, datasource_mappings),
-            max_buffer_size=10,
-        ):
+        async for event in buffered_stream(execute_workflow_stream(session, workflow, datasource_mappings), 10):
             try:
                 msg = event.model_dump_json().replace("/", "\\/") + "\n"
             except Exception:

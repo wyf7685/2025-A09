@@ -14,7 +14,7 @@ from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_langchain_tool
 from mcp.types import Implementation as MCPImplementation
 
-from app.const import VERSION
+from app.const import STATE_DIR, VERSION
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import format_sources_overview
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
@@ -76,6 +76,10 @@ class AgentContext:
     @property
     def tool_sources(self) -> dict[str, str]:
         return self._tool_sources.copy()
+
+    @property
+    def state_file(self) -> Path:
+        return STATE_DIR / f"{self.session_id}.json"
 
     def lookup_tool_source(self, tool_name: str) -> str | None:
         return self._tool_sources.get(tool_name)
