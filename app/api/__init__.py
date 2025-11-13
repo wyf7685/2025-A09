@@ -6,6 +6,7 @@ from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.clean import router as clean_router
 from app.api.datasources import router as datasources_router
+from app.api.file import router as file_router
 from app.api.health import router as health_router
 from app.api.mcp import router as mcp_router
 from app.api.model_config import router as model_config_router
@@ -25,3 +26,4 @@ router.include_router(clean_router, dependencies=[RequiresLogin()])
 router.include_router(mcp_router, dependencies=[RequiresLogin()])
 router.include_router(workflow_router, dependencies=[RequiresLogin()])
 router.include_router(agent_source_router)
+router.include_router(file_router)

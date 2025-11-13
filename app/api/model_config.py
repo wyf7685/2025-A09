@@ -9,7 +9,7 @@ from app.log import logger
 from app.schemas.custom_model import CustomModelConfig, CustomModelInfo, LLModelID
 from app.services.custom_model import custom_model_manager
 
-router = APIRouter(prefix="/models")
+router = APIRouter(prefix="/models", tags=["Model Config"])
 
 
 class ModelInfo(BaseModel):

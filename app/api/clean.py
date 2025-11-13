@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 # 创建路由实例
-router = APIRouter(prefix="/clean", tags=["数据清洗"])
+router = APIRouter(prefix="/clean", tags=["DataCleaning"])
 
 # 内存存储：文件ID -> 生成的清洗代码
 _generated_code_storage: dict[str, str] = {}
@@ -29,19 +29,18 @@ _generated_code_storage: dict[str, str] = {}
 
 @router.post("/analyze")
 async def analyze_data_quality(
-    file: UploadFile = File(...),
-    user_requirements: str | None = Form(None),
-    # TODO: implement model selection
     model_id: str = Form(),
+    file: UploadFile = File(),
+    user_requirements: str | None = Form(default=None),
 ) -> dict[str, Any]:
     """
     使用智能Agent分析数据质量并生成清洗建议
     如果有字段映射，立即应用并保存清洗后的数据文件
 
     Args:
+        model_id: 指定使用的LLM模型
         file: 上传的 CSV/Excel 文件
         user_requirements: 用户自定义清洗要求（可选）
-        model_name: 指定使用的LLM模型（可选）
 
     Returns:
         包含质量报告、字段映射、清洗建议和总结的完整分析结果
@@ -158,8 +157,8 @@ class ExecuteCleaningRequest(BaseModel):
 
 @router.post("/execute-cleaning")
 async def execute_cleaning(
-    file: UploadFile = File(...),
-    cleaning_data: str = Form(...),  # JSON格式的清洗请求数据
+    file: UploadFile = File(),
+    cleaning_data: str = Form(),  # JSON格式的清洗请求数据
 ) -> dict[str, Any]:
     """
     执行用户选择的数据清洗操作
@@ -315,14 +314,15 @@ class CleaningData(BaseModel):
 
 @router.post("/analyze-and-clean")
 async def analyze_and_clean(
-    file: UploadFile = File(...),
-    cleaning_data: str = Form(...),  # JSON格式的清洗请求数据
     model_id: str = Form(),
+    file: UploadFile = File(),
+    cleaning_data: str = Form(),  # JSON格式的清洗请求数据
 ) -> dict[str, Any]:
     """
     完整的数据分析和清洗流程
 
     Args:
+        model_id: 指定使用的LLM模型
         file: 上传的数据文件
         cleaning_data: JSON格式的清洗请求数据
 
@@ -436,12 +436,15 @@ async def analyze_and_clean(
 
 @router.post("/suggestions")
 async def get_cleaning_suggestions(
-    file: UploadFile = File(...), user_requirements: str | None = Form(None), model_id: str = Form()
+    model_id: str = Form(),
+    file: UploadFile = File(),
+    user_requirements: str | None = Form(default=None),
 ) -> dict[str, Any]:
     """
     获取数据清洗建议（支持用户自定义要求）
 
     Args:
+        model_id: 指定使用的LLM模型
         file: 上传的数据文件
         user_requirements: 用户自定义清洗要求（可选）
 
@@ -498,14 +501,15 @@ async def get_cleaning_suggestions(
 
 @router.post("/quality-report")
 async def get_quality_report(
-    file: UploadFile = File(...),
-    user_requirements: str | None = Form(None),
     model_id: str = Form(),
+    file: UploadFile = File(),
+    user_requirements: str | None = Form(default=None),
 ) -> dict[str, Any]:
     """
     获取详细的数据质量报告
 
     Args:
+        model_id: 指定使用的LLM模型
         file: 上传的数据文件
         user_requirements: 用户自定义要求（可选）
 

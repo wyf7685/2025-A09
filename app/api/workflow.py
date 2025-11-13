@@ -16,10 +16,11 @@ from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, Wo
 from app.services.agent import daa_service
 from app.services.session import session_service
 from app.services.workflow import workflow_service
+from app.utils import buffered_stream
 
 from ._depends import CurrentSessionFromBody
 
-router = APIRouter(prefix="/workflow")
+router = APIRouter(prefix="/workflow", tags=["Workflow"])
 
 
 @router.get("", response_model=list[WorkflowDefinition])
@@ -84,7 +85,10 @@ async def generate_workflow_execution_stream(
         chat_entry = ChatEntry(user_message=UserChatMessage(content=workflow_message))
 
         # 使用 workflow_service 的流式执行
-        async for event in workflow_service.execute_workflow_stream(session, workflow, datasource_mappings):
+        async for event in buffered_stream(
+            workflow_service.execute_workflow_stream(session, workflow, datasource_mappings),
+            max_buffer_size=10,
+        ):
             try:
                 msg = event.model_dump_json().replace("/", "\\/") + "\n"
             except Exception:

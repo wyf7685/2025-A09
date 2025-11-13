@@ -1,5 +1,6 @@
 import uuid
 from pathlib import Path
+from typing import Any
 
 import anyio
 from pydantic import BaseModel
@@ -214,13 +215,13 @@ class DataSourceService:
         logger.info(f"注册新数据源: {source_id} -> {source.unique_id}")
         return source_id, source
 
-    async def expire_cache(self) -> None:
+    async def expire_dremio_cache(self) -> None:
         await expire_dremio_cache()
 
 
 class TempFileService:
     def __init__(self) -> None:
-        self._data: dict[str, anyio.Path] = {}
+        self._data: dict[str, tuple[anyio.Path, dict[str, Any]]] = {}
 
         lifespan.on_shutdown(self.delete_all)
 
@@ -237,7 +238,7 @@ class TempFileService:
         file_id = str(uuid.uuid4())
         temp_path = _TEMP_DIR / f"{file_id}{file_path.suffix}"
         await anyio.Path(file_path).rename(temp_path)
-        self._data[file_id] = temp_path
+        self._data[file_id] = temp_path, {}
 
         if ttl is not None and ttl > 0:
             lifespan.start_soon(self._delete_after, file_id, ttl)
@@ -257,7 +258,7 @@ class TempFileService:
         file_id = str(uuid.uuid4())
         temp_path = _TEMP_DIR / f"{file_id}{suffix}"
         await temp_path.touch()
-        self._data[file_id] = temp_path
+        self._data[file_id] = temp_path, {}
 
         if ttl is not None and ttl > 0:
             lifespan.start_soon(self._delete_after, file_id, ttl)
@@ -274,7 +275,10 @@ class TempFileService:
         Returns:
             Path | None: 临时文件路径，如果不存在则返回None
         """
-        return Path(self._data[file_id]) if file_id in self._data else None
+        return Path(self._data[file_id][0]) if file_id in self._data else None
+
+    def get_entry(self, file_id: str) -> tuple[anyio.Path, dict[str, Any]] | None:
+        return self._data.get(file_id)
 
     async def delete(self, file_id: str) -> None:
         """
@@ -283,7 +287,7 @@ class TempFileService:
         Args:
             file_id: 临时文件ID
         """
-        if (file_path := self._data.pop(file_id, None)) and await file_path.exists():
+        if (file_entry := self._data.pop(file_id, None)) and await (file_path := file_entry[0]).exists():
             try:
                 await file_path.unlink()
             except Exception as e:

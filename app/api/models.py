@@ -2,21 +2,22 @@
 模型管理接口
 """
 
+import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.log import logger
 from app.schemas.ml_model import MLModelInfoOut
 from app.schemas.session import SessionID
+from app.services.datasource import temp_file_service
 from app.services.model_registry import model_registry
 
-router = APIRouter(prefix="/models")
+router = APIRouter(prefix="/models", tags=["ML Models"])
 
 
 class GetModelsResponse(BaseModel):
@@ -89,25 +90,6 @@ async def create_model(request: CreateModelRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to create model: {e}") from e
 
 
-class UpdateModelRequest(BaseModel):
-    status: str
-
-
-@router.put("/{model_id}")
-async def update_model(model_id: str, request: UpdateModelRequest) -> dict[str, Any]:
-    """更新模型状态"""
-    try:
-        status = request.status
-
-        # 这里应该实际更新模型状态
-        # 目前只是返回成功响应
-        return {"success": True, "model_id": model_id, "status": status}
-
-    except Exception as e:
-        logger.exception("更新模型失败")
-        raise HTTPException(status_code=500, detail=f"Failed to update model: {e}") from e
-
-
 @router.delete("/{model_id}")
 async def delete_model(model_id: str) -> dict[str, Any]:
     """删除模型"""
@@ -127,12 +109,21 @@ async def delete_model(model_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to delete model: {e}") from e
 
 
-@router.get("/download/{model_id}")
-async def download_model(model_id: str) -> FileResponse:
-    """下载模型文件"""
+class GetModelLinkResponse(BaseModel):
+    path: str
+
+
+@router.get("/{model_id}/link")
+async def get_model_link(model_id: str) -> GetModelLinkResponse:
+    """获取模型文件下载链接"""
     try:
-        model_archive = await model_registry.pack_model(model_id)
-        return FileResponse(model_archive, media_type="application/zip", filename=f"model_{model_id}.zip")
+        archive_file_id = await model_registry.pack_model(model_id)
+        entry = temp_file_service.get_entry(archive_file_id)
+        assert entry is not None, "Temporary file entry should exist"
+        metadata = entry[1]
+        metadata["filename"] = f"model_{model_id}.zip"
+        metadata["token"] = token = secrets.token_urlsafe(32)
+        return GetModelLinkResponse(path=f"/files/{archive_file_id}?token={token}")
     except ValueError as e:
         raise HTTPException(status_code=404, detail="Model not found") from e
     except Exception as e:
