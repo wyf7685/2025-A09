@@ -3,7 +3,7 @@ import enum
 import functools
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from types import TracebackType
-from typing import cast
+from typing import cast, overload
 
 import anyio
 import anyio.from_thread
@@ -53,12 +53,22 @@ class Lifespan:
             raise RuntimeError("Lifespan already started")
         self._task_group = task_group
 
-    def start_soon[*Ts](self, func: Callable[[*Ts], Awaitable[object]], /, *args: *Ts, name: object = None) -> None:
-        @functools.wraps(func)
-        async def wrapper() -> None:
-            await func(*args)
+    @overload
+    def start_soon[*Ts](self, func: Callable[[*Ts], Awaitable[object]], /, *args: *Ts, name: object = None) -> None: ...
+    @overload
+    def start_soon(self, /, *, name: object) -> Callable[[Callable[[], Awaitable[object]]], None]: ...
 
-        self.task_group.start_soon(self._run, wrapper, "后台任务执行失败", False, name=name)
+    def start_soon[*Ts](
+        self, func: Callable[[*Ts], Awaitable[object]] | None = None, /, *args: *Ts, name: object = None
+    ) -> Callable[[Callable[[], Awaitable[object]]], None] | None:
+        def decorator(f: Callable[..., Awaitable[object]]) -> None:
+            @functools.wraps(f)
+            async def wrapper() -> None:
+                await f(*args)
+
+            self.task_group.start_soon(self._run, wrapper, "后台任务执行失败", False, name=name)
+
+        return decorator if func is None else decorator(func)
 
     def from_thread[*Ts, R](self, func: Callable[[*Ts], Awaitable[R]], /, *args: *Ts) -> R:
         return anyio.from_thread.run(func, *args, token=self._token)

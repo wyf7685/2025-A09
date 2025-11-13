@@ -2,6 +2,7 @@ import contextlib
 import dataclasses
 import secrets
 from collections.abc import AsyncIterator, Iterator
+from datetime import datetime
 
 import anyio
 import anyio.lowlevel
@@ -15,7 +16,9 @@ from app.log import logger
 from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
 from app.services.mcp import mcp_service
-from app.utils import escape_tag
+from app.utils import escape_tag, suppress_exceptions
+
+AGENT_IDLE_SECONDS = 60 * 30  # 30 mins
 
 
 @dataclasses.dataclass
@@ -23,6 +26,7 @@ class AgentState:
     agent: DataAnalyzerAgent | None = None
     locked: bool = False
     scope: anyio.CancelScope | None = None
+    last_used: datetime = dataclasses.field(default_factory=datetime.now)
 
     @contextlib.contextmanager
     def lock(self) -> Iterator[None]:
@@ -80,6 +84,7 @@ class DataAnalyzerAgentService:
         state = self.agents.get(session.id)
         if state is None or state.agent is None:
             return None
+        state.last_used = datetime.now()
         return state.agent
 
     async def _get_or_create(self, session: Session) -> DataAnalyzerAgent:
@@ -93,22 +98,23 @@ class DataAnalyzerAgentService:
         if session_id not in self.agents or (state := self.agents[session_id]).agent is None:
             raise AgentNotFound(session_id)
 
-        await self._cancel(session_id)
+        with state.lock():
+            await self._cancel(session_id)
 
-        agent = state.agent
-        state.agent = None
+            agent = state.agent
+            state.agent = None
 
-        if save_state:
+            if save_state:
+                try:
+                    await agent.save_state(STATE_DIR / f"{session_id}.json")
+                except Exception:
+                    logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
+
             try:
-                await agent.save_state(STATE_DIR / f"{session_id}.json")
+                await agent.destroy()
+                logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
             except Exception:
-                logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
-
-        try:
-            await agent.destroy()
-            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
-        except Exception:
-            logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
+                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
         if pop:
             self.agents.pop(session_id, None)
@@ -187,3 +193,24 @@ class DataAnalyzerAgentService:
 
 
 daa_service = DataAnalyzerAgentService()
+
+
+@suppress_exceptions(Exception, message="删除空闲 Agent 失败", include_trace=True)
+async def _delete_idle_agents() -> None:
+    now = datetime.now()
+    async with anyio.create_task_group() as tg:
+        for session_id, state in daa_service.agents.items():
+            if not state.locked and (idle := (now - state.last_used).total_seconds()) >= AGENT_IDLE_SECONDS:
+                logger.opt(colors=True).info(
+                    f"会话 <c>{escape_tag(session_id)}</> 的 Agent 已空闲 <y>{int(idle // 60)}</> 分钟，准备销毁"
+                )
+                tg.start_soon(daa_service.safe_destroy, session_id)
+
+
+@lifespan.on_ready
+async def _() -> None:
+    @lifespan.start_soon(name="delete_idle_agents_loop")
+    async def _() -> None:
+        while True:
+            await anyio.sleep(60 * 5)  # 每 5 分钟检查一次
+            lifespan.start_soon(_delete_idle_agents)
