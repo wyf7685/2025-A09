@@ -15,6 +15,7 @@ app = FastAPI(
     title="DataForge",
     description="Dataforge - 智能数据锻造平台",
     version=VERSION,
+    openapi_url="/openapi.json" if not settings.APP_IS_PROD else None,
     lifespan=lifespan,
 )
 

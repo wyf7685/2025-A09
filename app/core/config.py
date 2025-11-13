@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"  # noqa: S104
     PORT: int = 8081
 
+    # 生产环境标记
+    APP_IS_PROD: bool = False
+
     # JWT 配置
     JWT_SECRET_KEY: SecretStr
     JWT_ALGORITHM: str = "HS256"
