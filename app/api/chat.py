@@ -24,7 +24,7 @@ from app.utils import buffered_stream, escape_tag
 
 from ._depends import CurrentSessionFromBody
 
-router = APIRouter(prefix="/chat")
+router = APIRouter(prefix="/chat", tags=["DataAnalyzerChat"])
 
 
 class ChatRequest(BaseModel):

@@ -1,4 +1,4 @@
-from langchain_core.tools import BaseTool, tool
+from typing import TYPE_CHECKING
 
 from app.core.agent.resume import resumable
 from app.core.agent.schemas import format_sources_overview
@@ -6,8 +6,13 @@ from app.core.agent.sources import Sources
 
 from ._registry import register_tool
 
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
-def sources_tools(sources: Sources) -> list[BaseTool]:
+
+def sources_tools(sources: Sources) -> list["BaseTool"]:
+    from langchain_core.tools import tool
+
     @tool
     @register_tool("列出所有数据集")
     def list_dataset_tool() -> str:

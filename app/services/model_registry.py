@@ -156,7 +156,9 @@ class ModelRegistry:
         if not model:
             raise ValueError(f"Model {model_id} not found")
 
-        temp_dir = TEMP_DIR / f"pack_model_{uuid.uuid4()}"
+        temp_id = uuid.uuid4()
+        temp_dir = TEMP_DIR / f"pack_model_{temp_id}"
+        archive = TEMP_DIR / f"packed_{temp_id}.zip"
         temp_dir.mkdir(parents=True, exist_ok=True)
         try:
             # 复制模型文件到临时目录
@@ -164,8 +166,7 @@ class ModelRegistry:
             shutil.copyfile(model.metadata_path, temp_dir / model.metadata_path.name)
 
             # 打包为 zip 文件
-            archive = temp_dir.with_suffix(".zip")
-            shutil.make_archive(archive.stem, "zip", temp_dir)
+            archive = Path(shutil.make_archive(str(archive.with_suffix("")), "zip", temp_dir))
 
             logger.info(f"模型 {model_id} 已打包为 {archive}")
             return archive
@@ -174,12 +175,9 @@ class ModelRegistry:
             # 清理临时目录
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    async def pack_model(self, model_id: str) -> Path:
+    async def pack_model(self, model_id: str) -> str:
         archive = await anyio.to_thread.run_sync(self._pack_model_archive, model_id)
-        file_id = await temp_file_service.register(archive, ttl=3600)
-        temp_path = temp_file_service.get(file_id)
-        assert temp_path is not None
-        return temp_path
+        return await temp_file_service.register(archive, ttl=3600)
 
 
 # 全局模型注册表实例

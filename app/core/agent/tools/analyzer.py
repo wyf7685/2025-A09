@@ -1,7 +1,6 @@
 import base64
 from collections.abc import Callable
-
-from langchain_core.tools import BaseTool, tool
+from typing import TYPE_CHECKING
 
 from app.core.agent.resume import resumable
 from app.core.agent.sources import Sources
@@ -14,6 +13,9 @@ from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
 from ._registry import register_tool
+
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -43,7 +45,7 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
+def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> "BaseTool":
     """
     创建一个数据分析工具，使用提供的DataFrame和语言模型。
 
@@ -54,6 +56,7 @@ def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> BaseTool:
     Returns:
         Tool: 用于数据分析的LangChain工具。
     """
+    from langchain_core.tools import tool
 
     @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
     @register_tool("通用数据分析工具")

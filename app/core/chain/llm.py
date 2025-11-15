@@ -1,28 +1,35 @@
 # ruff: noqa: E731
+from __future__ import annotations
+
 import datetime
 import threading
-from collections.abc import Callable
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import anyio.to_thread
-from langchain_core.language_models import BaseChatModel, LanguageModelInput
-from langchain_core.messages import BaseMessage
-from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import SecretStr
 
 from app.log import logger
-from app.schemas.custom_model import CustomModelConfig, LLModelID
 from app.services.custom_model import custom_model_manager
 from app.utils import escape_tag
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from langchain_core.language_models import BaseChatModel, LanguageModelInput
+    from langchain_core.messages import BaseMessage
+    from langchain_core.runnables import Runnable
+
+    from app.schemas.custom_model import CustomModelConfig, LLModelID
 
 type LLM = Runnable[LanguageModelInput, str]
 
 
 def rate_limiter(max_call_per_minute: int) -> Runnable[Any, Any]:
+    from langchain_core.runnables import RunnableLambda
+
     calls: list[datetime.datetime] = []
     delta = datetime.timedelta(minutes=1)
 
-    @RunnableLambda
     def limiter(input: Any) -> Any:
         now = datetime.datetime.now()
         calls.append(now)
@@ -42,7 +49,7 @@ def rate_limiter(max_call_per_minute: int) -> Runnable[Any, Any]:
             input.pop("remaining_steps", None)
         return input
 
-    return limiter
+    return RunnableLambda(limiter)
 
 
 def _convert(msg: BaseMessage) -> str:
@@ -58,6 +65,8 @@ def _convert_model(
     llm: Callable[[], LLM] | None,
     chat_model: BaseChatModel | Callable[[], BaseChatModel],
 ) -> LLM | BaseChatModel | tuple[LLM, BaseChatModel]:
+    from langchain_core.language_models import BaseChatModel
+
     get_chat_model = (lambda: chat_model) if isinstance(chat_model, BaseChatModel) else chat_model
 
     match type:

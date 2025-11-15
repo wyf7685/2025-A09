@@ -20,7 +20,7 @@ export const useModelStore = defineStore('model', () => {
     return response.data;
   };
 
-  const deleteModel = async (modelId: string): Promise<{ success: boolean }> => {
+  const deleteModel = async (modelId: string): Promise<{ success: boolean; }> => {
     const response = await api.delete(`/models/${modelId}`);
     return response.data;
   };
@@ -29,7 +29,7 @@ export const useModelStore = defineStore('model', () => {
   // 获取可用模型
   const fetchAvailableModels = async () => {
     try {
-      const response = await api.get<{ models: LLMModel[] }>('/models/available');
+      const response = await api.get<{ models: LLMModel[]; }>('/models/available');
       availableModels.value = response.data.models;
 
       // 如果当前选择的模型不在可用模型中，选择第一个可用模型
@@ -86,7 +86,7 @@ export const useModelStore = defineStore('model', () => {
   };
 
   // 删除自定义模型
-  const deleteCustomModel = async (modelId: string): Promise<{ success: boolean }> => {
+  const deleteCustomModel = async (modelId: string): Promise<{ success: boolean; }> => {
     try {
       const response = await api.delete(`/models/custom/${modelId}`);
       if (response.data.success) {
@@ -163,12 +163,18 @@ export const useModelStore = defineStore('model', () => {
     }
   };
 
-  const downloadModel = (modelId: string) => {
-    const link = document.createElement('a');
-    link.href = `${API_BASE_URL}/models/download/${modelId}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadModel = async (modelId: string) => {
+    try {
+      const response = await api.get<{ path: string; }>(`/models/${modelId}/link`);
+      const link = document.createElement('a');
+      link.href = `${API_BASE_URL}${response.data.path}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to download model:', error);
+      throw error;
+    }
   };
 
   return {

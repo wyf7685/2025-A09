@@ -12,6 +12,7 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8081 # see nginx.conf
+      - APP_IS_PROD=true
       - MAX_WORKERS=1
       - DREMIO_BASE_URL=http://dremio:9047
       - DREMIO_USERNAME=user

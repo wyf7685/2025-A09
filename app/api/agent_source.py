@@ -16,7 +16,7 @@ from app.services.datasource import temp_file_service
 from app.services.session import session_service
 from app.utils import escape_tag
 
-router = APIRouter(prefix="/agent_source", tags=["Agent数据源"])
+router = APIRouter(prefix="/agent_source", tags=["AgentSource"])
 
 
 async def _session_id_from_token(authorization: str = Header(description="Agent数据源令牌")) -> SessionID:

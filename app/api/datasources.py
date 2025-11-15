@@ -174,6 +174,7 @@ async def add_data_source_database(request: AddDataSourceDatabaseRequest) -> Reg
         if request.description:
             source.metadata.description = request.description
         await datasource_service.save_source(source_id, source)
+        await datasource_service.expire_dremio_cache()
         return RegisterDataSourceResponse(source_id=source_id, metadata=source.metadata)
     except Exception as e:
         logger.exception("添加数据库数据源失败")
@@ -226,7 +227,7 @@ async def list_datasources(force: bool = False) -> list[str]:
         with contextlib.suppress(Exception):
             async with list_ds_sem:
                 if force:
-                    await datasource_service.expire_cache()
+                    await datasource_service.expire_dremio_cache()
                 await datasource_service.sync_from_dremio()
         return list(datasource_service.sources)
     except HTTPException:
@@ -394,6 +395,9 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
 
         # 从数据源字典中删除
         await datasource_service.delete_source(source_id)
+
+        # 过期缓存
+        await datasource_service.expire_dremio_cache()
 
         # 删除关联的会话
         # TODO: 考虑其他删除方式

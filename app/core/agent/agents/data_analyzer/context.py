@@ -1,44 +1,43 @@
+from __future__ import annotations
+
 import contextlib
 import dataclasses
 import functools
 import threading
 from copy import deepcopy
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import anyio
 import anyio.to_thread
-from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage, SystemMessage
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda, ensure_config
-from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_langchain_tool
 from mcp.types import Implementation as MCPImplementation
 
-from app.const import VERSION
+from app.const import STATE_DIR, VERSION
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import format_sources_overview
-from app.core.agent.sources import Sources
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
 from app.core.agent.tools._registry import register_tool_name
 from app.core.chain import get_chat_model_async, get_llm
 from app.core.lifespan import Lifespan
 from app.log import logger
-from app.schemas.mcp import Connection
-from app.schemas.ml_model import MLModelInfo
 from app.schemas.session import AgentModelConfig, AgentModelConfigFixed, SessionID
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from langchain_core.language_models import LanguageModelInput
+    from langchain_core.runnables import Runnable, RunnableConfig
+    from langchain_core.tools import BaseTool
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
     from langgraph.graph.state import CompiledStateGraph
     from langgraph.prebuilt import ToolNode
 
-
-def get_runnable_config() -> RunnableConfig:
-    """获取默认的 Runnable 配置"""
-    return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
+    from app.core.agent.sources import Sources
+    from app.schemas.mcp import Connection
+    from app.schemas.ml_model import MLModelInfo
 
 
 @dataclasses.dataclass
@@ -50,18 +49,20 @@ class AgentContext:
     lifespan: Lifespan | None = None
 
     # private
-    _tool_node: "ToolNode | None" = None
-    _graph: "CompiledStateGraph | None" = None
+    _tool_node: ToolNode | None = None
+    _graph: CompiledStateGraph | None = None
     _saved_models: dict[str, Path] | None = None
     _mcp_instructions: str | None = None
     _tool_sources: dict[str, str] = dataclasses.field(default_factory=dict)
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
+        from langchain_core.runnables import ensure_config
+
         return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
 
     @property
-    def graph(self) -> "CompiledStateGraph":
+    def graph(self) -> CompiledStateGraph:
         if self._graph is None:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._graph
@@ -75,6 +76,10 @@ class AgentContext:
     @property
     def tool_sources(self) -> dict[str, str]:
         return self._tool_sources.copy()
+
+    @property
+    def state_file(self) -> Path:
+        return STATE_DIR / f"{self.session_id}.json"
 
     def lookup_tool_source(self, tool_name: str) -> str | None:
         return self._tool_sources.get(tool_name)
@@ -189,6 +194,7 @@ class AgentContext:
         return mcp_tools
 
     async def build_graph(self) -> None:
+        from langchain_core.runnables import RunnableLambda
         from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.prebuilt import ToolNode, create_react_agent
 

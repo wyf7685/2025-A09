@@ -87,9 +87,9 @@ class DataAnalyzerAgent:
         resume_tool_calls(self.ctx.sources, model_config, state.workflow_data, state.values.get("messages", []))
         logger.opt(colors=True).info(f"已恢复 agent 状态: {state.colorize()}")
 
-    async def load_state(self, state_file: Path) -> None:
+    async def load_state(self, state_file: Path | None = None) -> None:
         """从指定的状态文件加载 agent 状态。"""
-        path = anyio.Path(state_file)
+        path = anyio.Path(state_file or self.ctx.state_file)
         if not await path.exists():
             return
 
@@ -108,11 +108,11 @@ class DataAnalyzerAgent:
         model_config = await self.ctx.get_model_config()
         await self.set_state(state, model_config)
 
-    async def save_state(self, state_file: Path) -> None:
+    async def save_state(self, state_file: Path | None = None) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""
         state = await self.get_state()
         data = state.model_dump_json().encode("utf-8")
-        await anyio.Path(state_file).write_bytes(data)
+        await anyio.Path(state_file or self.ctx.state_file).write_bytes(data)
         logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
 
     async def destroy(self) -> None:

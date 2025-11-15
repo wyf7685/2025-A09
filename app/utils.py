@@ -235,3 +235,24 @@ async def buffered_stream[T](aiterable: AsyncIterable[T], max_buffer_size: float
         async with recv:
             async for item in recv:
                 yield item
+
+
+def suppress_exceptions[**P](
+    *exceptions: type[BaseException],
+    message: str | None = None,
+    include_trace: bool = False,
+) -> Callable[[Callable[P, Coroutine[None, None, object]]], Callable[P, Coroutine[None, None, None]]]:
+    def decorator(fn: Callable[P, Coroutine[None, None, object]]) -> Callable[P, Coroutine[None, None, None]]:
+        @functools.wraps(fn)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+            try:
+                await fn(*args, **kwargs)
+            except exceptions:
+                if message is not None:
+                    from app.log import logger
+
+                    logger.opt(exception=include_trace).warning(message)
+
+        return wrapper
+
+    return decorator

@@ -1,7 +1,6 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from langchain_core.tools import BaseTool, tool
 
 from app.core.agent.resume import resumable
 from app.core.agent.schemas import DatasetID, OperationFailed
@@ -42,8 +41,13 @@ from .multi import (
     join_dataframes,
 )
 
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
-def dataframe_tools(sources: Sources) -> list[BaseTool]:
+
+def dataframe_tools(sources: Sources) -> list["BaseTool"]:
+    from langchain_core.tools import tool
+
     @tool
     @register_tool("相关性分析")
     def correlation_analysis_tool(

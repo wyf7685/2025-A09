@@ -6,6 +6,7 @@ from typing import Any, overload
 from langchain_core.messages import ToolCall
 
 from app.log import logger
+from app.utils import escape_tag
 
 type ResumeCall = Callable[..., object]
 
@@ -70,11 +71,9 @@ def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
     """
     # 获取工具名称
     name = tool_call["name"]
-
-    # 尝试直接匹配
     if r := _RESUME_TOOL_REGISTRY.get(name):
-        logger.info(f"找到直接匹配的工具: {name}")
-        args = {**tool_call["args"], **extra} if isinstance(tool_call, dict) else {**tool_call.args, **extra}
-        return r.fn(**{k: v for k, v in args.items() if k in r.params})
+        args = {k: v for k, v in (tool_call["args"] | extra).items() if k in r.params}
+        logger.opt(colors=True).info(f"恢复工具调用: <g>{escape_tag(name)}</>, 参数: <c>{escape_tag(repr(args))}</>")
+        return r.fn(**args)
 
-    raise ValueError(f"工具 '{name}' 未在可恢复工具注册表中找到。已注册的工具: {list(_RESUME_TOOL_REGISTRY)}")
+    raise ValueError(f"工具 {name!r} 未在可恢复工具注册表中找到")
