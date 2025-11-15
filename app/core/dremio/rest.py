@@ -4,6 +4,7 @@ import shutil
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, override
 
@@ -32,6 +33,7 @@ class DremioRestClient(AbstractDremioClient):
 
         self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
+        self._token_age = None
 
     def _get_token(self) -> str:
         """
@@ -40,8 +42,9 @@ class DremioRestClient(AbstractDremioClient):
         Returns:
             str: 认证 token
         """
-        if self._token is None:
+        if self._token is None or (self._token_age and (datetime.now() - self._token_age).total_seconds() > 3600):
             self._token = self._get_temp_token()
+            self._token_age = datetime.now()
         return self._token
 
     def _get_temp_token(self) -> str:

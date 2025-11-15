@@ -3,6 +3,7 @@
 import functools
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, override
 
@@ -33,7 +34,7 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
 
         self.external_dir.mkdir(parents=True, exist_ok=True)
         self._token = None
-        # self._client = None
+        self._token_age = None
 
     async def _get_token(self) -> str:
         """
@@ -42,8 +43,9 @@ class AsyncDremioRestClient(AbstractAsyncDremioClient):
         Returns:
             str: 认证 token
         """
-        if self._token is None:
+        if self._token is None or (self._token_age and (datetime.now() - self._token_age).total_seconds() > 3600):
             self._token = await self._get_temp_token()
+            self._token_age = datetime.now()
         return self._token
 
     async def _get_temp_token(self) -> str:
