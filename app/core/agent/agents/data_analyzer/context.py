@@ -193,6 +193,10 @@ class AgentContext:
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n\n".join(instructions))
         return mcp_tools
 
+    def _handle_tool_errors(self, error: Exception) -> str:
+        logger.exception("工具调用时发生错误")
+        return f"工具调用错误: {error!r}\n请修复后重试。"
+
     async def build_graph(self) -> None:
         from langchain_core.runnables import RunnableLambda
         from langgraph.checkpoint.memory import InMemorySaver
@@ -209,7 +213,7 @@ class AgentContext:
         # Load Tools
         builtin_tools = await self._load_builtin_tools()
         mcp_tools = await self._load_mcp_tools()
-        self._tool_node = ToolNode(builtin_tools + mcp_tools)
+        self._tool_node = ToolNode(builtin_tools + mcp_tools, handle_tool_errors=self._handle_tool_errors)
 
         # Prompt
         prompt = RunnableLambda(

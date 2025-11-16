@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
-def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str = "fail") -> dict[str, Any]:
+def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str) -> dict[str, Any]:
     """
     工具1: 故障与正常样本对比分析
 
@@ -24,7 +24,7 @@ def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str = "fail") -> dict
 
     Args:
         df: 包含故障标签的数据框
-        target_col: 故障标签列名，默认为"fail"
+        target_col: 故障标签列名
 
     Returns:
         包含对比分析结果的字典
@@ -99,8 +99,8 @@ def fault_vs_normal_analysis(df: pd.DataFrame, target_col: str = "fail") -> dict
 
 def calculate_health_score(
     df: pd.DataFrame,
+    target_col: str,
     sample_index: int | None = None,
-    target_col: str = "fail",
 ) -> dict[str, Any]:
     """
     工具2: 健康度评分
@@ -109,8 +109,8 @@ def calculate_health_score(
 
     Args:
         df: 数据框
-        sample_index: 要评估的样本索引，None表示最新样本（最后一行）
         target_col: 故障标签列名
+        sample_index: 要评估的样本索引，None表示最新样本（最后一行）
 
     Returns:
         包含健康度评分和诊断信息的字典

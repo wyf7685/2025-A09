@@ -63,6 +63,7 @@ api.interceptors.response.use(
           break;
         case 401:
           errorMessage = '未授权访问';
+          useLoginStore().logout();
           break;
         case 403:
           errorMessage = '禁止访问';

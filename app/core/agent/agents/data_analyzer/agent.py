@@ -20,6 +20,8 @@ from .context import AgentContext
 from .schemas import AgentValues, DataAnalyzerAgentState, WorkflowData
 from .utils import create_title_chain, resume_tool_calls, summary_chain
 
+logger = logger.opt(colors=True)
+
 
 class DataAnalyzerAgent:
     ctx: AgentContext
@@ -85,7 +87,7 @@ class DataAnalyzerAgent:
         self.ctx.sources.reset()
         self._wf_data = state.workflow_data
         resume_tool_calls(self.ctx.sources, model_config, state.workflow_data, state.values.get("messages", []))
-        logger.opt(colors=True).info(f"已恢复 agent 状态: {state.colorize()}")
+        logger.info(f"已恢复 agent 状态: {state.colorize()}")
 
     async def load_state(self, state_file: Path | None = None) -> None:
         """从指定的状态文件加载 agent 状态。"""
@@ -96,7 +98,7 @@ class DataAnalyzerAgent:
         try:
             data = await path.read_bytes()
         except Exception as e:
-            logger.warning(f"无法加载 agent 状态: 读取状态文件时出错: {e}")
+            logger.warning(f"无法加载 agent 状态: 读取状态文件时出错: {escape_tag(repr(e))}")
             return
 
         try:
@@ -113,18 +115,19 @@ class DataAnalyzerAgent:
         state = await self.get_state()
         data = state.model_dump_json().encode("utf-8")
         await anyio.Path(state_file or self.ctx.state_file).write_bytes(data)
-        logger.opt(colors=True).info(f"已保存 agent 状态: {state.colorize()}")
+        logger.info(f"已保存 agent 状态: {state.colorize()}")
 
     async def destroy(self) -> None:
         """销毁 agent，释放资源"""
         if self.ctx.lifespan is not None:
             await self.ctx.lifespan.shutdown()
             self.ctx.lifespan = None
-        logger.opt(colors=True).info(f"已销毁数据分析 Agent: <c>{self.ctx.session_id}</>")
+        logger.info(f"已销毁数据分析 Agent: <c>{self.ctx.session_id}</>")
 
     async def stream(self, user_input: str) -> AsyncIterator[StreamEvent]:
         """使用用户输入调用 agent，并以流式方式返回事件"""
-        logger.opt(colors=True).info(f"<c>{self.ctx.session_id}</> | 开始处理用户输入: <y>{escape_tag(user_input)}</>")
+        prefix = f"<c>{self.ctx.session_id}</> |"
+        logger.info(f"{prefix} 开始处理用户输入: <y>{escape_tag(user_input)}</>")
 
         async for event in self.ctx.graph.astream(
             {"messages": [{"role": "user", "content": user_input}]},
@@ -137,6 +140,11 @@ class DataAnalyzerAgent:
             if isinstance(message, AIMessage) and metadata.get("langgraph_node") != "agent":
                 continue
             for evt in process_stream_event(message, lookup_tool_source=self.ctx.lookup_tool_source):
+                if evt.type == "tool_call":
+                    logger.info(
+                        f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
+                        f"{escape_tag(str(evt.args))}"
+                    )
                 yield evt
 
-        logger.opt(colors=True).success(f"<c>{self.ctx.session_id}</> | 处理完成")
+        logger.success(f"{prefix} 处理完成")

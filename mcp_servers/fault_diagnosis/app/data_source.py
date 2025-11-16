@@ -7,7 +7,7 @@ from typing import Any, Self
 import httpx
 import pandas as pd
 
-API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:8081/api/v1")
+API_BASE_URL = os.getenv("AGENT_API_BASE_URL", "http://localhost:8000/api")
 
 
 @dataclass
