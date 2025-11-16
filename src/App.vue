@@ -29,7 +29,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <LoginView v-if="!loginStore.isLoggedIn" :apiStatus="apiStatus" />
+  <LoginView v-if="!loginStore.isLoggedIn" />
   <MainLayout v-else :apiStatus="apiStatus">
     <RouterView v-slot="{ Component }">
       <template v-if="Component">

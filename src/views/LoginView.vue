@@ -6,6 +6,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { checkHealth } from '@/utils/api';
 
 // 获取环境变量
 const env = import.meta.env;
@@ -13,10 +14,6 @@ const icpNumber = env.VITE_ICP_NUMBER;
 const policeNumber = env.VITE_POLICE_NUMBER;
 const policeString = env.VITE_POLICE_STRING;
 const companyName = env.VITE_COMPANY_NAME;
-
-const props = defineProps<{
-  apiStatus: boolean;
-}>();
 
 const router = useRouter();
 const loginStore = useLoginStore();
@@ -46,7 +43,10 @@ const loading = ref(false);
 const handleLogin = async (formEl?: FormInstance) => {
   if (!formEl) return;
 
-  if (!props.apiStatus) {
+  try {
+    await checkHealth();
+  } catch (error) {
+    console.error('健康检查失败:', error);
     ElMessage.error('无法连接到服务器，请稍后再试');
     return;
   }
