@@ -38,8 +38,6 @@ def _process_image(image_data: str | bytes | Path, max_width: float = 15 * cm) -
     Returns:
         ReportLab Image 对象，如果处理失败则返回 None
     """
-    from urllib.request import urlopen
-
     from app.log import logger
 
     try:
@@ -127,12 +125,10 @@ def _register_chinese_fonts() -> str:
     Returns:
         可用的中文字体名称
     """
-    import os
-
     # Windows 字体目录
     font_dirs = [
-        r"C:\Windows\Fonts",
-        os.path.expanduser("~\\AppData\\Local\\Microsoft\\Windows\\Fonts"),
+        Path(r"C:\Windows\Fonts"),
+        Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts",
     ]
 
     # 尝试的字体列表（按优先级）
@@ -144,17 +140,20 @@ def _register_chinese_fonts() -> str:
         ("SimHei", "simhei.ttf"),  # 黑体
     ]
 
+    from app.log import logger
+
     registered_font = None
 
     for font_name, font_file in font_candidates:
         for font_dir in font_dirs:
-            font_path = os.path.join(font_dir, font_file)
-            if os.path.exists(font_path):
+            font_path = font_dir / font_file
+            if font_path.exists():
                 try:
-                    pdfmetrics.registerFont(TTFont(font_name, font_path))
+                    pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
                     registered_font = font_name
                     break
-                except Exception:  # noqa: S110
+                except Exception as e:
+                    logger.debug(f"注册字体 {font_name} 失败: {e}")
                     continue
         if registered_font:
             break
