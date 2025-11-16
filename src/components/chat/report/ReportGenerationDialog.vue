@@ -69,11 +69,11 @@ const generateReport = async () => {
       sessionStore.currentSessionId,
       selectedTemplateId.value === 'default' ? undefined : selectedTemplateId.value
     );
-    
+
     // 替换图片占位符
     let reportContent = result.report;
     reportFigures.value = result.figures || [];
-    
+
     for (let i = 0; i < reportFigures.value.length; i++) {
       const figure = reportFigures.value[i];
       // 尝试替换多种占位符格式
@@ -81,18 +81,18 @@ const generateReport = async () => {
         `{{figure-${i}}}`,
         `{figure-${i}}`,
       ];
-      
+
       for (const placeholder of placeholders) {
         if (reportContent.includes(placeholder)) {
           // 确保图片数据是完整的 data:image 格式
-          const imageData = figure.startsWith('data:image') 
-            ? figure 
+          const imageData = figure.startsWith('data:image')
+            ? figure
             : `data:image/png;base64,${figure}`;
           reportContent = reportContent.replaceAll(placeholder, imageData);
         }
       }
     }
-    
+
     generatedReport.value = reportContent;
     formattedReport.value = await formatMessage(reportContent);
     reportTitle.value = result.report_title || currentSessionName.value;
@@ -344,6 +344,7 @@ const deleteTemplate = async (templateId: string) => {
 }
 
 .markdown-content {
+
   /* 限制Markdown内容中的图片尺寸 */
   :deep(img) {
     max-width: 100%;
