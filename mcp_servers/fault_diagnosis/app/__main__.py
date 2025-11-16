@@ -54,7 +54,7 @@ async def read_source(source_id: str) -> pd.DataFrame:
 
 
 @app.tool(title="故障与正常样本对比分析")
-async def fault_vs_normal(source_id: str) -> dict:
+async def fault_vs_normal(source_id: str, target_col: str) -> dict:
     """
     故障与正常样本对比分析
 
@@ -63,6 +63,7 @@ async def fault_vs_normal(source_id: str) -> dict:
 
     Args:
         source_id: 数据源ID
+        target_col: 故障标签列名
 
     Returns:
         dict: 包含以下内容:
@@ -79,11 +80,11 @@ async def fault_vs_normal(source_id: str) -> dict:
         ```
     """
     df = await read_source(source_id)
-    return fault_vs_normal_analysis(df)
+    return fault_vs_normal_analysis(df, target_col)
 
 
 @app.tool(title="计算设备健康度评分")
-async def health_score(source_id: str, sample_index: int | None = None) -> dict:
+async def health_score(source_id: str, target_col: str, sample_index: int | None = None) -> dict:
     """
     计算设备健康度评分
 
@@ -92,6 +93,7 @@ async def health_score(source_id: str, sample_index: int | None = None) -> dict:
 
     Args:
         source_id: 数据源ID
+        target_col: 故障标签列名
         sample_index: 要评估的样本索引（可选，默认为最后一个样本）
 
     Returns:
@@ -111,11 +113,11 @@ async def health_score(source_id: str, sample_index: int | None = None) -> dict:
         ```
     """
     df = await read_source(source_id)
-    return calculate_health_score(df, sample_index)
+    return calculate_health_score(df, target_col, sample_index)
 
 
 @app.tool(title="故障模式聚类分析")
-async def fault_patterns(source_id: str, n_clusters: int = 3) -> dict:
+async def fault_patterns(source_id: str, target_col: str, n_clusters: int = 3) -> dict:
     """
     故障模式聚类分析
 
@@ -124,6 +126,7 @@ async def fault_patterns(source_id: str, n_clusters: int = 3) -> dict:
 
     Args:
         source_id: 数据源ID
+        target_col: 故障标签列名
         n_clusters: 聚类数量，默认3
 
     Returns:
@@ -146,7 +149,7 @@ async def fault_patterns(source_id: str, n_clusters: int = 3) -> dict:
         ```
     """
     df = await read_source(source_id)
-    return analyze_fault_patterns(df, n_clusters=n_clusters)
+    return analyze_fault_patterns(df, target_col, n_clusters=n_clusters)
 
 
 def run_server_sse() -> None:

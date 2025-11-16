@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
-def analyze_fault_patterns(df: pd.DataFrame, target_col: str = "fail", n_clusters: int = 3) -> dict[str, Any]:
+def analyze_fault_patterns(df: pd.DataFrame, target_col: str, n_clusters: int = 3) -> dict[str, Any]:
     """
     工具4: 故障模式聚类分析
 

@@ -3,7 +3,7 @@ from typing import cast
 import pandas as pd
 
 
-def filter_fault_samples(df: pd.DataFrame, target_col: str = "fail") -> pd.DataFrame:
+def filter_fault_samples(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
     """
     工具: 过滤故障样本
 
@@ -11,7 +11,7 @@ def filter_fault_samples(df: pd.DataFrame, target_col: str = "fail") -> pd.DataF
 
     Args:
         df: 包含故障标签的数据框
-        target_col: 故障标签列名，默认为"fail"
+        target_col: 故障标签列名
 
     Returns:
         仅包含故障样本的数据框
@@ -26,7 +26,7 @@ def filter_fault_samples(df: pd.DataFrame, target_col: str = "fail") -> pd.DataF
     return cast("pd.DataFrame", fault_samples)
 
 
-def filter_normal_samples(df: pd.DataFrame, target_col: str = "fail") -> pd.DataFrame:
+def filter_normal_samples(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
     """
     工具: 过滤正常样本
 
@@ -34,7 +34,7 @@ def filter_normal_samples(df: pd.DataFrame, target_col: str = "fail") -> pd.Data
 
     Args:
         df: 包含故障标签的数据框
-        target_col: 故障标签列名，默认为"fail"
+        target_col: 故障标签列名
 
     Returns:
         仅包含正常样本的数据框
