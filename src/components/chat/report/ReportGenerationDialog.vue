@@ -90,6 +90,7 @@ const downloadReport = async () => {
   try {
     await reportAPI.downloadReportPDF(generatedReport.value, reportTitle.value, reportFigures.value);
     ElMessage.success('报告下载成功');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('下载报告失败:', error);
     ElMessage.error('下载报告失败: ' + (error?.response?.data?.detail || error?.message || error));
