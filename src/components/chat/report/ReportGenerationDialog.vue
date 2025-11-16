@@ -69,9 +69,32 @@ const generateReport = async () => {
       sessionStore.currentSessionId,
       selectedTemplateId.value === 'default' ? undefined : selectedTemplateId.value
     );
-    generatedReport.value = result.report;
-    formattedReport.value = await formatMessage(result.report);
+    
+    // 替换图片占位符
+    let reportContent = result.report;
     reportFigures.value = result.figures || [];
+    
+    for (let i = 0; i < reportFigures.value.length; i++) {
+      const figure = reportFigures.value[i];
+      // 尝试替换多种占位符格式
+      const placeholders = [
+        `{{figure-${i}}}`,
+        `{figure-${i}}`,
+      ];
+      
+      for (const placeholder of placeholders) {
+        if (reportContent.includes(placeholder)) {
+          // 确保图片数据是完整的 data:image 格式
+          const imageData = figure.startsWith('data:image') 
+            ? figure 
+            : `data:image/png;base64,${figure}`;
+          reportContent = reportContent.replaceAll(placeholder, imageData);
+        }
+      }
+    }
+    
+    generatedReport.value = reportContent;
+    formattedReport.value = await formatMessage(reportContent);
     reportTitle.value = result.report_title || currentSessionName.value;
     ElMessage.success(`报告生成成功！使用模板：${result.template_used}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -309,6 +332,26 @@ const deleteTemplate = async (templateId: string) => {
   h3 {
     margin: 0 0 16px 0;
     color: #374151;
+  }
+
+  /* 限制报告中的图片尺寸 */
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.markdown-content {
+  /* 限制Markdown内容中的图片尺寸 */
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 }
 

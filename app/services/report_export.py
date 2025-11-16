@@ -54,12 +54,6 @@ def _process_image(image_data: str | bytes | Path, max_width: float = 15 * cm) -
                 base64_data = image_data.split(",", 1)[1] if "," in image_data else image_data
                 img_bytes = base64.b64decode(base64_data)
                 img_buffer = BytesIO(img_bytes)
-            elif image_data.startswith(("http://", "https://")):
-                logger.info(f"下载网络图片: {image_data[:100]}...")
-                # HTTP/HTTPS URL
-                with urlopen(image_data, timeout=10) as response:
-                    img_bytes = response.read()
-                    img_buffer = BytesIO(img_bytes)
             elif Path(image_data).exists():
                 logger.info(f"读取本地文件: {image_data}")
                 # 文件路径
