@@ -3,10 +3,11 @@ from pathlib import Path
 from typing import Any, Self, cast
 
 import anyio
+import anyio.lowlevel
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
-from app.core.agent.events import StreamEvent, process_stream_event
+from app.core.agent.events import StreamEvent, ToolCallEvent, build_tool_call_event, process_stream_event
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import SourcesDict
 from app.core.agent.sources import Sources
@@ -129,22 +130,41 @@ class DataAnalyzerAgent:
         prefix = f"<c>{self.ctx.session_id}</> |"
         logger.info(f"{prefix} 开始处理用户输入: <y>{escape_tag(user_input)}</>")
 
-        async for event in self.ctx.graph.astream(
-            {"messages": [{"role": "user", "content": user_input}]},
-            self.ctx.runnable_config,
-            stream_mode="messages",
-        ):
-            if not isinstance(event, tuple) or len(event) != 2:
-                continue
-            message, metadata = cast("tuple[BaseMessage, dict[str, Any]]", event)
-            if isinstance(message, AIMessage) and metadata.get("langgraph_node") != "agent":
-                continue
-            for evt in process_stream_event(message, lookup_tool_source=self.ctx.lookup_tool_source):
-                if evt.type == "tool_call":
-                    logger.info(
-                        f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
-                        f"{escape_tag(str(evt.args))}"
-                    )
-                yield evt
+        event_send, event_recv = anyio.create_memory_object_stream[StreamEvent](0)
+
+        async def read_tool_calls() -> None:
+            while True:
+                for tc in self.ctx.flush_buffered_tool_calls():
+                    if evt := build_tool_call_event(tc, self.ctx.lookup_tool_source):
+                        logger.info(
+                            f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
+                            f"{escape_tag(str(evt.args))}"
+                        )
+                        await event_send.send(evt)
+                await anyio.lowlevel.checkpoint()
+
+        async def stream_graph() -> None:
+            async for event in self.ctx.graph.astream(
+                {"messages": [{"role": "user", "content": user_input}]},
+                self.ctx.runnable_config,
+                stream_mode="messages",
+            ):
+                if not isinstance(event, tuple) or len(event) != 2:
+                    continue
+                message, metadata = cast("tuple[BaseMessage, dict[str, Any]]", event)
+                if isinstance(message, AIMessage) and metadata.get("langgraph_node") != "agent":
+                    continue
+                for evt in process_stream_event(message, lookup_tool_source=self.ctx.lookup_tool_source):
+                    if not isinstance(evt, ToolCallEvent):  # see read_tool_calls()
+                        await event_send.send(evt)
+
+            tg.cancel_scope.cancel()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(stream_graph)
+            tg.start_soon(read_tool_calls)
+
+            async for event in event_recv:
+                yield event
 
         logger.success(f"{prefix} 处理完成")

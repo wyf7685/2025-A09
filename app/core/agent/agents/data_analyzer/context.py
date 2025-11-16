@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 import anyio
 import anyio.to_thread
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolCall
 from langchain_mcp_adapters.sessions import create_session
 from langchain_mcp_adapters.tools import _list_all_tools, convert_mcp_tool_to_langchain_tool
+from langgraph.prebuilt import ToolNode
 from mcp.types import Implementation as MCPImplementation
 
 from app.const import STATE_DIR, VERSION
@@ -26,6 +27,7 @@ from app.schemas.session import AgentModelConfig, AgentModelConfigFixed, Session
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Sequence
     from pathlib import Path
 
     from langchain_core.language_models import LanguageModelInput
@@ -33,11 +35,48 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
     from langgraph.graph.state import CompiledStateGraph
-    from langgraph.prebuilt import ToolNode
+    from langgraph.store.base import BaseStore
 
     from app.core.agent.sources import Sources
     from app.schemas.mcp import Connection
     from app.schemas.ml_model import MLModelInfo
+
+
+def _handle_tool_errors(error: Exception) -> str:
+    logger.exception("工具调用时发生错误")
+    return f"工具调用错误: {error!r}\n请修复后重试。"
+
+
+class AgentToolNode(ToolNode):
+    def __init__(
+        self,
+        tools: Sequence[BaseTool],
+        emit_tool_call: Callable[[ToolCall], object],
+    ) -> None:
+        super().__init__(tools, handle_tool_errors=_handle_tool_errors)
+        self._emit_tool_call = emit_tool_call
+
+    def _func(
+        self,
+        input: Any,
+        config: RunnableConfig,
+        *,
+        store: BaseStore | None = None,
+    ) -> Any:
+        for tc in self._parse_input(input, store)[0]:
+            self._emit_tool_call(tc)
+        return super()._func(input, config, store=store)
+
+    async def _afunc(
+        self,
+        input: Any,
+        config: RunnableConfig,
+        *,
+        store: BaseStore | None = None,
+    ) -> Any:
+        for tc in self._parse_input(input, store)[0]:
+            self._emit_tool_call(tc)
+        return await super()._afunc(input, config, store=store)
 
 
 @dataclasses.dataclass
@@ -54,6 +93,7 @@ class AgentContext:
     _saved_models: dict[str, Path] | None = None
     _mcp_instructions: str | None = None
     _tool_sources: dict[str, str] = dataclasses.field(default_factory=dict)
+    _buffered_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
@@ -193,14 +233,25 @@ class AgentContext:
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n\n".join(instructions))
         return mcp_tools
 
-    def _handle_tool_errors(self, error: Exception) -> str:
-        logger.exception("工具调用时发生错误")
-        return f"工具调用错误: {error!r}\n请修复后重试。"
+    async def _build_tool_node(self) -> ToolNode:
+        # Load Tools
+        builtin_tools = await self._load_builtin_tools()
+        mcp_tools = await self._load_mcp_tools()
+        self._tool_node = AgentToolNode(builtin_tools + mcp_tools, emit_tool_call=self._buffered_tool_calls.append)
+
+        logger.opt(colors=True).info(
+            "使用工具数: <y>{len(builtin_tools)}</>" + (f", MCP 工具数: <y>{len(mcp_tools)}</>" if mcp_tools else "")
+        )
+        return self._tool_node
+
+    def flush_buffered_tool_calls(self) -> Iterator[ToolCall]:
+        while self._buffered_tool_calls:
+            yield self._buffered_tool_calls.pop(0)
 
     async def build_graph(self) -> None:
         from langchain_core.runnables import RunnableLambda
         from langgraph.checkpoint.memory import InMemorySaver
-        from langgraph.prebuilt import ToolNode, create_react_agent
+        from langgraph.prebuilt import create_react_agent
 
         if self.lifespan is not None:
             with contextlib.suppress(BaseException):
@@ -211,9 +262,7 @@ class AgentContext:
         await self.lifespan.startup()
 
         # Load Tools
-        builtin_tools = await self._load_builtin_tools()
-        mcp_tools = await self._load_mcp_tools()
-        self._tool_node = ToolNode(builtin_tools + mcp_tools, handle_tool_errors=self._handle_tool_errors)
+        tool_node = await self._build_tool_node()
 
         # Prompt
         prompt = RunnableLambda(
@@ -225,13 +274,10 @@ class AgentContext:
         _fn = functools.partial(
             create_react_agent,
             model=self._get_chat_model,
-            tools=self._tool_node,
+            tools=tool_node,
             prompt=prompt,
             checkpointer=InMemorySaver(),
             pre_model_hook=self.pre_model_hook,
         )
         self._graph = await anyio.to_thread.run_sync(_fn)
-        logger.opt(colors=True).info(
-            f"创建数据分析 Agent: <c>{self.session_id}</>, 使用工具数: <y>{len(builtin_tools)}</>"
-            + (f", MCP 工具数: <y>{len(mcp_tools)}</>" if mcp_tools else "")
-        )
+        logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>")
