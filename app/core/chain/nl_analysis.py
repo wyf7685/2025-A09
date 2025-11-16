@@ -16,6 +16,7 @@ _filter_patterns = [
     re.compile(r"plt\.rcParams\[.font\.sans-serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.sans-serif"] = [...]
     re.compile(r"plt\.rcParams\[.font\.serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.serif"] = [...]
     re.compile(r"sns\.set_theme\s*\(.*?\)"),  # sns.set_theme(...)
+    re.compile(r"sns\.set_style\s*\(.*?\)"),  # sns.set_style(...)
 ]
 
 

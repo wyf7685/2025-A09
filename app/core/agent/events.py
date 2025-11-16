@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncIterable, Callable, Iterable
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessage
 from mcp.types import ImageContent
 from pydantic import BaseModel, Field, Tag
 
@@ -62,6 +62,21 @@ def fix_message_content(content: str | list[Any]) -> str:
     return str(content) if content else ""
 
 
+def build_tool_call_event(
+    tool_call: ToolCall,
+    lookup_tool_source: Callable[[str], str | None] | None = None,
+) -> ToolCallEvent | None:
+    if tool_call["id"] is None:
+        return None
+    return ToolCallEvent(
+        id=tool_call["id"],
+        name=tool_call["name"],
+        human_repr=tool_name_human_repr(tool_call["name"]),
+        source=lookup_tool_source and lookup_tool_source(tool_call["name"]),
+        args=tool_call["args"],
+    )
+
+
 def process_stream_event(
     message: BaseMessage,
     *,
@@ -72,15 +87,8 @@ def process_stream_event(
         case AIMessage(content=content, tool_calls=tool_calls):
             yield LlmTokenEvent(content=fix_message_content(content))
             for tool_call in tool_calls:
-                if tool_call["id"] is None:
-                    continue
-                yield ToolCallEvent(
-                    id=tool_call["id"],
-                    name=tool_call["name"],
-                    human_repr=tool_name_human_repr(tool_call["name"]),
-                    source=lookup_tool_source and lookup_tool_source(tool_call["name"]),
-                    args=tool_call["args"],
-                )
+                if evt := build_tool_call_event(tool_call, lookup_tool_source):
+                    yield evt
         case ToolMessage(status="success", tool_call_id=tool_call_id, content=content, artifact=artifact):
             with contextlib.suppress(Exception):
                 success = json.loads(fix_message_content(content))["success"]

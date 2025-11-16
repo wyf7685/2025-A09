@@ -6,16 +6,14 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { checkHealth } from '@/utils/api';
 
 // 获取环境变量
 const env = import.meta.env;
 const icpNumber = env.VITE_ICP_NUMBER;
 const policeNumber = env.VITE_POLICE_NUMBER;
+const policeString = env.VITE_POLICE_STRING;
 const companyName = env.VITE_COMPANY_NAME;
-
-const props = defineProps<{
-  apiStatus: boolean;
-}>();
 
 const router = useRouter();
 const loginStore = useLoginStore();
@@ -45,7 +43,10 @@ const loading = ref(false);
 const handleLogin = async (formEl?: FormInstance) => {
   if (!formEl) return;
 
-  if (!props.apiStatus) {
+  try {
+    await checkHealth();
+  } catch (error) {
+    console.error('健康检查失败:', error);
     ElMessage.error('无法连接到服务器，请稍后再试');
     return;
   }
@@ -120,20 +121,20 @@ const handleLogin = async (formEl?: FormInstance) => {
     </div>
 
     <!-- 备案信息 -->
-    <div class="beian" v-if="icpNumber || policeNumber">
+    <div class="beian" v-if="icpNumber || (policeNumber && policeString)">
       <div class="beian-links">
         <template v-if="icpNumber">
           <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
             {{ icpNumber }}
           </a>
         </template>
-        <template v-if="icpNumber && policeNumber">
+        <template v-if="icpNumber && (policeNumber && policeString)">
           <span class="divider">|</span>
         </template>
-        <template v-if="policeNumber">
+        <template v-if="policeNumber && policeString">
           <img src="//www.beian.gov.cn/img/ghs.png" alt="公安备案图标" class="beian-icon" />
-          <a href="http://www.beian.gov.cn/" target="_blank" rel="noopener noreferrer">
-            {{ policeNumber }}
+          <a :href="`http://www.beian.gov.cn/#/query/webSearch?code=${policeNumber}`" rel="noreferrer" target="_blank">
+            {{ policeString }}
           </a>
         </template>
       </div>

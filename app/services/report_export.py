@@ -3,7 +3,9 @@
 """
 
 import base64
+import contextlib
 import re
+import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -125,11 +127,27 @@ def _register_chinese_fonts() -> str:
     Returns:
         可用的中文字体名称
     """
-    # Windows 字体目录
-    font_dirs = [
-        Path(r"C:\Windows\Fonts"),
-        Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts",
-    ]
+    if sys.platform == "win32":
+        # Windows 字体目录
+        font_dirs = [
+            Path("C:\\Windows\\Fonts"),
+            Path("~\\AppData\\Local\\Microsoft\\Windows\\Fonts").expanduser(),
+        ]
+    elif sys.platform == "darwin":
+        # macOS 字体目录
+        font_dirs = [
+            Path("/System/Library/Fonts"),
+            Path("/Library/Fonts"),
+            Path("~/Library/Fonts").expanduser(),
+        ]
+    else:
+        # Linux 字体目录
+        font_dirs = [
+            Path("/usr/share/fonts"),
+            Path("/usr/local/share/fonts"),
+            Path("~/.fonts").expanduser(),
+            Path("~/.local/share/fonts").expanduser(),
+        ]
 
     # 尝试的字体列表（按优先级）
     font_candidates = [
@@ -138,23 +156,19 @@ def _register_chinese_fonts() -> str:
         ("Microsoft YaHei", "msyh.ttc"),  # 微软雅黑
         ("Microsoft YaHei", "msyhbd.ttc"),  # 微软雅黑粗体
         ("SimHei", "simhei.ttf"),  # 黑体
+        ("Noto Sans CJK SC", "NotoSansCJKsc-Regular.otf"),  # 思源黑体简体
+        ("WenQuanYi Zen Hei", "WenQuanYiZenHei.ttf"),  # 文泉驿正黑
     ]
-
-    from app.log import logger
 
     registered_font = None
 
     for font_name, font_file in font_candidates:
-        for font_dir in font_dirs:
-            font_path = font_dir / font_file
-            if font_path.exists():
-                try:
-                    pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+        for font_dir in map(Path, font_dirs):
+            if (font_path := font_dir / font_file).exists():
+                with contextlib.suppress(Exception):
+                    pdfmetrics.registerFont(TTFont(font_name, font_path))
                     registered_font = font_name
                     break
-                except Exception as e:
-                    logger.debug(f"注册字体 {font_name} 失败: {e}")
-                    continue
         if registered_font:
             break
 
