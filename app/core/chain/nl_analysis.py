@@ -15,21 +15,19 @@ _filter_patterns = [
     re.compile(r"plt\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*"),  # plt.rcParams["axes.unicode_minus"] = ...
     re.compile(r"plt\.rcParams\[.font\.sans-serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.sans-serif"] = [...]
     re.compile(r"plt\.rcParams\[.font\.serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.serif"] = [...]
+    re.compile(r"sns\.set_theme\s*\(.*?\)"),  # sns.set_theme(...)
 ]
-
-
-def code_filter(text: str) -> str:
-    # 过滤 plt.rcParams[] 设置中文字体的代码
-    for pattern in _filter_patterns:
-        text = pattern.sub("", text)
-    return text
 
 
 def code_parser(text: str) -> str:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     if match := re.search(r"```(.*?)```", text, re.DOTALL):
         text = match.group(1).strip()
-    return code_filter(text.removeprefix("python").strip())
+    text = text.removeprefix("python").strip()
+    # 过滤 plt.rcParams[] 设置中文字体的代码
+    for pattern in _filter_patterns:
+        text = pattern.sub("", text)
+    return text
 
 
 PROMPT_GENERATE_CODE = """\
@@ -89,7 +87,7 @@ PROMPT_GENERATE_CODE = """\
 6. 绘图字体应使用系统提供的字体，如'WenQuanYi Micro Hei'，而不是'SimHei'
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
-允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、statsmodels
+允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
 """
 
@@ -162,7 +160,7 @@ PROMPT_FIX_CODE = """\
 9. 禁止使用seaborn库，因为它会导致中文字体显示问题
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
-允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、statsmodels
+允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels
 代码执行环境: Python 3.12, Debian bookworm
 """
 

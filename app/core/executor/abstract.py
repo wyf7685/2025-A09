@@ -12,6 +12,12 @@ from .utils import ExecuteResult
 class AbstractCodeExecutor(ABC):
     @abstractmethod
     def __init__(self, data_source: DataSource) -> None: ...
+    @abstractmethod
+    def start(self) -> None: ...
+    @abstractmethod
+    def stop(self) -> None: ...
+    @abstractmethod
+    def execute(self, code: str) -> ExecuteResult: ...
 
     def __enter__(self) -> Self:
         """使用上下文管理器启动容器"""
@@ -22,19 +28,8 @@ class AbstractCodeExecutor(ABC):
         """退出上下文管理器时关闭容器"""
         self.stop()
 
-    @abstractmethod
-    def start(self) -> None:
-        """启动Docker容器"""
-
-    @abstractmethod
-    def stop(self) -> None:
-        """停止并移除Docker容器"""
-
     async def astop(self) -> None:
         await anyio.to_thread.run_sync(self.stop)
-
-    @abstractmethod
-    def execute(self, code: str) -> ExecuteResult: ...
 
     def _check_code(self, code: str) -> ExecuteResult | None:
         # 验证代码语法

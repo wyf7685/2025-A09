@@ -8,7 +8,6 @@ from typing import cast, overload
 import anyio
 import anyio.from_thread
 import anyio.lowlevel
-import sniffio
 from anyio.abc import TaskGroup
 
 from app.log import logger
@@ -111,7 +110,6 @@ class Lifespan:
 
     async def startup(self) -> None:
         self._token = anyio.lowlevel.current_token()
-        self._asynclib_name = sniffio.current_async_library()
 
         if self._state != LifespanState.INITIAL:
             raise RuntimeError("Lifespan already started or starting")

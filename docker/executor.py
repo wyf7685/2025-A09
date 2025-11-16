@@ -19,6 +19,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns  # pyright: ignore[reportMissingModuleSource]
 from matplotlib.font_manager import FontProperties
 
 
@@ -68,6 +69,9 @@ def configure_matplotlib() -> None:
     plt.rcParams["axes.axisbelow"] = True  # 网格线置于数据之下
     plt.rcParams["figure.autolayout"] = True  # 自动调整布局
 
+    # 应用Seaborn主题
+    sns.set_theme(rc={"font.sans-serif": plt.rcParams["font.sans-serif"], "font.serif": plt.rcParams["font.serif"]})
+
 
 # 应用配置
 configure_matplotlib()
@@ -77,6 +81,7 @@ context = {
     "np": np,
     "plt": plt,
     "mpl": mpl,
+    "sns": sns,
     "__builtins__": __builtins__,
 }
 

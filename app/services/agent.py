@@ -22,6 +22,7 @@ AGENT_IDLE_SECONDS = 60 * 30  # 30 mins
 
 @dataclasses.dataclass
 class AgentState:
+    session_id: str
     agent: DataAnalyzerAgent | None = None
     locked: bool = False
     scope: anyio.CancelScope | None = None
@@ -30,7 +31,7 @@ class AgentState:
     @contextlib.contextmanager
     def lock(self) -> Iterator[None]:
         if self.locked:
-            raise AgentInUse("Agent is already in use")
+            raise AgentInUse(self.session_id)
 
         self.locked = True
         try:
@@ -97,23 +98,22 @@ class DataAnalyzerAgentService:
         if session_id not in self.agents or (state := self.agents[session_id]).agent is None:
             raise AgentNotFound(session_id)
 
-        with state.lock():
-            await self._cancel(session_id)
+        await self._cancel(session_id)
 
-            agent = state.agent
-            state.agent = None
+        agent = state.agent
+        state.agent = None
 
-            if save_state:
-                try:
-                    await agent.save_state()
-                except Exception:
-                    logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
-
+        if save_state:
             try:
-                await agent.destroy()
-                logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+                await agent.save_state()
             except Exception:
-                logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
+                logger.opt(colors=True).exception(f"保存会话 <c>{escape_tag(session_id)}</> 的 Agent 状态失败")
+
+        try:
+            await agent.destroy()
+            logger.opt(colors=True).info(f"已销毁会话 <c>{escape_tag(session_id)}</> 的 Agent")
+        except Exception:
+            logger.opt(colors=True).exception(f"销毁会话 <c>{escape_tag(session_id)}</> 的 Agent 失败")
 
         if pop:
             self.agents.pop(session_id, None)
@@ -141,7 +141,7 @@ class DataAnalyzerAgentService:
     @contextlib.asynccontextmanager
     async def use_agent(self, session: Session) -> AsyncIterator[DataAnalyzerAgent]:
         if session.id not in self.agents:
-            self.agents[session.id] = AgentState()
+            self.agents[session.id] = AgentState(session_id=session.id)
 
         state = self.agents[session.id]
         with state.lock():
