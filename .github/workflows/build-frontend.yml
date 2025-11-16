@@ -70,4 +70,5 @@ jobs:
             VITE_API_BASE_URL=/api
             VITE_ICP_NUMBER=${{ secrets.VITE_ICP_NUMBER }}
             VITE_POLICE_NUMBER=${{ secrets.VITE_POLICE_NUMBER }}
+            VITE_POLICE_STRING=${{ secrets.VITE_POLICE_STRING }}
             VITE_COMPANY_NAME=${{ secrets.VITE_COMPANY_NAME }}
