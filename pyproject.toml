@@ -33,6 +33,7 @@ dependencies = [
   "pyarrow>=19.0.1",
   "pydremio>=0.4.0",
   "pyjwt>=2.10.1",
+  "reportlab>=4.2.5",
   "requests>=2.32.0",
   "scikit-learn>=1.7.0",
   "scipy>=1.16.0",

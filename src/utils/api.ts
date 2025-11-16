@@ -327,4 +327,24 @@ export const reportAPI = {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   },
+
+  downloadReportPDF: async (content: string, title: string, figures: string[] = []): Promise<void> => {
+    const response = await api.post('/chat/download-report-pdf', {
+      report_content: content,
+      report_title: title,
+      figures: figures,
+    }, {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `${title}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
 };

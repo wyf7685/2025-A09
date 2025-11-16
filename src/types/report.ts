@@ -6,3 +6,11 @@ export interface ReportTemplate {
   is_default: boolean; // 是否为默认模板
   created_at: string; // 创建时间
 }
+
+export interface GenerateReportResponse {
+  session_id: string;
+  report: string;
+  figures: string[];
+  template_used: string;
+  report_title: string;
+}

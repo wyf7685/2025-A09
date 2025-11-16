@@ -19,6 +19,7 @@ from app.log import logger
 from app.schemas.chat import ChatEntry, UserChatMessage
 from app.schemas.session import Session, SessionID
 from app.services.agent import daa_service
+from app.services.report_export import markdown_to_pdf, sanitize_filename
 from app.services.session import session_service
 from app.utils import buffered_stream, escape_tag
 
@@ -235,6 +236,8 @@ class GenerateReportResponse(BaseModel):
     report: str
     figures: list[str]
     template_used: str
+    report_title: str
+    report_title: str
 
 
 @router.post("/generate-report")
@@ -282,13 +285,19 @@ async def generate_report(request: GenerateReportRequest, session: CurrentSessio
                     detail="当前会话没有对话记录，请先进行数据分析对话",
                 )
 
+            # 生成报告内容
             summary, figures = await agent.summary(template_content)
+
+            # 生成报告标题
+            report_title = await agent.create_title()
+            logger.info(f"生成报告标题: {report_title}")
 
         return GenerateReportResponse(
             session_id=session.id,
             report=summary,
             figures=figures,
             template_used=template_name,
+            report_title=report_title,
         )
 
     except HTTPException:
@@ -300,4 +309,89 @@ async def generate_report(request: GenerateReportRequest, session: CurrentSessio
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"生成分析报告失败: {e}",
+        ) from e
+
+
+class DownloadReportRequest(BaseModel):
+    """下载报告请求"""
+
+    report_content: str
+    report_title: str
+    figures: list[str] = []  # Base64编码的图片列表
+
+
+@router.post("/download-report-pdf")
+async def download_report_pdf(request: DownloadReportRequest) -> StreamingResponse:
+    """下载 PDF 格式的报告"""
+    try:
+        import tempfile
+        from pathlib import Path
+        from urllib.parse import quote
+
+        # 清理文件名
+        safe_filename = sanitize_filename(request.report_title)
+        if not safe_filename:
+            safe_filename = "分析报告"
+
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".pdf", delete=False) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+
+        try:
+            # 替换图片占位符
+            report_content = request.report_content
+            for i, figure_data in enumerate(request.figures):
+                # 确保 figure_data 是完整的 data:image 格式
+                if not figure_data.startswith("data:image"):
+                    figure_data = f"data:image/png;base64,{figure_data}"
+
+                # 尝试替换多种占位符格式
+                placeholders = [
+                    f"{{{{figure-{i}}}}}",  # {{figure-0}}
+                    f"{{figure-{i}}}",  # {figure-0}
+                ]
+
+                replaced = False
+                for placeholder in placeholders:
+                    if placeholder in report_content:
+                        report_content = report_content.replace(placeholder, figure_data)
+                        logger.info(f"替换图片占位符: {placeholder}")
+                        replaced = True
+                        break
+
+                if not replaced:
+                    logger.warning(f"未找到图片占位符 figure-{i}，尝试的格式: {placeholders}")
+
+            # 转换为 PDF
+            markdown_to_pdf(report_content, tmp_path)
+
+            # 读取 PDF 文件
+            pdf_content = tmp_path.read_bytes()
+
+            # 删除临时文件
+            tmp_path.unlink()
+
+            # 对文件名进行 URL 编码（RFC 5987 格式）
+            encoded_filename = quote(f"{safe_filename}.pdf")
+
+            # 返回 PDF 文件
+            return StreamingResponse(
+                iter([pdf_content]),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "Content-Type": "application/pdf",
+                },
+            )
+        except Exception:
+            # 确保删除临时文件
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
+
+    except Exception as e:
+        logger.exception("下载报告失败")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下载报告失败: {e}",
         ) from e
