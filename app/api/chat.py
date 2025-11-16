@@ -3,10 +3,13 @@
 """
 
 import json
+import tempfile
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -237,7 +240,6 @@ class GenerateReportResponse(BaseModel):
     figures: list[str]
     template_used: str
     report_title: str
-    report_title: str
 
 
 @router.post("/generate-report")
@@ -324,10 +326,6 @@ class DownloadReportRequest(BaseModel):
 async def download_report_pdf(request: DownloadReportRequest) -> StreamingResponse:
     """下载 PDF 格式的报告"""
     try:
-        import tempfile
-        from pathlib import Path
-        from urllib.parse import quote
-
         # 清理文件名
         safe_filename = sanitize_filename(request.report_title)
         if not safe_filename:
