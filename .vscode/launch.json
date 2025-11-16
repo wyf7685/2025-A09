@@ -23,7 +23,8 @@
       "cwd": "${workspaceFolder}/mcp_servers/fault_diagnosis",
       "env": {
         "APP_HOST": "127.0.0.1",
-        "APP_PORT": "8000"
+        "APP_PORT": "8000",
+        "AGENT_API_BASE_URL": "http://localhost:8081/api"
       }
     }
   ],

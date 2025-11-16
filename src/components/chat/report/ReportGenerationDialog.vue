@@ -21,6 +21,7 @@ const selectedTemplateId = ref<string>('default');
 const generatedReport = ref<string>('');
 const formattedReport = ref<string>('');
 const reportFigures = ref<string[]>([]);
+const reportTitle = ref<string>('');
 const viewingTemplate = ref<ReportTemplate | null>(null);
 const uploadTemplateDialogVisible = ref(false);
 
@@ -71,8 +72,9 @@ const generateReport = async () => {
     generatedReport.value = result.report;
     formattedReport.value = await formatMessage(result.report);
     reportFigures.value = result.figures || [];
+    reportTitle.value = result.report_title || currentSessionName.value;
     ElMessage.success(`报告生成成功！使用模板：${result.template_used}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('生成报告失败:', error);
     ElMessage.error('生成报告失败: ' + (error?.response?.data?.detail || error?.message || error));
@@ -81,14 +83,17 @@ const generateReport = async () => {
   }
 };
 
-// 下载报告
-const downloadReport = () => {
+// 下载报告（PDF 格式）
+const downloadReport = async () => {
   if (!generatedReport.value) return;
 
-  const filename = `${currentSessionName.value}_分析报告_${new Date().toISOString().slice(0, 19).replace('T', '_')}.md`;
-
-  reportAPI.downloadReport(generatedReport.value, filename);
-  ElMessage.success('报告下载成功');
+  try {
+    await reportAPI.downloadReportPDF(generatedReport.value, reportTitle.value, reportFigures.value);
+    ElMessage.success('报告下载成功');
+  } catch (error: any) {
+    console.error('下载报告失败:', error);
+    ElMessage.error('下载报告失败: ' + (error?.response?.data?.detail || error?.message || error));
+  }
 };
 
 // 查看选中的模板
