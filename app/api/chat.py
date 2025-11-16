@@ -344,13 +344,13 @@ async def download_report_pdf(request: DownloadReportRequest) -> StreamingRespon
                 # 确保 figure_data 是完整的 data:image 格式
                 if not figure_data.startswith("data:image"):
                     figure_data = f"data:image/png;base64,{figure_data}"
-                
+
                 # 尝试替换多种占位符格式
                 placeholders = [
                     f"{{{{figure-{i}}}}}",  # {{figure-0}}
-                    f"{{figure-{i}}}",      # {figure-0}
+                    f"{{figure-{i}}}",  # {figure-0}
                 ]
-                
+
                 replaced = False
                 for placeholder in placeholders:
                     if placeholder in report_content:
@@ -358,7 +358,7 @@ async def download_report_pdf(request: DownloadReportRequest) -> StreamingRespon
                         logger.info(f"替换图片占位符: {placeholder}")
                         replaced = True
                         break
-                
+
                 if not replaced:
                     logger.warning(f"未找到图片占位符 figure-{i}，尝试的格式: {placeholders}")
 
