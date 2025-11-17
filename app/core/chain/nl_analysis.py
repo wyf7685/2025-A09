@@ -11,10 +11,10 @@ from ._base import BaseLLMRunnable
 from .llm import LLM
 
 _filter_patterns = [
-    re.compile(r"plt\.rcParams\[.font\.family.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.family"] = [...]
-    re.compile(r"plt\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*"),  # plt.rcParams["axes.unicode_minus"] = ...
-    re.compile(r"plt\.rcParams\[.font\.sans-serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.sans-serif"] = [...]
-    re.compile(r"plt\.rcParams\[.font\.serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.serif"] = [...]
+    re.compile(r"(plt|mpl)\.rcParams\[.font\.family.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.family"] = [...]
+    re.compile(r"(plt|mpl)\.rcParams\[.axes\.unicode_minus.\]\s*=\s*.*"),  # plt.rcParams["axes.unicode_minus"] = ...
+    re.compile(r"(plt|mpl)\.rcParams\[.font\.sans-serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.sans-serif"] = [...]
+    re.compile(r"(plt|mpl)\.rcParams\[.font\.serif.\]\s*=\s*\[.*?\]"),  # plt.rcParams["font.serif"] = [...]
     re.compile(r"sns\.set_theme\s*\(.*?\)"),  # sns.set_theme(...)
     re.compile(r"sns\.set_style\s*\(.*?\)"),  # sns.set_style(...)
 ]
@@ -77,7 +77,6 @@ PROMPT_GENERATE_CODE = """\
 3. 禁止尝试写入或读取外部文件
 4. 禁止覆盖或重新定义'df'变量
 5. 禁止使用不在Docker环境中的字体，如'SimHei'、'SimSun'、'Microsoft YaHei'等
-6. 禁止使用seaborn库，因为它会导致中文字体显示问题
 
 ## 重要警告
 1. 'df'变量已预先定义，直接使用即可，不需要检查其是否存在
@@ -158,7 +157,6 @@ PROMPT_FIX_CODE = """\
 6. 禁止导入sklearn等机器学习库和其他非标准分析库
 7. 禁止尝试写入或读取外部文件
 8. 绘图字体必须使用Docker环境中可用的字体，如'WenQuanYi Micro Hei'，不要使用'SimHei'、'SimSun'或'Microsoft YaHei'
-9. 禁止使用seaborn库，因为它会导致中文字体显示问题
 
 Docker环境已经配置了中文字体支持，可以直接在图表中使用中文标题、标签和注释。
 允许使用的库: Python标准库、numpy、pandas、scipy、matplotlib、seaborn、statsmodels

@@ -41,6 +41,7 @@ const getProviderColor = (provider: string): string => {
     'DeepSeek': '#8b5cf6',
     'Ollama': '#000000',
     'ZhipuAI': '#1e88e5',
+    'OpenAI兼容': '#6366f1',
     // 'Anthropic': '#d97706',
   };
   return colorMap[provider] || '#6b7280';
@@ -51,27 +52,32 @@ const modelProviders = [
   {
     name: 'OpenAI',
     models: ['gpt-4', 'gpt-3.5-turbo', 'gpt-4-turbo'],
-    defaultUrl: 'https://api.openai.com/v1'
+    defaultUrl: 'https://api.openai.com/v1',
   },
   {
     name: 'Google',
     models: ['gemini-2.0-flash', 'gemini-1.5-pro'],
-    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta'
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta',
   },
   {
     name: 'DeepSeek',
     models: ['deepseek-chat', 'deepseek-reasoner'],
-    defaultUrl: 'https://api.deepseek.com/v1'
+    defaultUrl: 'https://api.deepseek.com/v1',
   },
   {
     name: 'Ollama',
     models: ['llama3.2', 'llama3.1', 'qwen2.5', 'mistral', 'gemma2'],
-    defaultUrl: 'http://localhost:11434'
+    defaultUrl: 'http://localhost:11434',
   },
   {
     name: 'ZhipuAI',
     models: ['glm-4.5', 'glm-4.5-air', 'glm-4.6'],
-    defaultUrl: 'https://open.bigmodel.cn/api/paas/v4'
+    defaultUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  },
+  {
+    name: 'OpenAI兼容',
+    models: ['gpt-4', 'gpt-3.5-turbo', 'custom-model'],
+    defaultUrl: 'https://api.example.com/v1',
   },
 ];
 
@@ -126,9 +132,18 @@ const getDefaultApiUrl = (provider: string): string => {
     'DeepSeek': 'https://api.deepseek.com/v1',
     'Ollama': 'http://localhost:11434',
     'ZhipuAI': 'https://open.bigmodel.cn/api/paas/v4',
+    'OpenAI兼容': 'https://api.example.com/v1',
     'Anthropic': 'https://api.anthropic.com/v1'
   };
   return defaultUrls[provider] || '';
+};
+
+// 转换前端提供商名称为后端格式
+const convertProviderToBackend = (provider: string): string => {
+  const providerMap: Record<string, string> = {
+    'OpenAI兼容': 'OpenAI-Compat',
+  };
+  return providerMap[provider] || provider;
 };
 
 const getDialogTitle = (): string => {
@@ -183,11 +198,14 @@ const saveLLMModel = async (): Promise<void> => {
     // 直接使用选择的模型名称作为API调用名称（因为它来自预设列表，保证正确）
     const apiModelName = llmModelForm.value.modelName;
 
+    // 转换提供商名称为后端格式
+    const backendProvider = convertProviderToBackend(llmModelForm.value.provider);
+
     if (currentEditLLMModel.value) {
       // 编辑现有模型
       const updateData: LLMModelEditParams = {
         name: llmModelForm.value.name,
-        provider: llmModelForm.value.provider,
+        provider: backendProvider,
         api_url: finalApiUrl,
         model_name: llmModelForm.value.modelName,
         api_model_name: apiModelName
@@ -202,7 +220,7 @@ const saveLLMModel = async (): Promise<void> => {
       // 添加新模型
       await modelStore.submitCustomModel({
         name: llmModelForm.value.name,
-        provider: llmModelForm.value.provider,
+        provider: backendProvider,
         api_key: llmModelForm.value.apiKey,
         api_url: finalApiUrl,
         model_name: llmModelForm.value.modelName,

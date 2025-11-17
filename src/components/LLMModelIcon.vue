@@ -13,6 +13,8 @@ const standardIcons = {
   'Google': { icon: 'logos:google-icon', color: '#4285f4' },
   'Anthropic': { icon: 'simple-icons:anthropic', color: '#d97706' },
   'Ollama': { icon: 'simple-icons:ollama', color: '#000000' },
+  'OpenAI兼容': { icon: 'streamline-logos:openai-logo', color: '#6366f1' },
+  'OpenAI-Compat': { icon: 'streamline-logos:openai-logo', color: '#6366f1' },
 } as Record<string, { icon: string, color: string; }>;
 
 const extraIcons = {

@@ -127,7 +127,7 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             model=config.api_model_name,
             base_url=config.api_url,
         )
-    elif config.provider.lower() == "zhipuai":
+    elif config.provider.lower() == "zhipuai" or config.provider.lower() == "openai":
         from langchain_openai import ChatOpenAI, OpenAI
 
         llm = lambda: OpenAI(
@@ -144,34 +144,11 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             timeout=30,  # 30秒超时
             max_retries=2,  # 最多重试2次
         )
-    # elif config.provider.lower() == "openai":
-    #     from langchain_openai import ChatOpenAI, OpenAI
-
-    #     llm = lambda: OpenAI(
-    #         model=config.api_model_name,
-    #         api_key=SecretStr(config.api_key),
-    #         base_url=config.api_url,
-    #         timeout=30,  # 30秒超时
-    #         max_retries=2,  # 最多重试2次
-    #     )
-    #     chat_model = lambda: ChatOpenAI(
-    #         model=config.api_model_name,
-    #         api_key=SecretStr(config.api_key),
-    #         base_url=config.api_url,
-    #         timeout=30,  # 30秒超时
-    #         max_retries=2,  # 最多重试2次
-    #     )
     else:
         # 默认使用 OpenAI 兼容格式
         from langchain_openai import ChatOpenAI, OpenAI
 
-        llm = lambda: OpenAI(
-            model=config.api_model_name,
-            api_key=SecretStr(config.api_key),
-            base_url=config.api_url,
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
-        )
+        llm = None
         chat_model = lambda: ChatOpenAI(
             model=config.api_model_name,
             api_key=SecretStr(config.api_key),
