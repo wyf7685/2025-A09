@@ -7,9 +7,9 @@ def register_tool_name(tool_name: str, human_repr: str) -> None:
     TOOL_NAMES[tool_name] = human_repr
 
 
-def register_tool[T: Callable](name: str) -> Callable[[T], T]:
+def register_tool[T: Callable](human_repr: str) -> Callable[[T], T]:
     def decorator(func: T) -> T:
-        register_tool_name(func.__name__, name)
+        register_tool_name(func.__name__, human_repr)
         return func
 
     return decorator

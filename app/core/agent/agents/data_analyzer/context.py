@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
-import threading
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
@@ -103,7 +102,7 @@ class AgentContext:
     def runnable_config(self) -> RunnableConfig:
         from langchain_core.runnables import ensure_config
 
-        return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
+        return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": self.session_id}})
 
     @property
     def graph(self) -> AgentGraph:
@@ -258,22 +257,21 @@ class AgentContext:
         tool_node = await self._build_tool_node()
 
         # Prompt
-        prompt = RunnableLambda(
-            self._generate_model_prompt,
-            name="Prompt",
-        )
+        prompt = RunnableLambda(self._generate_model_prompt, name="Prompt")
+
+        def build_graph() -> AgentGraph:
+            graph = create_react_agent(
+                model=self._get_chat_model,
+                tools=tool_node,
+                prompt=prompt,
+                context_schema=AgentRuntimeContext,
+                checkpointer=InMemorySaver(),
+                pre_model_hook=self.pre_model_hook,
+            )
+            return cast("AgentGraph", graph)
 
         # Create Agent
-        _fn = functools.partial(
-            create_react_agent,
-            model=self._get_chat_model,
-            tools=tool_node,
-            prompt=prompt,
-            context_schema=AgentRuntimeContext,
-            checkpointer=InMemorySaver(),
-            pre_model_hook=self.pre_model_hook,
-        )
-        self._graph = cast("AgentGraph", await anyio.to_thread.run_sync(_fn))
+        self._graph = await anyio.to_thread.run_sync(build_graph)
         logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>")
 
     async def create_runtime_context(self) -> AgentRuntimeContext:

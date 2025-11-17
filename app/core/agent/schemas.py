@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.core.agent.tools.scikit.model import ModelInstanceInfo, TrainModelResult
     from app.schemas.session import AgentModelConfigFixed
 else:
-    ModelInstanceInfo = TrainModelResult = Any
+    Sources = ModelInstanceInfo = TrainModelResult = AgentModelConfigFixed = Any
 
 type DatasetID = str
 type SourcesDict = MutableMapping[DatasetID, DataSource]
@@ -70,15 +70,8 @@ def is_success[T: _Checkable](result: T | OperationFailedModel, /) -> TypeGuard[
 @dataclasses.dataclass
 class AgentRuntimeContext:
     session_id: SessionID
-
-    if TYPE_CHECKING:
-        sources: Sources
-        model_config: AgentModelConfigFixed
-
-    else:
-        sources: Any
-        model_config: Any
-
+    sources: Sources
+    model_config: AgentModelConfigFixed
     model_instance_cache: dict[str, ModelInstanceInfo]
     train_model_cache: dict[str, TrainModelResult]
     saved_models: dict[str, Path]
@@ -94,13 +87,9 @@ class AgentRuntimeContext:
         from langchain_core.runnables import ensure_config
         from langchain_core.runnables.config import set_config_context
         from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
-        from langgraph.config import get_config
         from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 
-        try:
-            config = get_config()
-        except BaseException:
-            config = ensure_config()
+        config = ensure_config()
         parent_runtime: Runtime[Any] = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
         runtime = parent_runtime.merge(Runtime(context=self))
         config.setdefault(CONF, {})[CONFIG_KEY_RUNTIME] = runtime
