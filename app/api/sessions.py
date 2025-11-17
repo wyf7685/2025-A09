@@ -259,9 +259,6 @@ async def add_models_to_session(session: CurrentSessionFromPath, request: AddMod
 
         await session_service.save_session(session)
 
-        # 清除Agent缓存，强制重新创建以加载新的模型
-        await daa_service.safe_destroy(session.id)
-
     except HTTPException:
         raise
     except Exception as e:

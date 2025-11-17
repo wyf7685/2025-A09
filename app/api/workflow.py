@@ -16,7 +16,7 @@ from app.schemas.workflow import ExecuteWorkflowRequest, SaveWorkflowRequest, Wo
 from app.services.agent import daa_service
 from app.services.session import session_service
 from app.services.workflow import execute_workflow_stream, extract_from_session, workflow_service
-from app.utils import buffered_stream
+from app.utils import buffered_stream, stream_with_heartbeats
 
 from ._depends import CurrentSessionFromBody
 
@@ -74,6 +74,20 @@ async def generate_workflow_execution_stream(
     datasource_mappings: dict[str, str],
 ) -> AsyncIterator[str]:
     """生成工作流执行的流式响应"""
+
+    async def stream_chat() -> AsyncIterator[str]:
+        async for event in buffered_stream(execute_workflow_stream(session, workflow, datasource_mappings), 10):
+            try:
+                msg = event.model_dump_json().replace("/", "\\/") + "\n"
+            except Exception:
+                logger.exception("转换事件为 JSON 失败")
+            else:
+                yield msg
+
+            chat_entry.add_stream_event(event)
+
+    heartbeat_payload = json.dumps({"type": "heart_beat"}) + "\n"
+
     try:
         # 构造工作流执行消息
         workflow_message = (
@@ -85,15 +99,8 @@ async def generate_workflow_execution_stream(
         chat_entry = ChatEntry(user_message=UserChatMessage(content=workflow_message))
 
         # 使用 workflow_service 的流式执行
-        async for event in buffered_stream(execute_workflow_stream(session, workflow, datasource_mappings), 10):
-            try:
-                msg = event.model_dump_json().replace("/", "\\/") + "\n"
-            except Exception:
-                logger.exception("转换事件为 JSON 失败")
-            else:
-                yield msg
-
-            chat_entry.add_stream_event(event)
+        async for msg in stream_with_heartbeats(stream_chat(), heartbeat_payload, interval=5.0):
+            yield msg
 
         # 记录对话历史
         chat_entry.merge_text()

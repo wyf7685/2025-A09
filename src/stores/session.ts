@@ -230,6 +230,7 @@ export const useSessionStore = defineStore('session', () => {
               onToolError(data.id, data.error);
             } else if (data.type === 'done') {
               onDone();
+            } else if (data.type === 'heart_beat') {
             } else if (data.error) {
               onError(data.error);
             }

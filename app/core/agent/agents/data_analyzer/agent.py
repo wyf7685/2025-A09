@@ -131,17 +131,6 @@ class DataAnalyzerAgent:
 
         event_send, event_recv = anyio.create_memory_object_stream[StreamEvent](0)
 
-        async def read_tool_calls() -> None:
-            while True:
-                for tc in self.ctx.flush_buffered_tool_calls():
-                    if evt := build_tool_call_event(tc, self.ctx.lookup_tool_source):
-                        logger.info(
-                            f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
-                            f"{escape_tag(str(evt.args))}"
-                        )
-                        await event_send.send(evt)
-                await anyio.lowlevel.checkpoint()
-
         async def stream_graph() -> None:
             async for event in self.ctx.graph.astream(
                 {"messages": [{"role": "user", "content": user_input}]},
@@ -159,6 +148,17 @@ class DataAnalyzerAgent:
                         await event_send.send(evt)
 
             tg.cancel_scope.cancel()
+
+        async def read_tool_calls() -> None:
+            while True:
+                for tc in self.ctx.flush_buffered_tool_calls():
+                    if evt := build_tool_call_event(tc, self.ctx.lookup_tool_source):
+                        logger.info(
+                            f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
+                            f"{escape_tag(str(evt.args))}"
+                        )
+                        await event_send.send(evt)
+                await anyio.lowlevel.checkpoint()
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(stream_graph)

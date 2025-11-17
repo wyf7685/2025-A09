@@ -237,6 +237,32 @@ async def buffered_stream[T](aiterable: AsyncIterable[T], max_buffer_size: float
                 yield item
 
 
+async def stream_with_heartbeats[T](
+    aiterable: AsyncIterable[T],
+    heartbeat: T,
+    interval: float = 5.0,
+) -> AsyncIterable[T]:
+    send, recv = anyio.create_memory_object_stream[T](0)
+
+    async def producer() -> None:
+        async with send:
+            async for item in aiterable:
+                await send.send(item)
+        tg.cancel_scope.cancel()
+
+    async def heartbeat_sender() -> None:
+        while True:
+            await anyio.sleep(interval)
+            await send.send(heartbeat)
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(producer)
+        tg.start_soon(heartbeat_sender)
+        async with recv:
+            async for item in recv:
+                yield item
+
+
 def suppress_exceptions[**P](
     *exceptions: type[BaseException],
     message: str | None = None,

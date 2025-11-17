@@ -24,7 +24,7 @@ from app.schemas.session import Session, SessionID
 from app.services.agent import daa_service
 from app.services.report_export import markdown_to_pdf, sanitize_filename
 from app.services.session import session_service
-from app.utils import buffered_stream, escape_tag
+from app.utils import buffered_stream, escape_tag, stream_with_heartbeats
 
 from ._depends import CurrentSessionFromBody
 
@@ -47,24 +47,34 @@ class ChatRequest(BaseModel):
 
 async def generate_chat_stream(request: ChatRequest, session: Session) -> AsyncIterator[str]:
     """生成聊天流响应"""
+
+    async def stream_chat() -> AsyncIterator[str]:
+        async for event in buffered_stream(agent.stream(request.message), max_buffer_size=10):
+            try:
+                msg = event.model_dump_json().replace("/", "\\/") + "\n"
+            except Exception:
+                logger.exception("转换事件为 JSON 失败")
+            else:
+                yield msg
+
+            chat_entry.add_stream_event(event)
+
+    async def update_title() -> None:
+        session.name = await agent.create_title()
+        await session_service.save_session(session)
+        logger.info(f"设置会话 {session.id} 名称为: {session.name}")
+
+    heartbeat_payload = json.dumps({"type": "heart_beat"}) + "\n"
+    chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
+
     try:
-        chat_entry = ChatEntry(user_message=UserChatMessage(content=request.message))
-
         async with daa_service.use_agent(session) as agent:
-            async for event in buffered_stream(agent.stream(request.message), max_buffer_size=10):
-                try:
-                    msg = event.model_dump_json() + "\n"
-                except Exception:
-                    logger.exception("转换事件为 JSON 失败")
-                else:
-                    yield msg
+            async for msg in stream_with_heartbeats(stream_chat(), heartbeat_payload, interval=5.0):
+                yield msg
 
-                chat_entry.add_stream_event(event)
-
-            # 设置会话名称
-            if len(session.chat_history) < 3:
-                session.name = await agent.create_title()
-                logger.info(f"设置会话 {session.id} 名称为: {session.name}")
+            # 更新会话名称
+            if len(session.chat_history) < 3 and agent.ctx.lifespan:
+                agent.ctx.lifespan.start_soon(update_title)
 
         # 记录对话历史
         chat_entry.merge_text()
@@ -76,11 +86,11 @@ async def generate_chat_stream(request: ChatRequest, session: Session) -> AsyncI
 
     except DAAServiceError as e:
         logger.warning(e)
-        yield json.dumps({"error": str(e)})
+        yield json.dumps({"type": "error", "error": str(e)})
 
     except Exception as e:
         logger.exception("流式对话分析失败")
-        yield json.dumps({"error": f"流式对话分析失败: {e!r}"})
+        yield json.dumps({"type": "error", "error": f"流式对话分析失败: {e!r}"})
 
 
 @router.post("/stream")
