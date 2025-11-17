@@ -9,12 +9,12 @@ from langchain_core.runnables import Runnable
 
 from app.core.agent.events import StreamEvent, ToolCallEvent, build_tool_call_event, process_stream_event
 from app.core.agent.prompts.data_analyzer import PROMPTS
-from app.core.agent.schemas import SourcesDict
+from app.core.agent.schemas import AgentRuntimeContext, SourcesDict
 from app.core.agent.sources import Sources
 from app.core.chain.llm import get_llm_async
 from app.log import logger
 from app.schemas.mcp import Connection
-from app.schemas.session import AgentModelConfigFixed, SessionID
+from app.schemas.session import SessionID
 from app.utils import escape_tag, run_sync
 
 from .context import AgentContext
@@ -79,7 +79,7 @@ class DataAnalyzerAgent:
         )
 
     @run_sync
-    def set_state(self, state: DataAnalyzerAgentState, model_config: AgentModelConfigFixed) -> None:
+    def set_state(self, state: DataAnalyzerAgentState, context: AgentRuntimeContext) -> None:
         """设置当前 agent 状态"""
         self.ctx.graph.update_state(self.ctx.runnable_config, state.values)
         self.ctx.saved_models.clear()
@@ -87,7 +87,7 @@ class DataAnalyzerAgent:
         self.ctx.sources.random_state = state.sources_random_state
         self.ctx.sources.reset()
         self._wf_data = state.workflow_data
-        resume_tool_calls(self.ctx.sources, model_config, state.workflow_data, state.values.get("messages", []))
+        resume_tool_calls(context, state.workflow_data, state.values.get("messages", []))
         logger.info(f"已恢复 agent 状态: {state.colorize()}")
 
     async def load_state(self, state_file: Path | None = None) -> None:
@@ -108,8 +108,7 @@ class DataAnalyzerAgent:
             logger.warning("无法加载 agent 状态: 状态文件格式错误")
             return
 
-        model_config = await self.ctx.get_model_config()
-        await self.set_state(state, model_config)
+        await self.set_state(state, await self.ctx.create_runtime_context())
 
     async def save_state(self, state_file: Path | None = None) -> None:
         """将当前 agent 状态保存到指定的状态文件。"""

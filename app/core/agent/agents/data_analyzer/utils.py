@@ -9,11 +9,11 @@ from app.const import STATE_DIR
 from app.core.agent.events import fix_message_content
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.resume import resume_tool_call
+from app.core.agent.schemas import AgentRuntimeContext
 from app.core.agent.sources import Sources
 from app.core.chain.llm import LLM
 from app.exception import AgentNotFound
 from app.log import logger
-from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
 from .schemas import DataAnalyzerAgentState, WorkflowData
@@ -45,8 +45,7 @@ def create_mapped_sources(
 
 
 def resume_tool_calls(
-    sources: Sources,
-    model_config: AgentModelConfigFixed,
+    context: AgentRuntimeContext,
     wf_data: WorkflowData,
     messages: list[AnyMessage],
 ) -> None:
@@ -56,24 +55,25 @@ def resume_tool_calls(
         m.tool_calls for m in messages if isinstance(m, AIMessage) and m.tool_calls
     )
     for tool_call in tool_calls:
-        call_sources = sources
+        call_sources = context.sources
         restore = None
         if tool_call["id"] and (wf_call_id := wf_data.tool_calls.get(tool_call["id"])):
             if wf_call_id not in wf_sources:
                 wf_meta = wf_data.call_meta[wf_call_id]
                 wf_sources[wf_call_id] = create_mapped_sources(
-                    original=sources,
+                    original=context.sources,
                     mapping=wf_meta.mapping,
                     random_state=wf_meta.random_state,
                 )
             call_sources, restore = wf_sources[wf_call_id]
 
-        try:
-            resume_tool_call(tool_call, {"sources": call_sources, "model_config": model_config})
-        except Exception as e:
-            logger.opt(colors=True, exception=True).warning(
-                f"恢复工具调用时出错: <y>{escape_tag(tool_call['name'])}</> - {escape_tag(str(e))}"
-            )
+        with context.copy_with(sources=call_sources).set() as ctx:
+            try:
+                ctx.run(resume_tool_call, tool_call)
+            except Exception as e:
+                logger.opt(colors=True, exception=True).warning(
+                    f"恢复工具调用时出错: <y>{escape_tag(tool_call['name'])}</> - {escape_tag(str(e))}"
+                )
 
         if restore is not None:
             restore()

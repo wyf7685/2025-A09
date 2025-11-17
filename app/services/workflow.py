@@ -3,11 +3,13 @@
 """
 
 import contextlib
+import dataclasses
 import json
 import uuid
 from collections.abc import AsyncGenerator, Callable
+from contextvars import Context
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anyio
 import anyio.to_thread
@@ -123,12 +125,20 @@ async def extract_from_session(session: Session, name: str, description: str) ->
     )
 
 
+@dataclasses.dataclass
+class WorkflowContext:
+    messages: list[AnyMessage]
+    sources: Sources
+    context: Context
+    lookup_tool_source: Callable[[str], str | None]
+
+
 @contextlib.asynccontextmanager
-async def _fetch_sources_for_workflow(
+async def _fetch_context_for_workflow(
     session: Session,
     workflow: WorkflowDefinition,
     datasource_mappings: dict[str, str],  # original dataset ID -> mapped dataset ID
-) -> AsyncGenerator[tuple[list[AnyMessage], Sources, Callable[[str], str | None]]]:
+) -> AsyncGenerator[WorkflowContext]:
     async with daa_service.use_agent(session) as agent:
         original_sources = agent.ctx.sources
         sources_dict: dict[str, DataSource] = {}
@@ -143,7 +153,8 @@ async def _fetch_sources_for_workflow(
         messages: list[AnyMessage] = []
         sources = Sources(sources_dict, random_state=workflow.source_rs)
 
-        yield messages, sources, agent.ctx.lookup_tool_source
+        with (await agent.ctx.create_runtime_context()).copy_with(sources=sources).set() as ctx:
+            yield WorkflowContext(messages, sources, ctx, agent.ctx.lookup_tool_source)
 
         agent_state = await agent.get_state()
         agent_state.values.setdefault("messages", []).extend(messages)
@@ -195,11 +206,11 @@ async def execute_workflow_stream(
         append_tool_call()
         messages.append(ToolMessage(tool_call_id=tool_call_id, content=error_msg, status="error"))
 
-    async with _fetch_sources_for_workflow(session, workflow, datasource_mappings) as (
-        messages,
-        sources,
-        lookup_tool_source,
-    ):
+    def run_in_context(tool_call: ToolCall) -> Any:
+        return ctx.context.run(resume_tool_call, tool_call)
+
+    async with _fetch_context_for_workflow(session, workflow, datasource_mappings) as ctx:
+        messages = ctx.messages
         messages.append(HumanMessage(content=f"执行工作流：{workflow.name}"))
 
         # 逐个执行工具调用并生成事件
@@ -210,22 +221,21 @@ async def execute_workflow_stream(
 
             logger.info(f"处理第 {idx}/{len(workflow.tool_calls)} 个工具调用: {tool_name}")
             logger.info(f"工具参数(原始): {tool_args}")
-            logger.info(f"当前Sources中的数据源: {list(sources.sources.keys())}")
+            logger.info(f"当前Sources中的数据源: {list(ctx.sources.sources.keys())}")
 
             # 发送工具调用事件
             yield ToolCallEvent(
                 id=tool_call_id,
                 name=tool_name,
                 human_repr=tool_name_human_repr(tool_name),
-                source=lookup_tool_source(tool_name),
+                source=ctx.lookup_tool_source(tool_name),
                 args=tool_args,
             )
 
             try:
                 # 执行工具调用
                 tc: ToolCall = {"name": tool_name, "args": tool_args, "id": tool_call_id}
-                extra = {"sources": sources, "model_config": session.agent_model_config.fixed}
-                result = await anyio.to_thread.run_sync(resume_tool_call, tc, extra)
+                result = await anyio.to_thread.run_sync(run_in_context, tc)
 
                 # 处理工具返回的结果
                 if isinstance(result, tuple) and len(result) == 2:

@@ -1,9 +1,10 @@
+import contextlib
 import dataclasses
-from collections.abc import MutableMapping
+from collections.abc import Generator, MutableMapping
+from contextvars import Context
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, TypeGuard
 
-from langgraph.runtime import get_runtime
 from pydantic import BaseModel
 
 from app.core.datasource import DataSource
@@ -18,6 +19,7 @@ else:
 
 type DatasetID = str
 type SourcesDict = MutableMapping[DatasetID, DataSource]
+
 
 def format_sources_overview(sources: SourcesDict) -> str:
     """
@@ -83,4 +85,28 @@ class AgentRuntimeContext:
 
     @classmethod
     def get(cls) -> "AgentRuntimeContext":
+        from langgraph.runtime import get_runtime
+
         return get_runtime(AgentRuntimeContext).context
+
+    @contextlib.contextmanager
+    def set(self) -> Generator[Context]:
+        from langchain_core.runnables import ensure_config
+        from langchain_core.runnables.config import set_config_context
+        from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+        from langgraph.config import get_config
+        from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+
+        try:
+            config = get_config()
+        except BaseException:
+            config = ensure_config()
+        parent_runtime: Runtime[Any] = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+        runtime = parent_runtime.merge(Runtime(context=self))
+        config.setdefault(CONF, {})[CONFIG_KEY_RUNTIME] = runtime
+
+        with set_config_context(config) as ctx:
+            yield ctx
+
+    def copy_with(self, **overrides: Any) -> "AgentRuntimeContext":
+        return dataclasses.replace(self, **overrides)

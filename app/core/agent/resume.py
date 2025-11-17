@@ -58,7 +58,7 @@ def get_resumable_tools() -> list[str]:
     return list(_RESUME_TOOL_REGISTRY.keys())
 
 
-def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
+def resume_tool_call(tool_call: ToolCall) -> Any:
     """
     恢复工具调用
 
@@ -72,7 +72,7 @@ def resume_tool_call(tool_call: ToolCall, extra: dict[str, Any]) -> Any:
     # 获取工具名称
     name = tool_call["name"]
     if r := _RESUME_TOOL_REGISTRY.get(name):
-        args = {k: v for k, v in (tool_call["args"] | extra).items() if k in r.params}
+        args = {k: v for k, v in tool_call["args"].items() if k in r.params}
         logger.opt(colors=True).info(f"恢复工具调用: <g>{escape_tag(name)}</>, 参数: <c>{escape_tag(repr(args))}</>")
         return r.fn(**args)
 
