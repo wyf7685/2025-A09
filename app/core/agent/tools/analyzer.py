@@ -1,21 +1,16 @@
 import base64
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+
+from langchain_core.tools import tool
 
 from app.core.agent.resume import resumable
-from app.core.agent.sources import Sources
+from app.core.agent.schemas import AgentRuntimeContext
 from app.core.chain import get_llm
-from app.core.chain.llm import LLM
 from app.core.chain.nl_analysis import NL2DataAnalysis
 from app.core.executor import CodeExecutor, format_result
 from app.log import logger
-from app.schemas.session import AgentModelConfigFixed
 from app.utils import escape_tag
 
-from ._registry import register_tool
-
-if TYPE_CHECKING:
-    from langchain_core.tools import BaseTool
+from .registry import register_tool
 
 TOOL_DESCRIPTION = """\
 当你需要探索性数据分析或自定义可视化时使用该工具。
@@ -45,57 +40,21 @@ TOOL_DESCRIPTION = """\
 """
 
 
-def analyzer_tool(sources: Sources, get_llm: Callable[[], LLM]) -> "BaseTool":
-    """
-    创建一个数据分析工具，使用提供的DataFrame和语言模型。
-
-    Args:
-        sources (Sources): 要用于数据分析的数据集。
-        llm (LLM): 用于生成分析代码的语言模型。
-
-    Returns:
-        Tool: 用于数据分析的LangChain工具。
-    """
-    from langchain_core.tools import tool
-
-    @tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
-    @register_tool("通用数据分析工具")
-    def analyze_data(dataset_id: str, query: str) -> tuple[str, dict[str, str]]:
-        logger.info(f"执行通用数据分析工具: dataset_id={dataset_id}")
-        source = sources.get(dataset_id)
-
-        with CodeExecutor(source) as executor:
-            logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-            result = NL2DataAnalysis(get_llm(), executor=executor).invoke((source, query))
-
-        # 处理图片结果
-        artifact = {}
-        if (fig := result["figure"]) is not None:
-            # 创建包含图片的工具输出
-            artifact = {
-                "type": "image",
-                "base64_data": base64.b64encode(fig).decode(),
-                "caption": "分析图表输出",
-            }
-
-        return format_result(result), artifact
-
-    return analyze_data
-
-
+@tool(description=TOOL_DESCRIPTION, response_format="content_and_artifact")
 @resumable
+@register_tool("通用数据分析工具")
 def analyze_data(
-    sources: Sources,
-    model_config: AgentModelConfigFixed,
     dataset_id: str,
     query: str,
 ) -> tuple[str, dict[str, str]]:
+    context = AgentRuntimeContext.get()
     logger.info(f"执行通用数据分析工具: dataset_id={dataset_id}")
-    source = sources.get(dataset_id)
+    source = context.sources.get(dataset_id)
 
     with CodeExecutor(source) as executor:
         logger.opt(colors=True).info(f"<y>分析数据</> - 查询内容:\n{escape_tag(query)}")
-        result = NL2DataAnalysis(get_llm(model_config.code_generation), executor=executor).invoke((source, query))
+        llm = get_llm(context.model_config.code_generation)
+        result = NL2DataAnalysis(llm, executor=executor).invoke((source, query))
 
     # 处理图片结果
     artifact = {}
@@ -109,3 +68,6 @@ def analyze_data(
 
         return format_result(result), artifact
     return format_result(result), artifact
+
+
+analyzer_tool = analyze_data

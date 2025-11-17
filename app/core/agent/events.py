@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessag
 from mcp.types import ImageContent
 from pydantic import BaseModel, Field, Tag
 
-from .tools._registry import tool_name_human_repr
+from app.core.agent.tools.registry import tool_name_human_repr
 
 
 class LlmTokenEvent(BaseModel):

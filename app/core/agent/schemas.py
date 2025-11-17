@@ -1,13 +1,23 @@
+import dataclasses
 from collections.abc import MutableMapping
-from typing import Literal, NotRequired, Protocol, TypedDict, TypeGuard
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, TypeGuard
 
+from langgraph.runtime import get_runtime
 from pydantic import BaseModel
 
 from app.core.datasource import DataSource
+from app.schemas.session import SessionID
+
+if TYPE_CHECKING:
+    from app.core.agent.sources import Sources
+    from app.core.agent.tools.scikit.model import ModelInstanceInfo, TrainModelResult
+    from app.schemas.session import AgentModelConfigFixed
+else:
+    ModelInstanceInfo = TrainModelResult = Any
 
 type DatasetID = str
 type SourcesDict = MutableMapping[DatasetID, DataSource]
-
 
 def format_sources_overview(sources: SourcesDict) -> str:
     """
@@ -53,3 +63,24 @@ def is_failed(result: _Checkable | OperationFailedModel, /) -> TypeGuard[Operati
 
 def is_success[T: _Checkable](result: T | OperationFailedModel, /) -> TypeGuard[T]:
     return result.success
+
+
+@dataclasses.dataclass
+class AgentRuntimeContext:
+    session_id: SessionID
+
+    if TYPE_CHECKING:
+        sources: Sources
+        model_config: AgentModelConfigFixed
+
+    else:
+        sources: Any
+        model_config: Any
+
+    model_instance_cache: dict[str, ModelInstanceInfo]
+    train_model_cache: dict[str, TrainModelResult]
+    saved_models: dict[str, Path]
+
+    @classmethod
+    def get(cls) -> "AgentRuntimeContext":
+        return get_runtime(AgentRuntimeContext).context

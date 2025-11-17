@@ -147,6 +147,7 @@ class DataAnalyzerAgent:
             async for event in self.ctx.graph.astream(
                 {"messages": [{"role": "user", "content": user_input}]},
                 self.ctx.runnable_config,
+                context=await self.ctx.create_runtime_context(),
                 stream_mode="messages",
             ):
                 if not isinstance(event, tuple) or len(event) != 2:

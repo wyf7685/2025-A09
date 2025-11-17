@@ -17,10 +17,10 @@ from mcp.types import Implementation as MCPImplementation
 
 from app.const import STATE_DIR, VERSION
 from app.core.agent.prompts.data_analyzer import PROMPTS
-from app.core.agent.schemas import format_sources_overview
+from app.core.agent.schemas import AgentRuntimeContext, format_sources_overview
 from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
-from app.core.agent.tools._registry import register_tool_name
-from app.core.chain import get_chat_model_async, get_llm
+from app.core.agent.tools.registry import register_tool_name
+from app.core.chain import get_chat_model_async
 from app.core.lifespan import Lifespan
 from app.log import logger
 from app.schemas.session import AgentModelConfig, AgentModelConfigFixed, SessionID
@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from app.core.agent.sources import Sources
     from app.schemas.mcp import Connection
     from app.schemas.ml_model import MLModelInfo
+
+    type AgentGraph = CompiledStateGraph[Any, AgentRuntimeContext, Any, Any]
 
 
 def _handle_tool_errors(error: Exception) -> str:
@@ -86,14 +88,16 @@ class AgentContext:
     mcp_connections: list[tuple[str, Connection]] | None
     pre_model_hook: Runnable | None
     lifespan: Lifespan | None = None
+    saved_models: dict[str, Path] = dataclasses.field(default_factory=dict)
 
     # private
     _tool_node: ToolNode | None = None
-    _graph: CompiledStateGraph | None = None
-    _saved_models: dict[str, Path] | None = None
+    _graph: AgentGraph | None = None
     _mcp_instructions: str | None = None
     _tool_sources: dict[str, str] = dataclasses.field(default_factory=dict)
     _buffered_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
+    _model_instance_cache: dict[str, Any] = dataclasses.field(default_factory=dict)
+    _train_model_cache: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
@@ -102,16 +106,10 @@ class AgentContext:
         return ensure_config({"recursion_limit": 200, "configurable": {"thread_id": threading.get_ident()}})
 
     @property
-    def graph(self) -> CompiledStateGraph:
+    def graph(self) -> AgentGraph:
         if self._graph is None:
             raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
         return self._graph
-
-    @property
-    def saved_models(self) -> dict[str, Path]:
-        if self._saved_models is None:
-            raise RuntimeError("Agent graph has not been built yet. Call `build_graph` first.")
-        return self._saved_models
 
     @property
     def tool_sources(self) -> dict[str, str]:
@@ -178,13 +176,8 @@ class AgentContext:
         return model
 
     async def _load_builtin_tools(self) -> list[BaseTool]:
-        model_config = await self.get_model_config()
-        analyzer = analyzer_tool(self.sources, lambda: get_llm(model_config.code_generation))
-        df_tools = dataframe_tools(self.sources)
-        sk_tools, self._saved_models = scikit_tools(self.sources, self.session_id)
         await self._load_saved_models()
-        sc_tools = sources_tools(self.sources)
-        builtin_tools = [analyzer, *df_tools, *sk_tools, *sc_tools]
+        builtin_tools = [analyzer_tool, *dataframe_tools, *scikit_tools, *sources_tools]
 
         for tool in builtin_tools:
             self._tool_sources[tool.name] = "内置工具"
@@ -276,8 +269,19 @@ class AgentContext:
             model=self._get_chat_model,
             tools=tool_node,
             prompt=prompt,
+            context_schema=AgentRuntimeContext,
             checkpointer=InMemorySaver(),
             pre_model_hook=self.pre_model_hook,
         )
-        self._graph = await anyio.to_thread.run_sync(_fn)
+        self._graph = cast("AgentGraph", await anyio.to_thread.run_sync(_fn))
         logger.opt(colors=True).info(f"创建数据分析 Agent: <c>{self.session_id}</>")
+
+    async def create_runtime_context(self) -> AgentRuntimeContext:
+        return AgentRuntimeContext(
+            session_id=self.session_id,
+            sources=self.sources,
+            model_config=await self.get_model_config(),
+            saved_models=self.saved_models,
+            model_instance_cache=self._model_instance_cache,
+            train_model_cache=self._train_model_cache,
+        )

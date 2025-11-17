@@ -31,3 +31,5 @@ class DataAnalyzerAgentState(BaseModel):
             f"模型数=<y>{len(self.models)}</>, "
             f"随机状态=<y>{self.sources_random_state}</>"
         )
+
+
