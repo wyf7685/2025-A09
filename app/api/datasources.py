@@ -13,16 +13,14 @@ from pydantic import BaseModel, TypeAdapter
 
 from app.const import UPLOAD_DIR
 from app.core.config import settings
-from app.core.datasource import DataSourceMetadata, create_dremio_source
-from app.core.datasource.dremio import DremioDataSource
+from app.core.datasource import DataSourceMetadata, DremioDataSource, FileDataSource, create_dremio_source
 from app.core.dremio import get_async_dremio_client
 from app.log import logger
 from app.schemas.dremio import AnyDatabaseConnection, DremioDatabaseType
 from app.services.datasource import datasource_service, temp_file_service
 from app.services.session import session_service
 
-# 创建路由
-router = APIRouter(prefix="/datasources")
+router = APIRouter(prefix="/datasources", tags=["Datasources"])
 
 
 class RegisterDataSourceResponse(BaseModel):
@@ -388,6 +386,9 @@ async def delete_datasource(source_id: str) -> dict[str, Any]:
                 # 获取DremioDataSource对象
                 if isinstance(source, DremioDataSource):
                     await delete_dremio_source(source)
+                elif isinstance(source, FileDataSource):
+                    source.file_path.unlink(missing_ok=True)
+                    logger.info(f"已删除本地文件数据源: {source.file_path}")
                 else:
                     logger.warning(f"数据源不是DremioDataSource类型: {type(source)}")
             except Exception as e:
