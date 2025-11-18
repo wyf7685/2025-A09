@@ -13,9 +13,9 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 # ============ 常量和配置 ============
-JWT_ALGORITHM = "HS256"
+JWT_ALGORITHM = settings.JWT_ALGORITHM
 JWT_SECRET_KEY = settings.JWT_SECRET_KEY.get_secret_value()
-JWT_EXPIRATION_HOURS = 24
+JWT_EXPIRATION_HOURS = settings.JWT_EXPIRATION_HOURS
 
 
 # ============ 数据模型 ============
@@ -78,14 +78,14 @@ def _create_jwt_token(username: str, user_id: str | None = None, hours: int = JW
     now = datetime.now(UTC)
     expire = now + timedelta(hours=hours)
 
-    payload = {
-        "sub": user_id,
-        "username": username,
-        "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
-    }
+    payload = TokenPayload(
+        sub=user_id,
+        username=username,
+        iat=int(now.timestamp()),
+        exp=int(expire.timestamp()),
+    )
 
-    token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(payload.model_dump(), JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     expires_in = int((expire - now).total_seconds())
 
     return token, expires_in
@@ -191,6 +191,7 @@ async def get_current_user(token: str = Depends(_extract_token)) -> CurrentUserI
 CurrentUser = Annotated[CurrentUserInfo, Depends(get_current_user)]
 
 
+# Parameterless dependency to enforce login
 def RequiresLogin() -> Any:  # noqa: N802
     async def _requires_login(token: str = Depends(_extract_token)) -> None:
         _verify_jwt_token(token)
