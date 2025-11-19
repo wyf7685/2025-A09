@@ -299,14 +299,15 @@ async def generate_report(request: GenerateReportRequest, session: CurrentSessio
 
             # 生成报告内容
             summary, figures = await agent.summary(template_content)
-            
+
             # 调试：记录报告内容中的图片占位符
             logger.info(f"生成报告内容长度: {len(summary)}")
             logger.info(f"图片数量: {len(figures)}")
             logger.debug(f"报告内容（前1000字）: {summary[:1000]}")
-            
+
             # 搜索所有可能的图片引用格式
             import re
+
             figure_refs = re.findall(r"\{\{?figure-\d+\}?\}?|\!\[.*?\]\(\{?figure-\d+\}?\)", summary)
             if figure_refs:
                 logger.info(f"找到图片引用: {figure_refs}")
