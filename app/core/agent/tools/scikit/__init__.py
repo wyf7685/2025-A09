@@ -24,7 +24,6 @@ from .model import (
     ModelMetadata,
     PredictionResult,
     SaveModelResult,
-    TrainModelResult,
     create_model,
     evaluate_model,
     fit_model,
@@ -44,34 +43,6 @@ from .model_composite import (
 type ModelID = str
 
 get_context = AgentRuntimeContext.get
-
-
-def _format_train_result_for_llm(model_id: str, result: TrainModelResult) -> str:
-    """
-    格式化训练结果以便于 LLM 理解。
-    包括模型类型、特征列、目标列和模型评估指标。
-
-    Args:
-        model_id (str): 模型的唯一标识符。
-        result (TrainModelResult): 训练结果。
-
-    Returns:
-        str: 格式化后的字符串。
-    """
-    output = (
-        f"训练结果 (ID='{model_id}'):\n"
-        f"模型类型: {result.model_type}\n"
-        f"特征列: {', '.join(result.feature_columns)}\n"
-        f"目标列: {result.target_column}"
-    )
-
-    # 如果使用了自定义超参数，添加到输出中
-    if hyperparams := result.hyperparams:
-        output += "\n超参数:"
-        for param, value in hyperparams.items():
-            output += f"\n  - {param}: {value}"
-
-    return output
 
 
 def _fix_hyperparams(params: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +81,7 @@ def create_model_tool(
     model_type: str = "linear_regression",
     hyperparams: dict[str, Any] | str | None = None,
     random_state: int = 42,
-) -> str:
+) -> dict[str, Any]:
     """
     创建机器学习模型实例，但不进行训练。
 
@@ -134,7 +105,7 @@ def create_model_tool(
         random_state (int): 随机种子。
 
     Returns:
-        str: 模型ID，可用于fit_model_tool进行模型训练。
+        dict: 包含模型ID和创建信息的字典。
     """
     # 处理字符串形式的超参数
     parsed_hyperparams = None
@@ -155,16 +126,24 @@ def create_model_tool(
         model_info = create_model(model_type, random_state, parsed_hyperparams)
         model_id = _cache_model_info(model_info)
 
-        formatted = f"成功创建模型！\n模型ID: {model_id}\n模型类型: {model_type}"
+        result: dict[str, Any] = {
+            "status": "success",
+            "model_id": model_id,
+            "model_type": model_type,
+        }
         if parsed_hyperparams:
-            formatted += f"\n应用超参数: {parsed_hyperparams}"
-        elif parsed_hyperparams is None and hyperparams is not None:
-            formatted += "\n\n超参数解析错误，将使用默认参数"
+            result["hyperparams"] = parsed_hyperparams
+        if parsed_hyperparams is None and hyperparams is not None:
+            result["hyperparams_parse_warning"] = "超参数解析错误，将使用默认参数"
 
-        return formatted
+        return result
     except Exception as e:
         logger.opt(colors=True).exception(f"<r>创建模型失败</>: <e>{escape_tag(model_type)}</>")
-        return f"创建模型失败: {e}"
+        return {
+            "status": "error",
+            "error": str(e),
+            "model_type": model_type,
+        }
 
 
 @tool
@@ -176,7 +155,7 @@ def fit_model_tool(
     target: str,
     test_size: float = 0.2,
     random_state: int = 42,
-) -> str:
+) -> dict[str, Any]:
     """
     使用指定的模型实例和数据进行训练。
     模型ID由create_model_tool或create_composite_model_tool创建。
@@ -190,12 +169,15 @@ def fit_model_tool(
         random_state (int): 随机种子，用于复现结果。
 
     Returns:
-        str: 模型训练结果的格式化信息。模型ID保持不变，可直接用于evaluate_model_tool评估。
+        dict: 模型训练结果。模型ID保持不变，可直接用于evaluate_model_tool评估。
     """
     # 检查模型ID是否存在
     context = get_context()
     if model_id not in context.model_instance_cache:
-        return f"未找到模型ID: {model_id}。请先使用create_model_tool创建模型。"
+        return {
+            "status": "error",
+            "error": f"未找到模型ID: {model_id}。请先使用create_model_tool创建模型。",
+        }
 
     model_info = context.model_instance_cache[model_id]
     model = model_info["model"]
@@ -221,10 +203,22 @@ def fit_model_tool(
         )
 
         context.train_model_cache[model_id] = result
-        return _format_train_result_for_llm(model_id, result)
+
+        return {
+            "status": "success",
+            "model_id": model_id,
+            "model_type": result.model_type,
+            "feature_columns": result.feature_columns,
+            "target_column": result.target_column,
+            "hyperparams": result.hyperparams,
+        }
     except Exception as e:
         logger.opt(colors=True).exception(f"<r>训练模型失败</>: <e>{escape_tag(model_type)}</e>")
-        return f"训练模型失败: {e}"
+        return {
+            "status": "error",
+            "error": str(e),
+            "model_type": model_type,
+        }
 
 
 @tool
@@ -239,7 +233,7 @@ def create_composite_model_tool(
     cv_folds: int | None = None,
     validation_split: float | None = None,
     meta_model_hyperparams: dict[str, Any] | None = None,
-) -> str:
+) -> dict[str, Any]:
     """
     创建集成模型，组合多个已训练模型以提高性能。
     创建模型后，应使用fit_model_tool进行训练。
@@ -259,7 +253,7 @@ def create_composite_model_tool(
         meta_model_hyperparams (dict, optional): 元模型的超参数，仅用于stacking或blending
 
     Returns:
-        str: 创建集成模型ID，可用于后续的fit_model_tool训练
+        dict: 创建集成模型的结果，包含模型ID等信息
     """
     context = get_context()
 
@@ -309,12 +303,14 @@ def create_composite_model_tool(
     # 生成唯一ID并缓存结果
     model_id = _cache_model_info(model_info)
 
-    return (
-        f"复合模型创建成功 (ID={model_id})\n"
-        f"模型类型: {model_info['model_type']}\n"
-        f"基础模型: \n{'\n'.join(f'  {i + 1}. {mid}' for i, mid in enumerate(model_ids))}\n"
-        f"超参数: \n{json.dumps(model_info['hyperparams'], indent=2) if model_info['hyperparams'] else '无'}\n"
-    )
+    return {
+        "status": "success",
+        "model_id": model_id,
+        "model_type": model_info["model_type"],
+        "base_models": model_ids,
+        "composite_type": composite_type,
+        "hyperparams": model_info["hyperparams"],
+    }
 
 
 @tool
