@@ -3,10 +3,12 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import operator
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast
 
 import anyio
+import anyio.lowlevel
 import anyio.to_thread
 from langchain_core.messages import BaseMessage, SystemMessage, ToolCall
 from langchain_mcp_adapters.sessions import create_session
@@ -17,7 +19,7 @@ from mcp.types import Implementation as MCPImplementation
 from app.const import STATE_DIR, VERSION
 from app.core.agent.prompts.data_analyzer import PROMPTS
 from app.core.agent.schemas import AgentRuntimeContext, format_sources_overview
-from app.core.agent.tools import analyzer_tool, dataframe_tools, scikit_tools, sources_tools
+from app.core.agent.tools import builtin_tools
 from app.core.agent.tools.registry import register_tool_name
 from app.core.chain import get_chat_model_async
 from app.core.lifespan import Lifespan
@@ -26,7 +28,7 @@ from app.schemas.session import AgentModelConfig, AgentModelConfigFixed, Session
 from app.utils import escape_tag
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
     from pathlib import Path
 
     from langchain_core.language_models import LanguageModelInput
@@ -34,13 +36,14 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from langchain_mcp_adapters.sessions import Connection as LangChainMCPConnection
     from langgraph.graph.state import CompiledStateGraph
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+    from langgraph.runtime import Runtime
     from langgraph.store.base import BaseStore
 
     from app.core.agent.sources import Sources
-    from app.schemas.mcp import Connection
     from app.schemas.ml_model import MLModelInfo
 
-    type AgentGraph = CompiledStateGraph[Any, AgentRuntimeContext, Any, Any]
+    type AgentGraph = CompiledStateGraph[AgentState, AgentRuntimeContext, Any, Any]
 
 
 def _handle_tool_errors(error: Exception) -> str:
@@ -51,11 +54,33 @@ def _handle_tool_errors(error: Exception) -> str:
 class AgentToolNode(ToolNode):
     def __init__(
         self,
+        lifespan: Lifespan,
         tools: Sequence[BaseTool],
+        load_extra_tools: Callable[[], Awaitable[Sequence[BaseTool]]],
         emit_tool_call: Callable[[ToolCall], object],
     ) -> None:
-        super().__init__(tools, handle_tool_errors=_handle_tool_errors)
+        super().__init__(
+            tools,
+            name="tools",
+            handle_tool_errors=_handle_tool_errors,
+            messages_key="messages",
+        )
+        self._lifespan = lifespan
+        self._initial_tools = tools
+        self._load_extra_tools = load_extra_tools
         self._emit_tool_call = emit_tool_call
+
+    async def load_tools(self) -> None:
+        extra_tools = await self._load_extra_tools()
+        logger.opt(colors=True).info(f"加载额外工具数: <y>{len(extra_tools)}</>")
+        for name in set(self.tools_by_name.keys()) - {tool.name for tool in self._initial_tools}:
+            self.tools_by_name.pop(name, None)
+            self.tool_to_state_args.pop(name, None)
+            self.tool_to_store_arg.pop(name, None)
+        for tool in extra_tools:
+            self.tools_by_name[tool.name] = tool
+            self.tool_to_state_args[tool.name] = {}
+            self.tool_to_store_arg[tool.name] = None
 
     def _func(
         self,
@@ -64,6 +89,7 @@ class AgentToolNode(ToolNode):
         *,
         store: BaseStore | None = None,
     ) -> Any:
+        self._lifespan.from_thread(self.load_tools)
         for tc in self._parse_input(input, store)[0]:
             self._emit_tool_call(tc)
         return super()._func(input, config, store=store)
@@ -75,6 +101,7 @@ class AgentToolNode(ToolNode):
         *,
         store: BaseStore | None = None,
     ) -> Any:
+        await self.load_tools()
         for tc in self._parse_input(input, store)[0]:
             self._emit_tool_call(tc)
         return await super()._afunc(input, config, store=store)
@@ -84,7 +111,6 @@ class AgentToolNode(ToolNode):
 class AgentContext:
     session_id: SessionID
     sources: Sources
-    mcp_connections: list[tuple[str, Connection]] | None
     pre_model_hook: Runnable | None
     lifespan: Lifespan | None = None
     saved_models: dict[str, Path] = dataclasses.field(default_factory=dict)
@@ -97,6 +123,8 @@ class AgentContext:
     _buffered_tool_calls: list[ToolCall] = dataclasses.field(default_factory=list)
     _model_instance_cache: dict[str, Any] = dataclasses.field(default_factory=dict)
     _train_model_cache: dict[str, Any] = dataclasses.field(default_factory=dict)
+    _agent_source_tokens: set[str] = dataclasses.field(default_factory=set)
+    _mcp_tool_cache: dict[str, list[BaseTool]] = dataclasses.field(default_factory=dict)
 
     @functools.cached_property
     def runnable_config(self) -> RunnableConfig:
@@ -148,6 +176,7 @@ class AgentContext:
                 self.saved_models[model_info.id] = model_info.model_path
 
     async def _format_system_prompt(self) -> str:
+        await self._load_mcp_tools()
         ml_model_instructions = ""
         if model_infos := await self._load_external_models():
             ml_model_instructions = PROMPTS.external_ml_model.format(
@@ -163,46 +192,54 @@ class AgentContext:
             mcp_tools_instructions=self._mcp_instructions or "",
         )
 
-    async def _generate_model_prompt(self, state: dict[str, Any]) -> list[BaseMessage]:
+    async def _generate_model_prompt(self, state: AgentState) -> list[BaseMessage]:
         system_message = SystemMessage(content=await self._format_system_prompt())
         return [system_message, *state.get("messages", [])]
 
-    async def _get_chat_model(self, _state: object, _runtime: object) -> Runnable[LanguageModelInput, BaseMessage]:
-        cfg = await self.get_model_config()
-        model = await get_chat_model_async(cfg.chat)
+    async def _get_chat_model(
+        self,
+        _state: AgentState,
+        runtime: Runtime[AgentRuntimeContext],
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        model = await get_chat_model_async(runtime.context.model_config.chat)
         if self._tool_node:
             model = model.bind_tools(list(self._tool_node.tools_by_name.values()))
         return model
 
-    async def _load_builtin_tools(self) -> list[BaseTool]:
-        await self._load_saved_models()
-        builtin_tools = [analyzer_tool, *dataframe_tools, *scikit_tools, *sources_tools]
+    async def _delete_mcp_source_tokens(self) -> None:
+        from app.services.agent import daa_service
 
-        for tool in builtin_tools:
-            self._tool_sources[tool.name] = "内置工具"
-        return builtin_tools
+        for token in self._agent_source_tokens:
+            daa_service.delete_source_token(token)
 
     async def _load_mcp_tools(self) -> list[BaseTool]:
-        if self.mcp_connections is None:
+        from app.services.agent import daa_service
+        from app.services.mcp import mcp_service
+        from app.services.session import session_service
+
+        if (chat_session := await session_service.get(self.session_id)) is None or (
+            not (mcp_ids := set(chat_session.mcp_ids or []))
+        ):
             self._mcp_instructions = ""
             return []
 
-        assert self.lifespan is not None
-        from app.services.agent import daa_service
+        cached_ids = set(self._mcp_tool_cache.keys())
+        if mcp_ids == cached_ids:
+            return functools.reduce(operator.add, self._mcp_tool_cache.values(), [])
 
-        async def delete_mcp_source_tokens() -> None:
-            for token in tokens:
-                daa_service.delete_source_token(token)
+        for mcp_id in cached_ids - mcp_ids:
+            del self._mcp_tool_cache[mcp_id]
+
+        mcps = {mcp_id: mcp_service.get(mcp_id) for mcp_id in mcp_ids}
+        assert self.lifespan is not None
 
         instructions: list[str] = []
         mcp_tools: list[BaseTool] = []
-        tokens: list[str] = []
-        self.lifespan.on_shutdown(delete_mcp_source_tokens)
 
-        for idx, (server_name, conn) in enumerate(self.mcp_connections, 1):
+        for idx, (mcp_id, mcp) in enumerate(mcps.items(), 1):
             token = daa_service.create_source_token(self.session_id)
-            tokens.append(token)
-            connection = cast("LangChainMCPConnection", deepcopy(conn))
+            self._agent_source_tokens.add(token)
+            connection = cast("LangChainMCPConnection", deepcopy(mcp.connection))
             connection["session_kwargs"] = {"client_info": MCPImplementation(name=token, version=VERSION)}
             async with create_session(connection) as session:
                 init = await session.initialize()
@@ -215,30 +252,44 @@ class AgentContext:
                 ),
             )
             instructions.append(instruction)
+            lc_tools = []
             for mcp_tool in tools:
                 lc_tool = convert_mcp_tool_to_langchain_tool(None, mcp_tool, connection=connection)
-                self._tool_sources[lc_tool.name] = f"{server_name} (MCP)"
+                self._tool_sources[lc_tool.name] = f"{mcp.name} (MCP)"
                 if mcp_tool.title:
                     register_tool_name(lc_tool.name, mcp_tool.title)
-                mcp_tools.append(lc_tool)
+                lc_tools.append(lc_tool)
+            self._mcp_tool_cache[mcp_id] = lc_tools
+            mcp_tools.extend(lc_tools)
+            logger.opt(colors=True).info(
+                f"从 MCP 服务器 <c>{escape_tag(mcp.name)}</> 加载工具数: <y>{len(lc_tools)}</>"
+            )
 
         self._mcp_instructions = PROMPTS.mcp_tools_instruction.format(server_list="\n\n".join(instructions))
         return mcp_tools
 
-    async def _build_tool_node(self) -> ToolNode:
+    async def _build_tool_node(self, lifespan: Lifespan) -> ToolNode:
         # Load Tools
-        builtin_tools = await self._load_builtin_tools()
-        mcp_tools = await self._load_mcp_tools()
-        self._tool_node = AgentToolNode(builtin_tools + mcp_tools, emit_tool_call=self._buffered_tool_calls.append)
+        await self._load_saved_models()
+        tools = builtin_tools.copy()
+        for tool in tools:
+            self._tool_sources[tool.name] = "内置工具"
 
-        logger.opt(colors=True).info(
-            "使用工具数: <y>{len(builtin_tools)}</>" + (f", MCP 工具数: <y>{len(mcp_tools)}</>" if mcp_tools else "")
+        self._tool_node = AgentToolNode(
+            lifespan,
+            tools,
+            load_extra_tools=self._load_mcp_tools,
+            emit_tool_call=self._buffered_tool_calls.append,
         )
+
+        logger.opt(colors=True).info(f"使用工具数: <y>{len(builtin_tools)}</>")
         return self._tool_node
 
-    def flush_buffered_tool_calls(self) -> Iterator[ToolCall]:
+    async def flush_buffered_tool_calls(self) -> AsyncIterator[ToolCall]:
         while self._buffered_tool_calls:
             yield self._buffered_tool_calls.pop(0)
+            await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()
 
     async def build_graph(self) -> None:
         from langchain_core.runnables import RunnableLambda
@@ -252,9 +303,10 @@ class AgentContext:
 
         self.lifespan = Lifespan(f"Agent<white>[<c>{escape_tag(self.session_id)}</>]</>")
         await self.lifespan.startup()
+        self.lifespan.on_shutdown(self._delete_mcp_source_tokens)
 
         # Load Tools
-        tool_node = await self._build_tool_node()
+        tool_node = await self._build_tool_node(self.lifespan)
 
         # Prompt
         prompt = RunnableLambda(self._generate_model_prompt, name="Prompt")

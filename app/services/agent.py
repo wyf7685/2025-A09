@@ -14,7 +14,6 @@ from app.exception import AgentCancelled, AgentInUse, AgentNotFound
 from app.log import logger
 from app.schemas.session import Session, SessionID
 from app.services.datasource import datasource_service
-from app.services.mcp import mcp_service
 from app.utils import escape_tag, suppress_exceptions
 
 AGENT_IDLE_SECONDS = 60 * 30  # 30 mins
@@ -63,13 +62,8 @@ class DataAnalyzerAgentService:
         if self.get(session):
             await self._destroy(session.id, save_state=True, pop=False)
 
-        mcps = mcp_service.gets(*(session.mcp_ids or []))
         sources = await dataset_id_to_sources(session.dataset_ids)
-        agent = await DataAnalyzerAgent.create(
-            session_id=session.id,
-            sources_dict=sources,
-            mcp_connections=[(mcp.name, mcp.connection) for mcp in mcps],
-        )
+        agent = await DataAnalyzerAgent.create(session_id=session.id, sources_dict=sources)
         await agent.load_state()
 
         self.agents[session.id].agent = agent
@@ -169,12 +163,6 @@ class DataAnalyzerAgentService:
         """安全销毁会话的 Agent"""
         with contextlib.suppress(AgentNotFound):
             await self._destroy(session_id, save_state=True, pop=True)
-
-    async def refresh_mcp(self, session: Session) -> None:
-        """刷新会话的 MCP 连接"""
-        # 直接销毁当前 Agent，下次调用会创建带有新 MCP 的 Agent
-        with contextlib.suppress(AgentNotFound):
-            await self._destroy(session.id, pop=False)
 
     def create_source_token(self, session_id: SessionID) -> str:
         """为会话创建数据源令牌"""

@@ -159,9 +159,6 @@ async def add_mcp_to_session(session: CurrentSessionFromPath, request: AddMCPToS
             if mcp_id not in session.mcp_ids:
                 session.mcp_ids.append(mcp_id)
 
-        # 刷新MCP连接状态
-        await daa_service.refresh_mcp(session)
-
         # 保存会话
         await session_service.save_session(session)
 
@@ -191,9 +188,6 @@ async def remove_mcp_from_session(session: CurrentSessionFromPath, request: Remo
             for mcp_id in request.mcp_ids:
                 if mcp_id in session.mcp_ids:
                     session.mcp_ids.remove(mcp_id)
-
-        # 刷新MCP连接状态
-        await daa_service.refresh_mcp(session)
 
         # 保存会话
         await session_service.save_session(session)
