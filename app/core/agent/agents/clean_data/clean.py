@@ -161,7 +161,7 @@ def apply_user_selected_cleaning_with_ai(
 
         final_shape = cleaned_df.shape
         final_columns = cleaned_df.columns.tolist()
-        
+
         # 验证字段映射是否被保留
         logger.info(f"执行清洗后的列名: {final_columns}")
         if field_mappings_applied and final_columns != columns_after_mapping:
