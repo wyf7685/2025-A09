@@ -10,7 +10,7 @@ from app.const import DATA_DIR
 from app.core.lifespan import lifespan
 from app.exception import MCPServerAlreadyExists, MCPServerConnectionError, MCPServerNotFound
 from app.log import logger
-from app.schemas.mcp import MCPConnection
+from app.schemas.mcp import Connection, MCPConnection
 
 _mcp_servers_ta = TypeAdapter(dict[str, MCPConnection])
 _MCP_SERVERS_FILE = anyio.Path(DATA_DIR / "mcp_servers.json")
@@ -70,6 +70,20 @@ class MCPService:
     def get_all(self) -> Sequence[MCPConnection]:
         """Get all registered MCP servers."""
         return list(self.servers.values())
+
+    async def test_connection(self, connection: Connection) -> tuple[str, str | None]:
+        """Test connection to an MCP server."""
+        try:
+            async with create_session(cast("LangChainMCPConnection", connection)) as session:
+                init_resp = await session.initialize()
+                await session.send_ping()
+            impl = init_resp.serverInfo
+            title = impl.title or impl.name
+            description = init_resp.instructions
+            return title, description
+        except Exception as e:
+            logger.opt(exception=True).warning("测试连接到 MCP 服务器失败")
+            raise MCPServerConnectionError("", e) from e
 
 
 mcp_service = MCPService()

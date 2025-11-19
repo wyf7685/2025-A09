@@ -193,9 +193,7 @@ onMounted(async () => {
         <div class="card-header">
           <div class="connection-info">
             <h3 class="connection-name">{{ connection.name }}</h3>
-            <p class="connection-description" v-if="connection.description">
-              {{ connection.description }}
-            </p>
+            <pre class="connection-description" v-if="connection.description">{{ connection.description }}</pre>
           </div>
           <div class="connection-actions">
             <el-dropdown @command="handleCommand" trigger="click">
@@ -279,7 +277,8 @@ onMounted(async () => {
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="showCreateDialog" :title="editingConnection ? '编辑连接' : '添加 MCP 连接'" width="600px"
       :close-on-click-modal="false">
-      <MCPConnectionForm :connection="editingConnection" @save="handleSave" @cancel="handleCancel" />
+      <MCPConnectionForm :visible="showCreateDialog" :connection="editingConnection" @save="handleSave"
+        @cancel="handleCancel" />
     </el-dialog>
   </div>
 </template>

@@ -1,37 +1,46 @@
 <script setup lang="ts">
 import type { AnyMCPConnection, MCPConnection, MCPConnectionTransport } from '@/types/mcp';
+import api from '@/utils/api';
+import { formatMessage } from '@/utils/tools';
 import { ChatDotRound, Connection, Delete, Link, Monitor } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElButton, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMessage, ElOption, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch, ElTag } from 'element-plus';
 import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 
 // Props
-interface Props {
-  connection?: MCPConnection | null;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  connection: null
-});
+const props = defineProps<{
+  visible: boolean;
+  connection: MCPConnection | null;
+}>();
 
 // Emits
-interface Emits {
+const emit = defineEmits<{
   save: [data: {
     name: string;
     description?: string;
     connection: AnyMCPConnection;
   }];
   cancel: [];
-}
-
-const emit = defineEmits<Emits>();
+}>();
 
 // 响应式数据
 const formRef = ref<FormInstance>();
 const saving = ref(false);
+const testing = ref(false);
 const showArgInput = ref(false);
 const newArg = ref('');
 const argInputRef = ref();
+
+// 测试结果
+const testResult = ref<{
+  success: boolean;
+  title?: string;
+  description?: string;
+  error?: string;
+} | null>(null);
+
+// 格式化的markdown描述
+const formattedDescription = ref<string>('');
 
 // 表单数据
 const formData = reactive({
@@ -104,6 +113,26 @@ const formRules: FormRules = {
       }
     }
   ]
+};
+
+const clearForm = () => {
+  formData.name = '';
+  formData.description = '';
+  formData.transport = 'sse';
+
+  formData.command = '';
+  formData.args = [];
+  formData.cwd = '';
+  formData.encoding = 'utf-8';
+  formData.envVars = [];
+
+  formData.url = '';
+  formData.timeout = 30;
+  formData.sse_read_timeout = 300;
+  formData.terminate_on_close = true;
+  formData.headers = [];
+
+  testResult.value = null;
 };
 
 // 监听传输类型变化
@@ -250,6 +279,54 @@ const handleSave = async () => {
   }
 };
 
+// 测试连接
+const handleTestConnection = async () => {
+  try {
+    testing.value = true;
+    testResult.value = null;
+    formattedDescription.value = '';
+
+    const connectionConfig = buildConnectionConfig();
+
+    const response = await api.post<{
+      success: boolean;
+      title: string;
+      description: string | null;
+    }>('/mcp-connections/test', {
+      connection: connectionConfig,
+    });
+
+    if (response.data.success) {
+      // 格式化描述
+      if (response.data.description) {
+        formattedDescription.value = await formatMessage(response.data.description);
+      }
+
+      testResult.value = {
+        success: true,
+        title: response.data.title,
+        description: response.data.description || undefined,
+      };
+      ElMessage.success('连接测试成功');
+    } else {
+      testResult.value = {
+        success: false,
+        error: response.data.title,
+      };
+      ElMessage.error('连接测试失败: ' + response.data.title);
+    }
+  } catch (error) {
+    console.error('测试连接失败:', error);
+    testResult.value = {
+      success: false,
+      error: error instanceof Error ? error.message : '未知错误',
+    };
+    ElMessage.error('测试连接失败');
+  } finally {
+    testing.value = false;
+  }
+};
+
 // 处理取消
 const handleCancel = () => {
   emit('cancel');
@@ -297,6 +374,7 @@ const initFormData = () => {
 
 // 生命周期
 onMounted(() => {
+  clearForm();
   initFormData();
 });
 
@@ -304,6 +382,12 @@ onMounted(() => {
 watch(() => props.connection, () => {
   initFormData();
 }, { deep: true });
+
+watch(() => props.visible, (newVal) => {
+  if (newVal === false) {
+    clearForm();
+  }
+});
 </script>
 
 <template>
@@ -582,6 +666,46 @@ watch(() => props.connection, () => {
               placeholder="例如: ws://localhost:8080/mcp" />
           </el-form-item>
         </template>
+
+        <!-- 测试连接按钮 -->
+        <div class="test-connection-section">
+          <el-button @click="handleTestConnection" :loading="testing" type="info">
+            测试连接
+          </el-button>
+        </div>
+
+        <!-- 测试结果显示 -->
+        <template v-if="testResult">
+          <div v-if="testResult.success" class="test-result success">
+            <div class="result-header">
+              <span class="result-icon">✓</span>
+              <span class="result-title">测试成功</span>
+            </div>
+            <div class="result-content">
+              <div class="result-item">
+                <span class="result-label">Server Title:</span>
+                <span class="result-value">{{ testResult.title }}</span>
+              </div>
+              <div v-if="testResult.description" class="result-item">
+                <span class="result-label">Description:</span>
+                <div v-if="formattedDescription" class="markdown-body" v-html="formattedDescription"></div>
+                <span v-else class="result-value">{{ testResult.description }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="test-result error">
+            <div class="result-header">
+              <span class="result-icon">✕</span>
+              <span class="result-title">测试失败</span>
+            </div>
+            <div class="result-content">
+              <div class="result-item">
+                <span class="result-label">错误信息:</span>
+                <span class="result-value">{{ testResult.error }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </el-form>
 
@@ -636,6 +760,181 @@ watch(() => props.connection, () => {
   margin-left: 8px;
   color: var(--el-text-color-regular);
   font-size: 14px;
+}
+
+.test-connection-section {
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+}
+
+.test-result {
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 4px;
+  border-left: 4px solid;
+}
+
+.test-result.success {
+  background: #f0f9ff;
+  border-left-color: #10b981;
+}
+
+.test-result.error {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.result-icon {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.test-result.success .result-icon {
+  color: #10b981;
+}
+
+.test-result.error .result-icon {
+  color: #ef4444;
+}
+
+.result-title {
+  color: var(--el-text-color-primary);
+}
+
+.result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.result-label {
+  color: var(--el-text-color-regular);
+  font-weight: 500;
+  min-width: 120px;
+}
+
+.result-value {
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+  flex: 1;
+}
+
+/* Markdown 样式，参考 AssistantText.vue */
+:deep(.markdown-body) {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: transparent;
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+
+  /* 调整代码块样式 */
+  pre {
+    background-color: #f6f8fa;
+    border-radius: 4px;
+    padding: 12px;
+    border: 1px solid #e1e5e9;
+    overflow-x: auto;
+  }
+
+  code {
+    background-color: #f6f8fa;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  /* 调整表格样式 */
+  table {
+    display: table;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 12px 0;
+  }
+
+  table th,
+  table td {
+    padding: 8px 12px;
+    border: 1px solid #e1e5e9;
+    text-align: left;
+  }
+
+  table th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+  }
+
+  /* 调整图片最大宽度 */
+  img {
+    max-width: 100%;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* 调整标题样式 */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: #1f2937;
+    font-weight: 600;
+    margin: 8px 0;
+  }
+
+  /* 调整链接样式 */
+  a {
+    color: #10b981;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  /* 调整列表样式 */
+  ul,
+  ol {
+    margin: 8px 0;
+    padding-left: 20px;
+  }
+
+  li {
+    margin: 4px 0;
+  }
+
+  /* 调整引用样式 */
+  blockquote {
+    margin: 12px 0;
+    padding: 8px 12px;
+    background-color: #f9fafb;
+    border-left: 4px solid #10b981;
+    border-radius: 4px;
+  }
+
+  /* 调整段落样式 */
+  p {
+    margin: 8px 0;
+  }
 }
 
 .form-actions {

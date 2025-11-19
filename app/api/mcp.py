@@ -47,6 +47,33 @@ async def create_mcp_connection(request: CreateMCPConnectionRequest) -> MCPConne
         raise HTTPException(status_code=500, detail=f"Failed to create MCP connection: {e}") from e
 
 
+class TestMCPConnectionRequest(BaseModel):
+    """测试MCP连接请求"""
+
+    connection: Connection
+
+
+class TestMCPConnectionResponse(BaseModel):
+    """测试MCP连接响应"""
+
+    success: bool
+    title: str
+    description: str | None = None
+
+
+@router.post("/test", response_model=TestMCPConnectionResponse)
+async def test_mcp_connection(request: TestMCPConnectionRequest) -> TestMCPConnectionResponse:
+    """
+    测试MCP连接
+    """
+    try:
+        title, description = await mcp_service.test_connection(request.connection)
+        return TestMCPConnectionResponse(success=True, title=title, description=description)
+    except Exception as e:
+        logger.exception("测试MCP连接失败")
+        return TestMCPConnectionResponse(success=False, title=str(e), description=None)
+
+
 @router.get("")
 async def list_mcp_connections() -> dict[str, MCPConnection]:
     """

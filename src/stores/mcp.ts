@@ -18,20 +18,20 @@ export const useMCPStore = defineStore('mcp', () => {
 
   const loadingWrapper =
     <T extends unknown[], R>(errorMessage: string, fn: (...args: T) => Promise<R>) =>
-    (...args: T) =>
-      withLoading(
-        loading,
-        () => {
-          error.value = null;
-          return fn(...args);
-        },
-        (err) => {
-          error.value = errorMessage;
-          console.error(errorMessage, err);
-          ElMessage.error(errorMessage);
-          throw err;
-        },
-      );
+      (...args: T) =>
+        withLoading(
+          loading,
+          () => {
+            error.value = null;
+            return fn(...args);
+          },
+          (err) => {
+            error.value = errorMessage;
+            console.error(errorMessage, err);
+            ElMessage.error(errorMessage);
+            throw err;
+          },
+        );
 
   // 获取所有MCP连接
   const listConnections = loadingWrapper('获取MCP连接列表失败', async () => {
@@ -67,6 +67,18 @@ export const useMCPStore = defineStore('mcp', () => {
       return response.data;
     },
   );
+
+  // 测试MCP连接
+  const testConnection = async (connection: AnyMCPConnection) => {
+    const response = await api.post<{
+      success: boolean;
+      title: string;
+      description: string | null;
+    }>('/mcp-connections/test', {
+      connection,
+    });
+    return response.data;
+  };
 
   // 更新MCP连接
   const updateConnection = loadingWrapper(
@@ -173,6 +185,7 @@ export const useMCPStore = defineStore('mcp', () => {
     listConnections,
     getConnection,
     createConnection,
+    testConnection,
     updateConnection,
     deleteConnection,
     addConnectionsToSession,
