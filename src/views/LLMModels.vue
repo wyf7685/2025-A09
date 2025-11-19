@@ -370,7 +370,8 @@ onMounted(async () => {
             </el-select>
           </el-form-item>
           <el-form-item label="API Key" required>
-            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password />
+            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password
+              autocomplete="new-password" />
           </el-form-item>
           <el-form-item label="API URL">
             <el-input v-model="llmModelForm.apiUrl" placeholder="留空使用默认URL" />
