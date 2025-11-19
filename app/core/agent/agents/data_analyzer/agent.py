@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any, Self, cast
 
 import anyio
-import anyio.lowlevel
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
@@ -13,7 +12,6 @@ from app.core.agent.schemas import AgentRuntimeContext, SourcesDict
 from app.core.agent.sources import Sources
 from app.core.chain.llm import get_llm_async
 from app.log import logger
-from app.schemas.mcp import Connection
 from app.schemas.session import SessionID
 from app.utils import escape_tag, run_sync
 
@@ -36,14 +34,12 @@ class DataAnalyzerAgent:
         cls,
         session_id: SessionID,
         sources_dict: SourcesDict,
-        mcp_connections: list[tuple[str, Connection]] | None = None,
         pre_model_hook: Runnable | None = None,
     ) -> Self:
         self = super().__new__(cls)
         self.ctx = AgentContext(
             session_id=session_id,
             sources=Sources(sources_dict),
-            mcp_connections=mcp_connections,
             pre_model_hook=pre_model_hook,
         )
         self._wf_data = WorkflowData()
@@ -151,14 +147,13 @@ class DataAnalyzerAgent:
 
         async def read_tool_calls() -> None:
             while True:
-                for tc in self.ctx.flush_buffered_tool_calls():
+                async for tc in self.ctx.flush_buffered_tool_calls():
                     if evt := build_tool_call_event(tc, self.ctx.lookup_tool_source):
                         logger.info(
                             f"{prefix} 开始工具调用: <y>{escape_tag(evt.id)}</> - <g>{escape_tag(evt.name)}</>\n"
                             f"{escape_tag(str(evt.args))}"
                         )
                         await event_send.send(evt)
-                await anyio.lowlevel.checkpoint()
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(stream_graph)
