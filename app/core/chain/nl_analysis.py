@@ -27,7 +27,7 @@ def code_parser(text: str) -> str:
     text = text.removeprefix("python").strip()
     # 过滤 plt.rcParams[] 设置中文字体的代码
     for pattern in _filter_patterns:
-        text = pattern.sub("", text)
+        text = pattern.sub("pass", text)
     return text
 
 
