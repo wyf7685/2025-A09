@@ -165,10 +165,10 @@ def apply_user_selected_cleaning_with_ai(
         # 验证字段映射是否被保留
         logger.info(f"执行清洗后的列名: {final_columns}")
         if field_mappings_applied and final_columns != columns_after_mapping:
-            logger.warning(f"警告：列名在清洗过程中被改变！")
+            logger.warning("警告：列名在清洗过程中被改变！")
             logger.warning(f"预期的列名: {columns_after_mapping}")
             logger.warning(f"实际的列名: {final_columns}")
-            logger.warning(f"生成的代码可能意外修改了字段映射")
+            logger.warning("生成的代码可能意外修改了字段映射")
 
         # 构建操作记录
         applied_operations = []
