@@ -4,7 +4,6 @@ import PageHeader from '@/components/PageHeader.vue';
 import { useMCPStore } from '@/stores/mcp';
 import type { AnyMCPConnection, MCPConnection } from '@/types/mcp';
 import { Delete, Edit, MoreFilled, Plus, Search } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import {
   ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu,
   ElEmpty, ElIcon, ElInput, ElMessageBox, ElOption, ElSelect, ElTag
@@ -258,14 +257,14 @@ onMounted(async () => {
       <div v-if="filteredConnections.length === 0 && !loading" class="empty-state">
         <div v-if="!searchQuery && !selectedTransport" class="empty-content">
           <div class="empty-icon">
-            <Icon icon="material-symbols:hub-outline" />
+            <i-material-symbols-hub-outline />
           </div>
           <h3 class="empty-title">暂无 MCP 连接</h3>
           <p class="empty-description">还没有配置任何模型上下文协议连接</p>
           <p class="empty-tip">添加 MCP 连接来扩展您的分析能力</p>
           <div class="empty-action-wrapper">
             <el-button type="primary" @click="showCreateDialog = true" class="empty-action">
-              <Icon icon="material-symbols:add" class="button-icon" />
+              <i-material-symbols-add class="button-icon" />
               添加第一个连接
             </el-button>
           </div>

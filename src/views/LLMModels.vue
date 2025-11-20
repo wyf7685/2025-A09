@@ -4,7 +4,6 @@ import PageHeader from '@/components/PageHeader.vue';
 import { useModelStore } from '@/stores/model';
 import type { LLMModel, LLMModelEditParams } from '@/types';
 import { Delete, Edit, Plus } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import {
   ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElIcon,
   ElInput, ElMessage, ElMessageBox, ElOption, ElSelect
@@ -302,11 +301,10 @@ onMounted(async () => {
             </div>
             <div class="model-status">
               <div class="status-indicator" :class="{ 'status-active': llmModel.available }">
-                <Icon
-                  :icon="llmModel.available ? 'material-symbols:check-circle' : 'material-symbols:error-circle-rounded'"
-                  width="16"
-                  height="16"
-                  :color="getStatusColor(llmModel.available ?? false)" />
+                <i-material-symbols-check-circle v-if="llmModel.available"
+                  width="16" height="16" :color="getStatusColor(llmModel.available ?? false)" />
+                <i-material-symbols-error-circle-rounded v-else
+                  width="16" height="16" :color="getStatusColor(llmModel.available ?? false)" />
                 <span class="status-text">{{ llmModel.available ? '已配置' : '未配置' }}</span>
               </div>
             </div>
@@ -332,7 +330,7 @@ onMounted(async () => {
       <div v-else class="empty-state">
         <div class="empty-content">
           <div class="empty-icon">
-            <Icon icon="material-symbols:psychology-alt-outline" width="80" height="80" color="#d1d5db" />
+            <i-material-symbols-psychology-alt-outline width="80" height="80" color="#d1d5db" />
           </div>
           <h3>暂无配置的模型</h3>
           <p>开始添加您的第一个大语言模型配置</p>

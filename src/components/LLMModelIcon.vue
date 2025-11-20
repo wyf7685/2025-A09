@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import DeepseekIcon from '@/assets/icons/deepseek.ico';
 import ZhipuAIIcon from '@/assets/icons/zhipu.svg';
-import { Icon } from '@iconify/vue';
+import type { FunctionalComponent } from 'vue';
+import LogosGoogleIcon from '~icons/logos/google-icon';
+import SimpleIconsAnthropic from '~icons/simple-icons/anthropic';
+import SimpleIconsOllama from '~icons/simple-icons/ollama';
+import SimpleIconsOpenai from '~icons/simple-icons/openai';
+import StreamlineLogosOpenaiLogo from '~icons/streamline-logos/openai-logo';
 
 defineProps<{
   provider: string;
@@ -9,13 +14,15 @@ defineProps<{
 }>();
 
 const standardIcons = {
-  'OpenAI': { icon: 'simple-icons:openai', color: '#00a67e' },
-  'Google': { icon: 'logos:google-icon', color: '#4285f4' },
-  'Anthropic': { icon: 'simple-icons:anthropic', color: '#d97706' },
-  'Ollama': { icon: 'simple-icons:ollama', color: '#000000' },
-  'OpenAI兼容': { icon: 'streamline-logos:openai-logo', color: '#6366f1' },
-  'OpenAI-Compat': { icon: 'streamline-logos:openai-logo', color: '#6366f1' },
-} as Record<string, { icon: string, color: string; }>;
+  'OpenAI': { icon: SimpleIconsOpenai, color: '#00a67e' },
+  'Google': { icon: LogosGoogleIcon, color: '#4285f4' },
+  'Anthropic': { icon: SimpleIconsAnthropic, color: '#d97706' },
+  'Ollama': { icon: SimpleIconsOllama, color: '#000000' },
+  'OpenAI兼容': { icon: StreamlineLogosOpenaiLogo, color: '#6366f1' },
+  'OpenAI-Compat': {
+    icon: StreamlineLogosOpenaiLogo, color: '#6366f1'
+  },
+} as Record<string, { icon: FunctionalComponent, color: string; }>;
 
 const extraIcons = {
   'DeepSeek': DeepseekIcon,
@@ -30,13 +37,12 @@ const extraIcons = {
     :width="size"
     :height="size"
     style="border-radius: 4px;" />
-  <Icon v-else-if="standardIcons[provider]"
-    :icon="standardIcons[provider].icon"
+  <component v-else-if="standardIcons[provider]"
+    :is="standardIcons[provider].icon"
     :width="size"
     :height="size"
     :color="standardIcons[provider].color" />
-  <Icon v-else
-    icon="material-symbols:settings-outline"
+  <i-material-symbols-settings-outline v-else
     :width="size"
     :height="size"
     color="#6b7280" />

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { LLMModel } from '@/types';
 import { DataAnalysis, Document, Upload, UploadFilled } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import { ElButton, ElCol, ElForm, ElFormItem, ElIcon, ElInput, ElMessage, ElOption, ElOptionGroup, ElRow, ElSelect, ElTag, ElUpload, type UploadFile } from 'element-plus';
 import { ref } from 'vue';
 
@@ -109,7 +108,7 @@ const handleDragleave = () => {
       </div>
       <div class="file-actions">
         <el-button class="delete-btn" text circle @click="clearSelectedFile" :title="'删除当前文件'">
-          <Icon icon="material-symbols:close-rounded" width="20" height="20" />
+          <i-material-symbols-close-rounded width="20" height="20" />
         </el-button>
       </div>
     </div>
@@ -161,7 +160,7 @@ const handleDragleave = () => {
           <el-input v-model="userRequirements" type="textarea"
             placeholder="例如：请重点关注数据标准化，确保所有列名都符合命名规范，处理缺失值，并验证邮箱格式..." :rows="3" show-word-limit maxlength="500" />
           <div class="hint-text">
-            <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
+            <i-material-symbols-info-outline-rounded width="16" height="16" color="#6b7280" />
             描述您的具体清洗需求，AI将根据您的要求生成个性化的清洗建议
           </div>
         </el-form-item>
@@ -185,7 +184,7 @@ const handleDragleave = () => {
             </el-option-group>
           </el-select>
           <div class="hint-text">
-            <Icon icon="material-symbols:info-outline-rounded" width="16" height="16" color="#6b7280" />
+            <i-material-symbols-info-outline-rounded width="16" height="16" color="#6b7280" />
             不同模型在字段理解和建议生成方面各有特色
           </div>
         </el-form-item>

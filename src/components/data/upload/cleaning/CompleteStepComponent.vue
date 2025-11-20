@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
-import { Icon } from '@iconify/vue';
 import { ElButton, ElCard, ElDialog, ElMessage, ElResult, ElTag } from 'element-plus';
 import { ref } from 'vue';
 
@@ -78,38 +77,36 @@ const viewGeneratedCode = async () => {
       '数据已成功上传到Dremio，您可以在数据源列表中查看' :
       '数据处理完成，请选择操作'">
       <template #icon>
-        <Icon icon="material-symbols:task-alt-rounded" width="80" height="80" color="#67C23A" />
+        <i-material-symbols-task-alt-rounded width="80" height="80" color="#67C23A" />
       </template>
       <template #extra>
         <div class="complete-actions">
           <el-button type="primary" @click="completeCleaningAndUpload" size="large"
             v-if="analysisResult?.data_uploaded">
-            <Icon icon="material-symbols:check-circle-outline-rounded" width="18" height="18"
-              style="margin-right: 4px;" />
+            <i-material-symbols-check-circle-outline-rounded width="18" height="18" style="margin-right: 4px;" />
             关闭并查看数据源列表
           </el-button>
 
           <el-button type="primary" @click="skipAnalysisAndUpload" size="large" v-if="!analysisResult?.data_uploaded">
-            <Icon icon="material-symbols:upload" width="18" height="18"
-              style="margin-right: 4px;" />
+            <i-material-symbols-upload width="18" height="18" style="margin-right: 4px;" />
             立即上传数据
           </el-button>
 
           <el-button @click="startAnalysis" size="large">
-            <Icon icon="material-symbols:refresh-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-refresh-rounded width="18" height="18" style="margin-right: 4px;" />
             重新分析数据质量
           </el-button>
 
           <el-button @click="step = 'cleaning'" v-if="cleaningSuggestions.length > 0 && !analysisResult?.data_uploaded"
             size="large">
-            <Icon icon="material-symbols:edit-outline-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-edit-outline-rounded width="18" height="18" style="margin-right: 4px;" />
             重新选择清洗操作
           </el-button>
 
           <el-button @click="viewGeneratedCode" size="large"
             v-if="cleanedFileId"
             type="info">
-            <Icon icon="material-symbols:code-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-code-rounded width="18" height="18" style="margin-right: 4px;" />
             查看生成的清洗代码
           </el-button>
         </div>

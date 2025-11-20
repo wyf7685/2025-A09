@@ -2,7 +2,6 @@
 <script setup lang="ts">
 import { useDataSourceStore } from '@/stores/datasource';
 import { useSessionStore } from '@/stores/session';
-import { Icon } from '@iconify/vue';
 import { ElCol, ElRow, ElStatistic } from 'element-plus';
 import { computed, onMounted } from 'vue';
 
@@ -35,7 +34,7 @@ onMounted(() => {
     <div class="analysis-card welcome-card">
       <div class="card-header">
         <h2>
-          <Icon icon="material-symbols:home-rounded" class="header-icon" />
+          <i-material-symbols-home-rounded class="header-icon" />
           <span class="card-header-text"> 工作台总览</span>
         </h2>
         <p class="subtitle">欢迎使用智能数据分析平台</p>
@@ -44,7 +43,7 @@ onMounted(() => {
         <el-col :span="8">
           <div class="stat-item">
             <div class="stat-icon session-icon">
-              <Icon icon="material-symbols:chat-bubble-outline" />
+              <i-material-symbols-chat-bubble-outline />
             </div>
             <el-statistic title="当前会话" :value="currentSessionName" />
           </div>
@@ -52,7 +51,7 @@ onMounted(() => {
         <el-col :span="8">
           <div class="stat-item">
             <div class="stat-icon dataset-icon">
-              <Icon icon="material-symbols:database-outline" />
+              <i-material-symbols-database-outline />
             </div>
             <el-statistic title="已上传数据集" :value="dataSourceCount" />
           </div>
@@ -60,7 +59,7 @@ onMounted(() => {
         <el-col :span="8">
           <div class="stat-item">
             <div class="stat-icon history-icon">
-              <Icon icon="material-symbols:history" />
+              <i-material-symbols-history />
             </div>
             <el-statistic title="分析会话" :value="chatHistoryLength" />
           </div>
@@ -72,7 +71,7 @@ onMounted(() => {
     <div class="analysis-card quick-actions-card">
       <div class="card-header">
         <h3>
-          <Icon icon="heroicons:rocket-launch" class="section-icon" />
+          <i-heroicons-rocket-launch class="section-icon" />
           <span class="card-header-text">快速开始</span>
         </h3>
         <p class="subtitle">选择一个操作开始您的数据分析之旅</p>
@@ -82,12 +81,12 @@ onMounted(() => {
         <el-col :span="8">
           <div class="quick-action-card sources-card" @click="$router.push('/data-management')">
             <div class="action-icon sources-icon">
-              <Icon icon="material-symbols:storage" />
+              <i-material-symbols-storage />
             </div>
             <h4>数据管理</h4>
             <p>管理您的数据源</p>
             <div class="card-arrow">
-              <Icon icon="heroicons:arrow-right" />
+              <i-heroicons-arrow-right />
             </div>
           </div>
         </el-col>
@@ -95,12 +94,12 @@ onMounted(() => {
         <el-col :span="8">
           <div class="quick-action-card chat-card" @click="$router.push('/chat-analysis')">
             <div class="action-icon chat-icon">
-              <Icon icon="material-symbols:smart-toy-outline" />
+              <i-material-symbols-smart-toy-outline />
             </div>
             <h4>对话分析</h4>
             <p>智能数据分析助手</p>
             <div class="card-arrow">
-              <Icon icon="heroicons:arrow-right" />
+              <i-heroicons-arrow-right />
             </div>
           </div>
         </el-col>
@@ -108,12 +107,12 @@ onMounted(() => {
         <el-col :span="8">
           <div class="quick-action-card upload-card" @click="$router.push('/data-upload')">
             <div class="action-icon upload-icon">
-              <Icon icon="material-symbols:upload" />
+              <i-material-symbols-upload />
             </div>
             <h4>数据上传</h4>
             <p>上传本地数据文件</p>
             <div class="card-arrow">
-              <Icon icon="heroicons:arrow-right" />
+              <i-heroicons-arrow-right />
             </div>
           </div>
         </el-col>
@@ -123,31 +122,31 @@ onMounted(() => {
       <!-- 模型管理区域 -->
       <div class="models-section">
         <h4 class="models-title">
-          <Icon icon="material-symbols:psychology-alt-outline" class="models-icon" />
+          <i-material-symbols-psychology-alt-outline class="models-icon" />
           模型管理
         </h4>
         <el-row :gutter="16" class="models-row">
           <el-col :span="12">
             <div class="quick-action-card models-card llm-card" @click="$router.push('/llm-models')">
               <div class="action-icon llm-icon">
-                <Icon icon="material-symbols:neurology" />
+                <i-material-symbols-neurology />
               </div>
               <h5>大语言模型</h5>
               <p>管理 LLM 模型配置</p>
               <div class="card-arrow">
-                <Icon icon="heroicons:arrow-right" />
+                <i-heroicons-arrow-right />
               </div>
             </div>
           </el-col>
           <el-col :span="12">
             <div class="quick-action-card models-card trained-card" @click="$router.push('/trained-models')">
               <div class="action-icon trained-icon">
-                <Icon icon="material-symbols:model-training" />
+                <i-material-symbols-model-training />
               </div>
               <h5>训练模型</h5>
               <p>管理自训练模型</p>
               <div class="card-arrow">
-                <Icon icon="heroicons:arrow-right" />
+                <i-heroicons-arrow-right />
               </div>
             </div>
           </el-col>
@@ -157,17 +156,17 @@ onMounted(() => {
       <!-- 高级功能区域 -->
       <div class="advanced-section">
         <h4 class="advanced-title">
-          <Icon icon="material-symbols:settings-outline" class="advanced-icon" />
+          <i-material-symbols-settings-outline class="advanced-icon" />
           高级功能
         </h4>
         <div class="quick-action-card advanced-card mcp-card" @click="$router.push('/mcp-connections')">
           <div class="action-icon mcp-icon">
-            <Icon icon="material-symbols:hub-outline" />
+            <i-material-symbols-hub-outline />
           </div>
           <h5>MCP 连接管理</h5>
           <p>管理模型上下文协议连接</p>
           <div class="card-arrow">
-            <Icon icon="heroicons:arrow-right" />
+            <i-heroicons-arrow-right />
           </div>
         </div>
       </div>

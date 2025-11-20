@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { useLoginStore } from '@/stores/login';
 import { ChatDotRound, House, Lightning, Link, Menu } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import { ElAside, ElButton, ElIcon, ElTooltip } from 'element-plus';
 import { RouterLink } from 'vue-router';
+import TablerChartDots from '~icons/tabler/chart-dots';
+import TablerCloudUpload from '~icons/tabler/cloud-upload';
+import TablerDatabase from '~icons/tabler/database';
+import TablerRobot from '~icons/tabler/robot';
 
 defineProps<{
   apiStatus: boolean;
@@ -38,13 +41,13 @@ const loginStore = useLoginStore();
     <div class="sidebar-menu">
       <div :class="['custom-menu', { collapsed: sidebarCollapsed }]">
         <RouterLink v-for="(item, index) in [
-          { path: '/dashboard', icon: House, label: '工作台', type: 'element' },
-          { path: '/data-management', icon: 'tabler:database', label: '数据管理', type: 'iconify' },
-          { path: '/data-upload', icon: 'tabler:cloud-upload', label: '数据上传', type: 'iconify' },
-          { path: '/chat-analysis', icon: ChatDotRound, label: '对话分析', type: 'element' },
-          { path: '/mcp-connections', icon: Link, label: 'MCP连接', type: 'element' },
-          { path: '/llm-models', icon: 'tabler:robot', label: '大语言模型', type: 'iconify' },
-          { path: '/trained-models', icon: 'tabler:chart-dots', label: '机器学习模型', type: 'iconify' }
+          { path: '/dashboard', icon: House, label: '工作台' },
+          { path: '/data-management', icon: TablerDatabase, label: '数据管理' },
+          { path: '/data-upload', icon: TablerCloudUpload, label: '数据上传' },
+          { path: '/chat-analysis', icon: ChatDotRound, label: '对话分析' },
+          { path: '/mcp-connections', icon: Link, label: 'MCP连接' },
+          { path: '/llm-models', icon: TablerRobot, label: '大语言模型' },
+          { path: '/trained-models', icon: TablerChartDots, label: '机器学习模型' },
         ]"
           :key="index"
           :to="item.path"
@@ -57,15 +60,13 @@ const loginStore = useLoginStore();
             :offset="12"
             :show-after="300">
             <div class="menu-icon">
-              <Icon v-if="item.type === 'iconify'" :icon="item.icon as string" />
-              <el-icon v-else>
+              <el-icon>
                 <component :is="item.icon" />
               </el-icon>
             </div>
           </el-tooltip>
           <div v-else class="menu-icon">
-            <Icon v-if="item.type === 'iconify'" :icon="item.icon as string" />
-            <el-icon v-else>
+            <el-icon>
               <component :is="item.icon" />
             </el-icon>
           </div>
@@ -93,7 +94,7 @@ const loginStore = useLoginStore();
           type="danger"
           class="logout-button"
           @click="loginStore.logout()">
-          <Icon icon="material-symbols:logout-rounded"></Icon>
+          <i-material-symbols-logout-rounded />
           <span>退出登录</span>
         </el-button>
       </div>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { CleaningAction, CleaningStep, CleaningSuggestion } from '@/types/cleaning';
-import { Icon } from '@iconify/vue';
 import { ElAlert, ElButton, ElEmpty } from 'element-plus';
 import CleaningSuggestionItem from './CleaningSuggestionItem.vue';
 
@@ -54,7 +53,7 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
     <div v-if="isCleaning" class="cleaning-progress">
       <el-empty description="正在记录您的清洗选择，请稍候...">
         <template #image>
-          <Icon icon="line-md:loading-loop" width="60" height="60" color="#667eea" />
+          <i-line-md-loading-loop width="60" height="60" color="#667eea" />
         </template>
       </el-empty>
     </div>
@@ -70,7 +69,7 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
         <el-alert title="功能说明" description="本系统将根据您选择的建议自动执行数据清洗操作，包括字段重命名、缺失值处理、异常值处理等，清洗后的数据将保存到Dremio中。" type="info"
           :closable="false">
           <template #icon>
-            <Icon icon="material-symbols:info-outline" width="20" height="20" color="#409EFF" />
+            <i-material-symbols-info-outline width="20" height="20" color="#409EFF" />
           </template>
         </el-alert>
       </div>
@@ -82,17 +81,17 @@ const skipAnalysisAndUpload = () => emit('skipAndUpload');
         <div class="action-buttons">
           <el-button type="primary" @click="applyCleaningActions" :loading="isCleaning"
             :disabled="selectedCleaningActions.length === 0" size="large">
-            <Icon icon="material-symbols:play-arrow-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-play-arrow-rounded width="18" height="18" style="margin-right: 4px;" />
             执行选中的清洗操作 ({{ selectedCleaningActions.length }})
           </el-button>
 
           <el-button @click="skipAnalysisAndUpload" size="large">
-            <Icon icon="material-symbols:upload-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-upload-rounded width="18" height="18" style="margin-right: 4px;" />
             跳过清洗直接上传
           </el-button>
 
           <el-button @click="step = 'analysis'" size="large">
-            <Icon icon="material-symbols:arrow-back-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-arrow-back-rounded width="18" height="18" style="margin-right: 4px;" />
             返回分析结果
           </el-button>
         </div>

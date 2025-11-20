@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { ChatMessage } from '@/types';
 import { Loading } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import { ElIcon } from 'element-plus';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AssistantMessage from './message/AssistantMessage.vue';
@@ -60,7 +59,7 @@ onMounted(() => {
     <div v-if="!currentSessionId || !currentDatasetExists" class="empty-state">
       <div class="empty-content">
         <div class="empty-icon">
-          <Icon icon="material-symbols:smart-toy-outline" />
+          <i-material-symbols-smart-toy-outline />
         </div>
         <h3 class="empty-title">开始智能数据分析</h3>
         <p class="empty-description">选择一个数据集，开始您的数据分析对话</p>

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { CleaningStep } from '@/types/cleaning';
-import { Icon } from '@iconify/vue';
+import type { FunctionalComponent } from 'vue';
+import MaterialSymbolsAnalyticsOutlineRounded from '~icons/material-symbols/analytics-outline-rounded';
+import MaterialSymbolsCheckCircleOutlineRounded from '~icons/material-symbols/check-circle-outline-rounded';
+import MaterialSymbolsCleaningServicesOutlineRounded from '~icons/material-symbols/cleaning-services-outline-rounded';
+import MdiCloudUpload from '~icons/mdi/cloud-upload';
 
 // 组件属性
 defineProps<{
@@ -9,11 +13,11 @@ defineProps<{
 
 // 步骤配置
 const steps = [
-  { key: 'upload', name: '文件上传', icon: 'mdi:cloud-upload' },
-  { key: 'analysis', name: '智能分析', icon: 'material-symbols:analytics-outline-rounded' },
-  { key: 'cleaning', name: '清洗建议', icon: 'material-symbols:cleaning-services-outline-rounded' },
-  { key: 'complete', name: '完成上传', icon: 'material-symbols:check-circle-outline-rounded' },
-] as { key: CleaningStep, name: string, icon: string; }[];
+  { key: 'upload', name: '文件上传', icon: MdiCloudUpload },
+  { key: 'analysis', name: '智能分析', icon: MaterialSymbolsAnalyticsOutlineRounded },
+  { key: 'cleaning', name: '清洗建议', icon: MaterialSymbolsCleaningServicesOutlineRounded },
+  { key: 'complete', name: '完成上传', icon: MaterialSymbolsCheckCircleOutlineRounded },
+] as { key: CleaningStep, name: string, icon: FunctionalComponent; }[];
 
 // 获取步骤索引
 const getStepIndex = (step: CleaningStep) => {
@@ -29,13 +33,13 @@ const getStepIndex = (step: CleaningStep) => {
     }">
       <div class="step-icon">
         <template v-if="getStepIndex(currentStep) > getStepIndex(stepItem.key)">
-          <Icon :icon="'material-symbols:check-circle-rounded'" width="24" height="24" color="#67C23A" />
+          <i-material-symbols-check-circle-rounded width="24" height="24" color="#67C23A" />
         </template>
         <template v-else-if="currentStep === stepItem.key">
-          <Icon :icon="stepItem.icon" width="24" height="24" color="#409EFF" />
+          <component :is="stepItem.icon" width="24" height="24" color="#409EFF" />
         </template>
         <template v-else>
-          <Icon :icon="stepItem.icon" width="24" height="24" color="#C0C4CC" />
+          <component :is="stepItem.icon" width="24" height="24" color="#C0C4CC" />
         </template>
       </div>
       <div class="step-title">{{ stepItem.name }}</div>

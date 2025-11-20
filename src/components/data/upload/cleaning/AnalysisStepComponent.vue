@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { AnalyzeDataQualityState, CleaningSuggestion, DataQualityReport } from '@/types/cleaning';
-import { Icon } from '@iconify/vue';
 import { ElAlert, ElButton, ElEmpty } from 'element-plus';
 import DataQualityReportDetail from './DataQualityReport.vue';
 import FieldMappingsGrid from './FieldMappingsGrid.vue';
@@ -29,7 +28,7 @@ const emit = defineEmits<{
       <div class="loading-status">
         <el-empty description="正在智能分析数据质量，请稍候...">
           <template #image>
-            <Icon icon="line-md:loading-loop" width="60" height="60" color="#667eea" />
+            <i-line-md-loading-loop width="60" height="60" color="#667eea" />
           </template>
         </el-empty>
       </div>
@@ -59,18 +58,17 @@ const emit = defineEmits<{
         <div class="action-buttons">
           <el-button type="primary" @click="emit('gotoCleaning')" :disabled="cleaningSuggestions.length === 0"
             size="large">
-            <Icon icon="material-symbols:cleaning-services-outline-rounded" width="18" height="18"
-              style="margin-right: 4px;" />
+            <i-material-symbols-cleaning-services-outline-rounded width="18" height="18" style="margin-right: 4px;" />
             下一步：执行清洗操作 ({{ cleaningSuggestions.length }})
           </el-button>
 
           <el-button type="success" @click="emit('skipAndUpload')" size="large" :disabled="!dataQualityReport">
-            <Icon icon="material-symbols:upload-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-upload-rounded width="18" height="18" style="margin-right: 4px;" />
             {{ cleaningSuggestions.length === 0 ? '直接上传数据' : '忽略问题，仅应用字段映射并上传' }}
           </el-button>
 
           <el-button @click="emit('gotoUpload')" size="large">
-            <Icon icon="material-symbols:arrow-back-rounded" width="18" height="18" style="margin-right: 4px;" />
+            <i-material-symbols-arrow-back-rounded width="18" height="18" style="margin-right: 4px;" />
             返回上传
           </el-button>
         </div>

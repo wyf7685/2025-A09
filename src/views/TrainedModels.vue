@@ -5,7 +5,6 @@ import { useModelStore } from '@/stores/model';
 import { useSessionStore } from '@/stores/session';
 import type { MLModel, SessionListItem } from '@/types';
 import { Calendar, DataAnalysis, Delete, Download, Refresh, Search, Star, View } from '@element-plus/icons-vue';
-import { Icon } from '@iconify/vue';
 import { ElButton, ElCard, ElDialog, ElIcon, ElMessage, ElMessageBox, ElSkeleton, ElTag, ElTooltip } from 'element-plus';
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -169,14 +168,14 @@ onMounted(async () => {
       <div v-else-if="models.length === 0" class="empty-state">
         <div class="empty-content">
           <div class="empty-icon">
-            <Icon icon="material-symbols:model-training" />
+            <i-material-symbols-model-training />
           </div>
           <h3 class="empty-title">暂无训练模型</h3>
           <p class="empty-description">还没有训练任何机器学习模型</p>
           <p class="empty-tip">在对话分析中使用模型训练功能来创建模型</p>
           <div class="empty-action-wrapper">
             <el-button type="primary" @click="$router.push('/chat-analysis')" class="empty-action">
-              <Icon icon="material-symbols:rocket-launch" class="button-icon" />
+              <i-material-symbols-rocket-launch class="button-icon" />
               开始对话分析
             </el-button>
           </div>
