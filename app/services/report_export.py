@@ -25,6 +25,51 @@ from reportlab.platypus import (
 )
 
 
+def _process_markdown_formatting(text: str) -> str:
+    """
+    处理 Markdown 格式化（粗体、斜体），避免处理代码中的标记
+
+    支持:
+    - **text** 或 __text__ -> <b>text</b> (粗体)
+    - *text* 或 _text_ -> <i>text</i> (斜体)
+    - `code` -> 不处理（保持原样）
+
+    Args:
+        text: 原始 Markdown 文本
+
+    Returns:
+        转换后的 HTML 标记文本
+    """
+    from re import Match
+
+    # 首先保护代码块（反引号内容）
+    code_parts = {}
+    code_pattern = r"`([^`]+)`"
+
+    def save_code(match: Match[str]) -> str:
+        key = f"__CODE_PLACEHOLDER_{len(code_parts)}__"
+        code_parts[key] = match.group(0)
+        return key
+
+    # 替换所有代码片段
+    text = re.sub(code_pattern, save_code, text)
+
+    # 处理粗体（** 或 __）
+    text = re.sub(r"\*\*([^\*]+)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__([^_]+)__", r"<b>\1</b>", text)
+
+    # 处理斜体（* 或 _，但要避免已处理的粗体标签）
+    # 只处理配对的 * 或 _
+    text = re.sub(r"(?<!\*)\*([^\*]+)\*(?!\*)", r"<i>\1</i>", text)
+    text = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"<i>\1</i>", text)
+
+    # 恢复代码块
+    for key, value in code_parts.items():
+        text = text.replace(key, value)
+
+    return text
+
+
 def _process_image(image_data: str | bytes | Path, max_width: float = 15 * cm) -> Image | None:
     """
     处理图片数据并创建 ReportLab Image 对象
@@ -295,9 +340,8 @@ def _parse_markdown_to_elements(markdown_content: str, styles: dict, chinese_fon
             elements.append(Spacer(1, 0.5 * cm))
         # 处理普通段落
         elif stripped:
-            # 处理粗体和斜体
-            text = stripped.replace("**", "<b>").replace("__", "<b>")
-            text = text.replace("*", "<i>").replace("_", "<i>")
+            # 处理粗体和斜体，同时避免处理代码中的标记
+            text = _process_markdown_formatting(stripped)
             elements.append(Paragraph(text, styles["Normal"]))
             elements.append(Spacer(1, 0.2 * cm))
         else:

@@ -134,6 +134,10 @@ def apply_user_selected_cleaning_with_ai(
             "user_requirements": user_requirements or "无特殊要求",
         }
 
+        # 记录映射后的列名
+        columns_after_mapping = df.columns.tolist()
+        logger.info(f"字段映射后的列名: {columns_after_mapping}")
+
         # 生成清洗代码（使用指定模型）
         logger.info("开始生成清洗代码...")
         generated_code = _create_code_generator_chain(model_id).invoke(data_info)
@@ -157,6 +161,14 @@ def apply_user_selected_cleaning_with_ai(
 
         final_shape = cleaned_df.shape
         final_columns = cleaned_df.columns.tolist()
+
+        # 验证字段映射是否被保留
+        logger.info(f"执行清洗后的列名: {final_columns}")
+        if field_mappings_applied and final_columns != columns_after_mapping:
+            logger.warning(f"警告：列名在清洗过程中被改变！")
+            logger.warning(f"预期的列名: {columns_after_mapping}")
+            logger.warning(f"实际的列名: {final_columns}")
+            logger.warning(f"生成的代码可能意外修改了字段映射")
 
         # 构建操作记录
         applied_operations = []
