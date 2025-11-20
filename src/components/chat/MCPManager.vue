@@ -414,10 +414,4 @@ onMounted(async () => {
   color: var(--el-text-color-secondary);
   gap: 8px;
 }
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
 </style>

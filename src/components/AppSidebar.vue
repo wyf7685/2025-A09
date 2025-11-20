@@ -382,4 +382,22 @@ const loginStore = useLoginStore();
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+
+// 响应式设计
+@media (max-width: 768px) {
+  .layout-sidebar {
+    position: fixed;
+    left: -250px;
+    z-index: 1000;
+    height: 100%;
+
+    &.mobile-open {
+      left: 0;
+    }
+  }
+
+  .layout-content {
+    padding: 16px;
+  }
+}
 </style>
