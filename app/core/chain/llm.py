@@ -130,12 +130,12 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
         llm = lambda: OllamaLLM(
             model=config.api_model_name,
             base_url=config.api_url,
-            **timeout_retry_kwargs,
+            **temperature_kwargs,
         )
         chat_model = lambda: ChatOllama(
             model=config.api_model_name,
             base_url=config.api_url,
-            **timeout_retry_kwargs,
+            **temperature_kwargs,
         )
     elif config.provider.lower() == "zhipuai" or config.provider.lower() == "openai":
         from langchain_openai import ChatOpenAI, OpenAI
