@@ -88,7 +88,7 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
     )
 
     temperature_kwargs: dict[str, Any] = {
-        "temperature": 0.1,
+        "temperature": 0.7,
     }
     timeout_retry_kwargs: dict[str, Any] = {
         "timeout": 30,  # 30秒超时
