@@ -87,6 +87,14 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
         f" - <y>{escape_tag(config.api_model_name)}</>",
     )
 
+    temperature_kwargs: dict[str, Any] = {
+        "temperature": 0.1,
+    }
+    timeout_retry_kwargs: dict[str, Any] = {
+        "timeout": 30,  # 30秒超时
+        "max_retries": 2,  # 最多重试2次
+    }
+
     # 根据提供商选择正确的模型类
     if config.provider.lower() == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAI
@@ -95,15 +103,15 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             model=config.api_model_name,
             google_api_key=SecretStr(config.api_key),
             transport="rest",
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
         chat_model = lambda: ChatGoogleGenerativeAI(
             model=config.api_model_name,
             google_api_key=SecretStr(config.api_key),
             transport="rest",
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
     elif config.provider.lower() == "deepseek":
         from langchain_deepseek import ChatDeepSeek
@@ -113,8 +121,8 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             model=config.api_model_name,
             api_key=SecretStr(config.api_key),
             base_url=config.api_url,
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
     elif config.provider.lower() == "ollama":
         from langchain_ollama import ChatOllama, OllamaLLM
@@ -122,10 +130,12 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
         llm = lambda: OllamaLLM(
             model=config.api_model_name,
             base_url=config.api_url,
+            **timeout_retry_kwargs,
         )
         chat_model = lambda: ChatOllama(
             model=config.api_model_name,
             base_url=config.api_url,
+            **timeout_retry_kwargs,
         )
     elif config.provider.lower() == "zhipuai" or config.provider.lower() == "openai":
         from langchain_openai import ChatOpenAI, OpenAI
@@ -134,15 +144,15 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             model=config.api_model_name,
             api_key=SecretStr(config.api_key),
             base_url=config.api_url,
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
         chat_model = lambda: ChatOpenAI(
             model=config.api_model_name,
             api_key=SecretStr(config.api_key),
             base_url=config.api_url,
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
     else:
         # 默认使用 OpenAI 兼容格式
@@ -153,8 +163,8 @@ def _from_config(config: CustomModelConfig) -> tuple[Callable[[], LLM] | None, C
             model=config.api_model_name,
             api_key=SecretStr(config.api_key),
             base_url=config.api_url,
-            timeout=30,  # 30秒超时
-            max_retries=2,  # 最多重试2次
+            **temperature_kwargs,
+            **timeout_retry_kwargs,
         )
 
     return llm, chat_model
