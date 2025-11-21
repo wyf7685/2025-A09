@@ -120,9 +120,16 @@ class DataSourceService:
 
         if await (fp := _DATASOURCE_DIR / f"{source_id}.json").exists():
             try:
-                await fp.unlink()
+                await fp.unlink(missing_ok=True)
             except Exception as e:
                 logger.warning(f"删除数据源文件失败: {fp} - {e}")
+
+        source = await self.get_source(source_id)
+        if isinstance(source, FileDataSource):
+            try:
+                source.file_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"删除文件数据源文件失败: {source.file_path} - {e}")
 
         self.sources.pop(source_id, None)
 
