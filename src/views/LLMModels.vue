@@ -145,6 +145,22 @@ const convertProviderToBackend = (provider: string): string => {
   return providerMap[provider] || provider;
 };
 
+const guessProviderFromDisplayName = (displayName: string): string | null => {
+  const keywords: Record<string, string> = {
+    'gpt': 'OpenAI',
+    'gemini': 'Google',
+    'claude': 'Anthropic',
+    'deepseek': 'DeepSeek',
+    'glm': 'ZhipuAI',
+  }
+  for (const keyword of Object.keys(keywords)) {
+    if (displayName.toLowerCase().includes(keyword)) {
+      return keywords[keyword];
+    }
+  }
+  return null;
+};
+
 const getDialogTitle = (): string => {
   if (currentEditLLMModel.value) {
     return `编辑 ${currentEditLLMModel.value.name}`;
@@ -267,10 +283,6 @@ onMounted(async () => {
 <template>
   <div class="llm-models-page">
     <div class="page-header">
-      <!-- <div class="header-content">
-        <h1>大语言模型管理</h1>
-        <p class="header-subtitle">配置和管理您的大语言模型API</p>
-      </div> -->
       <PageHeader
         title="大语言模型管理"
         subtitle="配置和管理您的大语言模型API" />
@@ -291,7 +303,7 @@ onMounted(async () => {
           <div class="llm-model-header">
             <div class="model-icon"
               :style="{ background: `linear-gradient(135deg, ${getProviderColor(llmModel.provider)}15, ${getProviderColor(llmModel.provider)}25)` }">
-              <LLMModelIcon :provider="llmModel.provider" :size="28" />
+              <LLMModelIcon :provider="guessProviderFromDisplayName(llmModel.name) || llmModel.provider" :size="28" />
             </div>
             <div class="model-info">
               <h3>{{ llmModel.name }}</h3>
@@ -411,7 +423,8 @@ onMounted(async () => {
             </el-select>
           </el-form-item>
           <el-form-item label="API Key">
-            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password />
+            <el-input v-model="llmModelForm.apiKey" type="password" placeholder="请输入API密钥" show-password
+              autocomplete="new-password" />
           </el-form-item>
           <el-form-item label="API URL">
             <el-input v-model="llmModelForm.apiUrl" placeholder="留空使用默认URL" />
